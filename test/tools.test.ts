@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { newWorld } from "lumi-rp-engine/studio";
 import type { HostCharacter } from "../src/backend/host";
 import { startStudio } from "../src/backend/main";
-import { SourceReader } from "../src/backend/sources";
+import { booksFor, SourceReader } from "../src/backend/sources";
 import { OUTPUT_LIMIT, runTool } from "../src/backend/tools";
 import type { BookRef, DraftSource } from "../src/shared/protocol";
 import { FakeHost } from "./support/fake-host";
@@ -18,7 +18,7 @@ function message(i: number, size: number): string {
   return `${`m${i} says `.repeat(Math.ceil(size / 8)).slice(0, size - end.length)}${end}`;
 }
 
-async function setup(options: { messages?: string[]; pasted?: string; lore?: { id: string; content: string }[]; card?: Partial<HostCharacter> } = {}) {
+async function setup(options: { messages?: string[]; pasted?: string; lore?: { id: string; content: string }[]; card?: Partial<HostCharacter>; persona?: { id: string; name: string } } = {}) {
   const host = new FakeHost();
   const studio = startStudio(host);
   const messages = options.messages ?? Array.from({ length: 40 }, (_, i) => message(i, 1500));
@@ -40,7 +40,7 @@ async function setup(options: { messages?: string[]; pasted?: string; lore?: { i
     host.cards.set("char-1", { id: "char-1", owner: USER, name: "Silas", description: "", personality: "", scenario: "", firstMessage: "", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: [], ...options.card });
     characterIds.push("char-1");
   }
-  const source: DraftSource = { kind: "chat", label: "Chat: Long", chatId: "chat-long", characterIds, books, pasted: options.pasted ? [{ title: "Notes", text: options.pasted }] : [], worldId: null };
+  const source: DraftSource = { kind: "chat", label: "Chat: Long", chatId: "chat-long", characterIds, books, pasted: options.pasted ? [{ title: "Notes", text: options.pasted }] : [], worldId: null, persona: options.persona ?? null };
   const draft = await studio.drafts.create(USER, { name: "Long", source, doc: newWorld("long", "Long"), link: null });
   const ctx = { userId: USER, draftId: draft.id, drafts: studio.drafts, reader: new SourceReader(host, USER, source), bridge: studio.bridge };
   return { host, studio, draft, ctx };
@@ -133,5 +133,13 @@ describe("tool answers", () => {
     const out = await runTool("draft_patch", { ops }, ctx);
     expect(out.error).toBe(true);
     expect((await studio.drafts.get(USER, draft.id))?.proposed ?? null).toBeNull();
+  });
+
+  test("the user's persona is read as a card of its own, and its lore book applies", async () => {
+    const { host, ctx } = await setup({ persona: { id: "persona-1", name: "Rhea" } });
+    host.personaList.set("persona-1", { owner: USER, active: true, persona: { id: "persona-1", name: "Rhea", description: "A harbor pilot with a debt of her own.", bookId: "book-p" } });
+    expect((await runTool("cards_read", { name: "Rhea" }, ctx)).content).toContain("A harbor pilot with a debt of her own.");
+    host.bookStore.set("book-p", { id: "book-p", owner: USER, name: "Rhea's past", description: "", metadata: {}, entryList: [] });
+    expect((await booksFor(host, USER, null, [])).map((b) => [b.id, b.scope])).toEqual([["book-p", "persona"]]);
   });
 });

@@ -21,6 +21,15 @@ export interface HostMessage {
   content: string;
 }
 
+/** One of the user's personas: who they play in their chats. */
+export interface HostPersona {
+  id: string;
+  name: string;
+  description: string;
+  /** The lore book attached to it, if any. */
+  bookId: string | null;
+}
+
 export interface HostCharacter {
   id: string;
   name: string;
@@ -117,8 +126,9 @@ export interface StudioHost {
     global(userId: string): Promise<string[]>;
   };
   personas: {
-    /** The book attached to the user's active persona, if any. */
-    activeBookId(userId: string): Promise<string | null>;
+    /** The user's active persona, if any. */
+    active(userId: string): Promise<HostPersona | null>;
+    get(personaId: string, userId: string): Promise<HostPersona | null>;
   };
   models: {
     /** One quiet generation with tools on the connection (null: the user's active one). */

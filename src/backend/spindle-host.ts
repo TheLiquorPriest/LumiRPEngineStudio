@@ -2,10 +2,14 @@
 // besides the entry that touches the host API. Host payloads are decoded into the port's shapes
 // here, and every call passes the user, as an extension installed for the whole server must.
 
-import type { LlmMessageDTO, LlmMessagePartDTO, SpindleAPI } from "lumiverse-spindle-types";
+import type { LlmMessageDTO, LlmMessagePartDTO, PersonaDTO, SpindleAPI } from "lumiverse-spindle-types";
 import { isRecord, toJson } from "../shared/json";
 import type { JsonObject } from "../shared/json";
-import type { HostBookEntry, ModelPart, ModelToolCall, StudioHost } from "./host";
+import type { HostBookEntry, HostPersona, ModelPart, ModelToolCall, StudioHost } from "./host";
+
+function persona(p: PersonaDTO): HostPersona {
+  return { id: p.id, name: p.name, description: p.description, bookId: p.attached_world_book_id };
+}
 
 declare const spindle: SpindleAPI;
 
@@ -101,8 +105,13 @@ export function createSpindleHost(): StudioHost {
       global: (userId) => spindle.world_books.getGlobal(userId),
     },
     personas: {
-      async activeBookId(userId) {
-        return (await spindle.personas.getActive(userId))?.attached_world_book_id ?? null;
+      async active(userId) {
+        const p = await spindle.personas.getActive(userId);
+        return p ? persona(p) : null;
+      },
+      async get(personaId, userId) {
+        const p = await spindle.personas.get(personaId, userId);
+        return p ? persona(p) : null;
       },
     },
     models: {

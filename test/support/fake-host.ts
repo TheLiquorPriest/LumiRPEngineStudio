@@ -2,7 +2,7 @@
 // scripted model, and the shared RPC pool both extensions use. A fake LumiRPEngine (fake-engine.ts)
 // plays the engine's side of the bridge from LumiRPEngine's docs/STUDIO.md. No network, no models.
 
-import type { HostBook, HostBookEntry, HostCharacter, HostChat, HostMessage, ModelReply, ModelRequest, StudioHost } from "../../src/backend/host";
+import type { HostBook, HostBookEntry, HostCharacter, HostChat, HostMessage, HostPersona, ModelReply, ModelRequest, StudioHost } from "../../src/backend/host";
 import { ENGINE_EXTENSION, STUDIO_EXTENSION } from "../../src/shared/bridge";
 import type { BackendToFrontend } from "../../src/shared/protocol";
 
@@ -42,7 +42,7 @@ export class FakeHost implements StudioHost {
   readonly cards = new Map<string, HostCharacter & { owner: string }>();
   readonly bookStore = new Map<string, HostBook & { owner: string; entryList: HostBookEntry[] }>();
   readonly globalBooks = new Map<string, string[]>();
-  readonly personaBook = new Map<string, string>();
+  readonly personaList = new Map<string, { owner: string; active: boolean; persona: HostPersona }>();
   readonly sent: { userId: string; message: BackendToFrontend }[] = [];
   readonly modelCalls: ModelRequest[] = [];
   readonly logs: string[] = [];
@@ -97,7 +97,11 @@ export class FakeHost implements StudioHost {
   };
 
   personas: StudioHost["personas"] = {
-    activeBookId: async (userId) => this.personaBook.get(userId) ?? null,
+    active: async (userId) => [...this.personaList.values()].find((p) => p.owner === userId && p.active)?.persona ?? null,
+    get: async (personaId, userId) => {
+      const p = this.personaList.get(personaId);
+      return p && p.owner === userId ? p.persona : null;
+    },
   };
 
   models: StudioHost["models"] = {

@@ -214,7 +214,8 @@ export class Dispatcher {
         const cards = await cardsOf(this.host, userId, ids);
         const books = await booksFor(this.host, userId, chat, cards);
         const world = title || chat.name || "New world";
-        const source: DraftSource = { ...empty, label: `Chat: ${chat.name}`, chatId: chat.id, characterIds: ids, books };
+        const persona = await this.host.personas.active(userId).catch(() => null);
+        const source: DraftSource = { ...empty, label: `Chat: ${chat.name}`, chatId: chat.id, characterIds: ids, books, persona: persona ? { id: persona.id, name: persona.name } : null };
         return this.drafts.create(userId, { name: world, source, doc: newWorld(slug(world), world), link: null, note: `Started from the chat “${chat.name}”${cards.length > 0 ? ` with ${cards.map((c) => c.name).join(", ")}` : ""}${books.length > 0 ? `, reading ${books.length} lore book${books.length === 1 ? "" : "s"}` : ""}.` });
       }
       case "character": {

@@ -43,6 +43,8 @@ export interface DraftSource {
   pasted: PastedText[];
   /** The LumiRPEngine world it started from, if any. */
   worldId: string | null;
+  /** The user's active persona when the draft started from a chat: who they play there, usually the POV. */
+  persona?: { id: string; name: string } | null;
 }
 
 export interface Issue {

@@ -29,8 +29,8 @@ export async function booksFor(host: StudioHost, userId: string, chat: HostChat 
   const chatBooks = chat && Array.isArray(chat.metadata.chat_world_book_ids) ? chat.metadata.chat_world_book_ids : [];
   for (const id of chatBooks) if (typeof id === "string") wanted.push({ id, scope: "chat" });
   for (const c of characters) for (const id of c.bookIds) wanted.push({ id, scope: "character" });
-  const persona = await host.personas.activeBookId(userId).catch(() => null);
-  if (persona) wanted.push({ id: persona, scope: "persona" });
+  const persona = await host.personas.active(userId).catch(() => null);
+  if (persona?.bookId) wanted.push({ id: persona.bookId, scope: "persona" });
   for (const id of await host.books.global(userId).catch(() => [])) wanted.push({ id, scope: "global" });
   const out: BookRef[] = [];
   for (const { id, scope } of wanted) {
@@ -81,9 +81,18 @@ export class SourceReader {
     return this.transcriptRead;
   }
 
+  /** The source's character cards, after the user's persona as a card of its own when the draft has one. */
   cards(): Promise<HostCharacter[]> {
-    this.cardsRead ??= cardsOf(this.host, this.userId, this.source.characterIds);
+    this.cardsRead ??= Promise.all([this.personaCard(), cardsOf(this.host, this.userId, this.source.characterIds)]).then(([persona, cards]) => (persona ? [persona, ...cards] : cards));
     return this.cardsRead;
+  }
+
+  /** The persona the draft started with, as cards_read shows it: its name, marked, and its description. */
+  private async personaCard(): Promise<HostCharacter | null> {
+    const ref = this.source.persona;
+    if (!ref) return null;
+    const p = await this.host.personas.get(ref.id, this.userId).catch(() => null);
+    return p ? { id: p.id, name: `${p.name} (persona)`, description: p.description, personality: "", scenario: "", firstMessage: "", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: p.bookId ? [p.bookId] : [] } : null;
   }
 
   /** A source book's entries; a book the draft doesn't read is refused. */

@@ -91,6 +91,7 @@ export async function describeSources(reader: SourceReader): Promise<string> {
   if (s.chatId) lines.push(`The chat has ${(await reader.transcript().catch(() => [])).length} messages (0 is the first).`);
   const cards = await reader.cards().catch(() => []);
   if (cards.length > 0) lines.push(`Character cards: ${cards.map((c) => c.name).join(", ")}.`);
+  if (s.persona) lines.push(`The user's persona is ${s.persona.name} (cards_read name="${s.persona.name}"): who they play in the chat, usually the POV.`);
   if (s.books.length > 0) lines.push(`Lore books: ${s.books.map((b) => `${b.name} (${b.scope})`).join(", ")}.`);
   if (s.pasted.length > 0) lines.push(`Pasted texts: ${s.pasted.map((p, i) => `${i}: ${p.title} (${p.text.length} characters)`).join(", ")}.`);
   return lines.join("\n");
