@@ -100,7 +100,7 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 - **Knowledge.** `{ "type": "knows", "to": "harbor_guild" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.
 - **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ "type": "knows", "to": "rhea" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger ("Silas doesn't know you."), so a person the POV spent the chat with would greet them as one.
 - **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.
-- **Things** are where they are: `fields.place` for something lying somewhere, `{ "type": "in", "to": "rhea" }` for something carried, `owns` for ownership.
+- **Things** are where they are: `fields.place` for something lying somewhere, `{ "type": "in", "to": "rhea" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns.
 
 ## Quests and secrets as tracks
 
@@ -176,6 +176,7 @@ When the source chat already plays a world (`chat_state` says so), the draft sta
 - Every id an item names (a place, an owner, a relation target, a track in a formula) exists.
 - Everyone who has met the POV holds a `knows` or a `regard` toward them.
 - Each person's `life` is their state at the present, and the dead and dying are at the place they lie.
+- Everything someone owns names them in `fields.owner`.
 - Openings are today's balances, and quests start at the stage the story reached.
 - No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: "true"`, so the first turn reveals it.
 - No public text gives a secret away, and no cue states the secret it stands for.
