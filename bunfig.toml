@@ -1,0 +1,3 @@
+[test]
+# The suite lives in test/.
+root = "test"

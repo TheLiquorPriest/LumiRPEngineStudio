@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "name": "LumiRPEngine Studio",
+  "identifier": "lumi_rp_engine_studio",
+  "author": "TheLiquorPriest",
+  "github": "https://github.com/TheLiquorPriest/LumiRPEngineStudio",
+  "homepage": "https://github.com/TheLiquorPriest/LumiRPEngineStudio",
+  "description": "An assistant that builds LumiRPEngine worlds from scratch and converts chats you're already in, and their lore, into worlds.",
+  "permissions": ["generation", "chats", "chat_mutation", "characters", "world_books", "personas"],
+  "entry_backend": "dist/backend.js",
+  "entry_frontend": "dist/frontend.js"
+}
