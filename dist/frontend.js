@@ -577,7 +577,7 @@ function App(props) {
           setDraft(r.draft);
         if (r.draft)
           setNotice({ text: `LumiRPEngine installed “${r.draft.name}”.`, error: false });
-      });
+      }, (error) => setNotice({ text: `The Studio couldn't record what LumiRPEngine installed: ${error instanceof Error ? error.message : String(error)}`, error: true }));
     };
     window.addEventListener(STATE_EVENT, onState);
     window.addEventListener(INSTALLED_EVENT, onInstalled);
@@ -730,7 +730,6 @@ function NewDraft(props) {
   const [problem, setProblem] = d2(null);
   A(() => {
     setProblem(null);
-    setPick("");
     const load = async () => {
       if (kind === "chat" && props.chatId)
         setChat((await client.request({ type: "pick.chat", chatId: props.chatId })).chat);
@@ -776,7 +775,7 @@ function NewDraft(props) {
           type: "button",
           class: k === kind ? "lres-btn primary" : "lres-btn",
           disabled: k === "chat" && !props.chatId,
-          onClick: () => setKind(k),
+          onClick: () => (setKind(k), setPick("")),
           children: KIND_LABEL[k]
         }, k, false, undefined, this))
       }, undefined, false, undefined, this),
@@ -1082,24 +1081,12 @@ function DraftPanel(props) {
           }, undefined, true, undefined, this),
           /* @__PURE__ */ u3("div", {
             class: "lres-chat",
-            children: draft.review.changes.map((c) => /* @__PURE__ */ u3("label", {
-              class: "lres-row",
-              children: [
-                /* @__PURE__ */ u3("input", {
-                  type: "checkbox",
-                  checked: !declined.includes(c.key),
-                  onChange: (e) => setDeclined(e.currentTarget.checked ? declined.filter((k) => k !== c.key) : [...declined, c.key])
-                }, undefined, false, undefined, this),
-                /* @__PURE__ */ u3("span", {
-                  class: "lres-chip",
-                  children: c.kind
-                }, undefined, false, undefined, this),
-                /* @__PURE__ */ u3("span", {
-                  class: "lres-grow",
-                  children: c.label
-                }, undefined, false, undefined, this)
-              ]
-            }, c.key, true, undefined, this))
+            children: draft.review.changes.map((c) => /* @__PURE__ */ u3(ChangeRow, {
+              change: c,
+              ticked: !declined.includes(c.key),
+              toggle: (ticked) => setDeclined(ticked ? declined.filter((k) => k !== c.key) : [...declined, c.key]),
+              compare: () => client.request({ type: "review.change", draftId: draft.id, key: c.key })
+            }, c.key, false, undefined, this))
           }, undefined, false, undefined, this),
           /* @__PURE__ */ u3("div", {
             class: "lres-row",
@@ -1243,7 +1230,15 @@ function DraftPanel(props) {
             children: [
               "Offered to LumiRPEngine (",
               draft.offer.mode === "new" ? "a new world" : "a new revision",
-              "): review and install it in LumiRPEngine's Build tab."
+              "): review and install it in LumiRPEngine's Build tab.",
+              " ",
+              /* @__PURE__ */ u3("button", {
+                type: "button",
+                class: "lres-btn",
+                disabled: draft.running,
+                onClick: () => void act(async () => props.setDraft((await client.request({ type: "offer.withdraw", draftId: draft.id })).draft)),
+                children: "Withdraw"
+              }, undefined, false, undefined, this)
             ]
           }, undefined, true, undefined, this) : null,
           /* @__PURE__ */ u3("div", {
@@ -1343,6 +1338,82 @@ function DraftPanel(props) {
           }, undefined, true, undefined, this)
         ]
       }, undefined, true, undefined, this)
+    ]
+  }, undefined, true, undefined, this);
+}
+function ChangeRow(props) {
+  const { change } = props;
+  const [shown, setShown] = d2(null);
+  const [problem, setProblem] = d2(null);
+  const toggleCompare = () => {
+    if (shown) {
+      setShown(null);
+      return;
+    }
+    setProblem(null);
+    props.compare().then(setShown, (error) => setProblem(error instanceof Error ? error.message : String(error)));
+  };
+  const json = (value, none) => /* @__PURE__ */ u3("pre", {
+    style: { whiteSpace: "pre-wrap", fontSize: "11px", maxHeight: "260px", overflow: "auto", margin: 0 },
+    children: value === null ? none : JSON.stringify(value, null, 2)
+  }, undefined, false, undefined, this);
+  return /* @__PURE__ */ u3("div", {
+    children: [
+      /* @__PURE__ */ u3("div", {
+        class: "lres-row",
+        children: [
+          /* @__PURE__ */ u3("input", {
+            type: "checkbox",
+            "aria-label": `Take ${change.label}`,
+            checked: props.ticked,
+            onChange: (e) => props.toggle(e.currentTarget.checked)
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ u3("span", {
+            class: "lres-chip",
+            children: change.kind
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ u3("span", {
+            class: "lres-grow",
+            children: change.label
+          }, undefined, false, undefined, this),
+          /* @__PURE__ */ u3("button", {
+            type: "button",
+            class: "lres-btn",
+            onClick: toggleCompare,
+            children: shown ? "Hide" : "Compare"
+          }, undefined, false, undefined, this)
+        ]
+      }, undefined, true, undefined, this),
+      problem ? /* @__PURE__ */ u3("div", {
+        class: "lres-muted",
+        children: problem
+      }, undefined, false, undefined, this) : null,
+      shown ? /* @__PURE__ */ u3("div", {
+        class: "lres-row",
+        style: { alignItems: "flex-start" },
+        children: [
+          /* @__PURE__ */ u3("div", {
+            class: "lres-grow",
+            children: [
+              /* @__PURE__ */ u3("div", {
+                class: "lres-muted",
+                children: "Now"
+              }, undefined, false, undefined, this),
+              json(shown.before, "(not in the draft yet)")
+            ]
+          }, undefined, true, undefined, this),
+          /* @__PURE__ */ u3("div", {
+            class: "lres-grow",
+            children: [
+              /* @__PURE__ */ u3("div", {
+                class: "lres-muted",
+                children: "Proposed"
+              }, undefined, false, undefined, this),
+              json(shown.after, "(removed)")
+            ]
+          }, undefined, true, undefined, this)
+        ]
+      }, undefined, true, undefined, this) : null
     ]
   }, undefined, true, undefined, this);
 }

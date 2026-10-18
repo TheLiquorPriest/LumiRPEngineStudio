@@ -40064,9 +40064,9 @@ async function booksFor(host, userId, chat, characters) {
   for (const c of characters)
     for (const id of c.bookIds)
       wanted.push({ id, scope: "character" });
-  const persona = await host.personas.activeBookId(userId).catch(() => null);
-  if (persona)
-    wanted.push({ id: persona, scope: "persona" });
+  const persona = await host.personas.active(userId).catch(() => null);
+  if (persona?.bookId)
+    wanted.push({ id: persona.bookId, scope: "persona" });
   for (const id of await host.books.global(userId).catch(() => []))
     wanted.push({ id, scope: "global" });
   const out = [];
@@ -40115,8 +40115,15 @@ class SourceReader {
     return this.transcriptRead;
   }
   cards() {
-    this.cardsRead ??= cardsOf(this.host, this.userId, this.source.characterIds);
+    this.cardsRead ??= Promise.all([this.personaCard(), cardsOf(this.host, this.userId, this.source.characterIds)]).then(([persona, cards]) => persona ? [persona, ...cards] : cards);
     return this.cardsRead;
+  }
+  async personaCard() {
+    const ref = this.source.persona;
+    if (!ref)
+      return null;
+    const p = await this.host.personas.get(ref.id, this.userId).catch(() => null);
+    return p ? { id: p.id, name: `${p.name} (persona)`, description: p.description, personality: "", scenario: "", firstMessage: "", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: p.bookId ? [p.bookId] : [] } : null;
   }
   entries(bookId) {
     if (!this.source.books.some((b) => b.id === bookId))
@@ -40138,7 +40145,7 @@ class SourceReader {
 }
 
 // docs/ASSISTANT-GUIDE.md
-var ASSISTANT_GUIDE_default = "# Converting chats and lore into a LumiRPEngine world\n\nThis guide is what the Studio's assistant works from, and what you can read to know what it does. A LumiRPEngine world is one JSON document (`lre-world-v1`). Collections are objects keyed by id, and each item's `id` repeats its key. Money is in integer minor units of the world's currency (cents for dollars), and times are ISO local date-times (`2026-09-14T18:30`). Kinds, fields, relation types, effects and formula functions are all in the reference (`reference_lookup`); this guide says how to use them for a conversion.\n\n## The goal\n\nA converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were, quests sit at the stage the story reached, and secrets the POV has learned are known. Nothing that already happened is replayed. The world only has to be true from now on.\n\n## Working order\n\n1. Read the sources first: skim the transcript from the start (`transcript_read` in ranges of 30 to 60), search it for names, places, money and dates (`transcript_search`), read the cards (`cards_read`) and list and read the lore (`lore_list`, `lore_search`, `lore_read`). Read the end of the chat closely: it is the present.\n2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people and their accounts, then relations, then tracks, lore, schedules, and last the start and calendar.\n3. Run `draft_check` after each batch and fix every error. Keep ids stable: other items refer to them.\n4. Finish with a short answer: what the world holds, what you assumed, what the user should look at.\n\n## The POV\n\n`pov` names the entity the player plays: the chat's user persona, the one the transcript calls \"you\" or the user's character. A new draft has a POV `you` at a place `home`; rename it by writing your own entity and setting `/pov` to its id (then remove `you`), or keep `you` and give it the real name. The POV is a `person` (or a kind that extends `person`) on a lead tier, and never capped by realism.\n\n```json\n{ \"id\": \"rhea\", \"kind\": \"person\", \"name\": \"Rhea Valen\", \"tier\": \"principal\", \"fields\": { \"place\": \"salt_quay\", \"wealth\": \"modest\" }, \"relations\": [] }\n```\n\n## People, tiers and classifications\n\n- **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.\n- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `\"agent\": true` on someone who pursues their own goals off-screen (a rival, a schemer).\n- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: \"tending bar\"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, `employer`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. Description and personality belong in lore entries linked to the person, or in fields your own kind defines.\n- **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:\n\n```json\n{ \"id\": \"character\", \"label\": \"Character\", \"extends\": \"person\", \"fields\": { \"description\": { \"type\": \"text\", \"label\": \"Description\" }, \"role\": { \"type\": \"text\", \"label\": \"Role\" } } }\n```\n\n- **Classifications** sort people for rules and for the GM: a facet with values, optionally nested. Keep a facet hidden (no `\"shown\": true`) when its values would spoil the story (\"villain\").\n\n```json\n{ \"id\": \"role\", \"label\": \"Story role\", \"multiple\": false, \"values\": { \"ally\": { \"label\": \"Ally\" }, \"antagonist\": { \"label\": \"Antagonist\" }, \"villain\": { \"label\": \"Villain\", \"parent\": \"antagonist\" } } }\n```\n\nAn entity holds values in `class` (`\"class\": { \"role\": [\"ally\"] }`) and free tags in `tags`.\n\n- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ \"type\": \"member_of\", \"to\": \"harbor_guild\", \"fields\": { \"role\": \"Quartermaster\" } }`.\n\n## Places, routes and maps\n\n- **Places** form a tree with `parent`: a region holds a town, a town its streets and buildings, a building its rooms. Give each a `name`, and a `fields.description` when the story describes it. A place the POV hasn't heard of yet gets `\"visibility\": \"discoverable\"`; a hidden one `\"secret\"`.\n\n```json\n{ \"id\": \"salt_quay\", \"name\": \"Salt Quay\", \"parent\": \"port_veil\", \"fields\": { \"description\": \"Tar-black pilings and fish crates.\" } }\n```\n\n- **Routes** join places the story travels between, with minutes per mode (`walk`, `road`, `offroad`, `water`). Estimate from the story: a few minutes across a town, an hour on foot between villages.\n\n```json\n{ \"id\": \"quay_to_market\", \"from\": \"salt_quay\", \"to\": \"market_row\", \"modes\": { \"walk\": { \"minutes\": 6 } }, \"bidirectional\": true }\n```\n\n- **Maps** draw a place's inside. A grid map's `layout` rows use `#` for walls, `.` for floor, `+` for doors and legend letters for rooms; a node map lists `places` and `links`. Draw one only when the story's space matters (a house, a ship, a dungeon). A map owns the places, grid and routes it compiles: edit the map, never what it made. `guide_lookup map` and `reference_lookup lre-map` for the details.\n\n## Money\n\n- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ \"code\": \"GP\", \"symbol\": \"gp\", \"minorUnit\": \"copper\", \"decimals\": 2, \"format\": \"{sign}{amount} gp\" }`. Amounts are always integer minor units.\n- **At Money 1** a person's `wealth` band is all there is. Set it from how the story treats them.\n- **Accounts** hold real balances (Money 2 and up): one entity per purse, wallet, bank account or card, owned by its holder. Its `opening` is the balance **now**, at the story's present, not when the story began. Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.\n\n```json\n{ \"id\": \"rhea_purse\", \"kind\": \"account\", \"name\": \"Rhea's purse\", \"tier\": \"background\", \"fields\": { \"owner\": \"rhea\", \"type\": \"cash\", \"opening\": 4250 }, \"relations\": [] }\n```\n\n`type` is `cash`, `checking`, `savings`, `card`, `loan` or `brokerage`. A debt is a `loan` (or a `card`) whose opening is what is owed, as a negative amount.\n\n## Calendar and the start\n\n- `/start` is where and when play begins: `{ \"place\": \"salt_quay\", \"at\": \"2026-09-14T18:30\" }`, the POV's place and the story's present. Put the POV's `fields.place` at the same place.\n- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier. Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).\n- Read the present from the transcript: the last date, weekday, time of day or season it states, or what the events imply (\"the next morning\" after a night scene). If the story never says, pick a plausible date and say so.\n- An invented calendar uses `\"system\": \"custom\"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`).\n- `dayParts` name the parts of the day (`{ \"id\": \"morning\", \"label\": \"Morning\", \"start\": \"06:00\" }`).\n\n## Relations and regard\n\n- **Regard** is how one person feels about another, one directed relation with three axes from \u2212100 to 100: `warmth`, `trust` and `respect`. Write both directions when both matter; they differ more often than not. Calibrate from the story: 0 is a stranger, \xB120 an acquaintance's lean, \xB150 strong feeling, \xB180 and beyond for the defining bonds and feuds.\n\n```json\n{ \"type\": \"regard\", \"to\": \"rhea\", \"fields\": { \"warmth\": 35, \"trust\": 10, \"respect\": 40 } }\n```\n\n- **Knowledge.** `{ \"type\": \"knows\", \"to\": \"harbor_guild\" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.\n- **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.\n- **Things** are where they are: `fields.place` for something lying somewhere, `{ \"type\": \"in\", \"to\": \"rhea\" }` for something carried, `owns` for ownership.\n\n## Quests and secrets as tracks\n\nA track is a small state machine: `start` names its first stage, and each stage's `next` lists `{ \"to\": stage, \"when\": formula }`. Formulas read the world: `at(pov, 'archive')`, `stage(track)`, `knows(pov, 'silas')`, `flag('vault_opened')`, `balance('rhea_purse') >= 5000`, `hour >= 18`. `reference_lookup formula` lists them all.\n\n- **Quests** are what the POV is pursuing. Start the track at the stage the story has **reached**, not at its beginning; earlier stages can stay for completeness, but `start` is today's stage. Give that stage a `cue` (what the player knows now) and `objectives` (`{ \"label\": \"Find the ledger\", \"when\": \"flag('ledger_found')\" }`). A quest whose stage has no `next` is finished.\n\n```json\n{ \"id\": \"lost_ledger\", \"kind\": \"quest\", \"label\": \"The lost ledger\", \"visibility\": \"public\", \"start\": \"searching\", \"stages\": {\n  \"searching\": { \"label\": \"Searching the archive\", \"cue\": \"Silas swears the ledger left the archive in May.\", \"next\": [{ \"to\": \"found\", \"when\": \"flag('ledger_found')\" }] },\n  \"found\": { \"label\": \"The ledger is found\", \"next\": [] } } }\n```\n\n- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. If the POV already learned the secret in the chat, start the track at the revealed stage.\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"cue\": \"Silas flinches whenever the guild is mentioned.\", \"next\": [{ \"to\": \"known\", \"when\": \"at(pov, 'guild_office')\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`).\n\n## Lore entries with audiences\n\nLore is what the world knows, for the engine's helpers: places' histories, people's backgrounds, customs, factions. Convert each useful lore-book entry and each fact the chat established into an entry with a title, the text, `keys`, `aliases` (other names), `topics`, and `links` (the ids of the people and places it is about).\n\n```json\n{ \"id\": \"lore_port_veil\", \"title\": \"Port Veil\", \"content\": \"A salt-trading port of nine thousand\u2026\", \"keys\": [\"Port Veil\", \"the port\"], \"aliases\": [\"the Veil\"], \"topics\": [\"places\"], \"links\": [\"port_veil\"] }\n```\n\n- `\"visibility\": \"known_by\"` keeps an entry to what the POV knows (they must know every linked person and place).\n- A **secret** entry holds a secret itself: `\"secret\": true` with a `gate` formula (`\"stage('silas_debt') == 'known'\"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator.\n- A public entry must never repeat a track's truth (lint error `secret_truth`).\n- Keep macros (`{{user}}`, `{{char}}`) out of lore unless the source used them on purpose: the engine lists them for review on install.\n\n## Schedules\n\nSchedules give people routines: where they are (`target: \"place\"`) or what they do (`target: \"activity\"`) by time of day and weekday. The owner is an entity, a group, a kind or a selector. Base them on what the story shows (\"the baker opens at dawn\"); invent plausible ones for the rest of the cast only when it helps.\n\n```json\n{ \"id\": \"mara_days\", \"owner\": \"mara\", \"target\": \"place\", \"recurrence\": { \"every\": \"week\", \"weekdays\": [1, 2, 3, 4, 5] },\n  \"slots\": [{ \"start\": \"06:00\", \"end\": \"14:00\", \"value\": \"bakery\" }, { \"start\": \"14:00\", \"end\": \"22:00\", \"value\": \"mara_house\" }] }\n```\n\n## Realism and the rest\n\n- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money to 2 when the story tracks cash, Relationships when feelings drive it. A chat can change levels later.\n- Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).\n\n## Refining a world in play\n\nWhen the source chat already plays a world (`chat_state` says so), the draft starts from that world's head and becomes its **next revision**; the chat keeps running on its revision until the player chooses Upgrade in LumiRPEngine (**Settings \u2192 Pins and upgrade**), which shows every change and lets them take or keep each one. So:\n\n- Keep every id the chat uses. Renaming an id makes a new thing and strands the old one.\n- Add what the story introduced since the world was made: new people, places, quests, lore.\n- Fix definitions (a name, a description, a tier) freely; for state the chat has moved on (where someone is, a balance, a quest's stage), the Upgrade keeps the chat's value by default, which is usually right.\n- Don't remove what the chat still uses: the Upgrade keeps removed people unless the player picks Remove.\n- Install it as **a new revision** of the same world.\n\n## Before finishing\n\n- `draft_check` has no errors.\n- The POV exists, stands at the start place, and the start time is the story's present.\n- Every id an item names (a place, an owner, a relation target, a track in a formula) exists.\n- Openings are today's balances; quests start at the stage the story reached; learned secrets are revealed.\n- No public text gives a secret away.\n";
+var ASSISTANT_GUIDE_default = "# Converting chats and lore into a LumiRPEngine world\n\nThis guide is what the Studio's assistant works from, and what you can read to know what it does. A LumiRPEngine world is one JSON document (`lre-world-v1`). Collections are objects keyed by id, and each item's `id` repeats its key. Money is in integer minor units of the world's currency (cents for dollars), and times are ISO local date-times (`2026-09-14T18:30`). Kinds, fields, relation types, effects and formula functions are all in the reference (`reference_lookup`); this guide says how to use them for a conversion.\n\n## The goal\n\nA converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were (the dead where they lie), everyone who has met the POV knows them, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.\n\n## Working order\n\n1. Read the sources first: skim the transcript from the start (`transcript_read` in ranges of 30 to 60), search it for names, places, money and dates (`transcript_search`), read the cards (`cards_read`) and list and read the lore (`lore_list`, `lore_search`, `lore_read`). Read the end of the chat closely: it is the present.\n2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people and their accounts, then relations, then tracks, lore, schedules, and last the start and calendar.\n3. Run `draft_check` after each batch and fix every error. Keep ids stable: other items refer to them.\n4. Finish with a short answer: what the world holds, what you assumed, what the user should look at.\n\n## The POV\n\n`pov` names the entity the player plays: the chat's user persona, the one the transcript calls \"you\" or the user's character. A new draft has a POV `you` at a place `home`; rename it by writing your own entity and setting `/pov` to its id (then remove `you`), or keep `you` and give it the real name. The POV is a `person` (or a kind that extends `person`) on a lead tier, and never capped by realism.\n\n```json\n{ \"id\": \"rhea\", \"kind\": \"person\", \"name\": \"Rhea Valen\", \"tier\": \"principal\", \"fields\": { \"place\": \"salt_quay\", \"wealth\": \"modest\" }, \"relations\": [] }\n```\n\n## People, tiers and classifications\n\n- **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.\n- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `\"agent\": true` on someone who pursues their own goals off-screen (a rival, a schemer).\n- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: \"tending bar\"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, `employer`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. Description and personality belong in lore entries linked to the person, or in fields your own kind defines.\n- **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:\n\n```json\n{ \"id\": \"character\", \"label\": \"Character\", \"extends\": \"person\", \"fields\": { \"description\": { \"type\": \"text\", \"label\": \"Description\" }, \"role\": { \"type\": \"text\", \"label\": \"Role\" } } }\n```\n\n- **Classifications** sort people for rules and for the GM: a facet with values, optionally nested. Keep a facet hidden (no `\"shown\": true`) when its values would spoil the story (\"villain\").\n\n```json\n{ \"id\": \"role\", \"label\": \"Story role\", \"multiple\": false, \"values\": { \"ally\": { \"label\": \"Ally\" }, \"antagonist\": { \"label\": \"Antagonist\" }, \"villain\": { \"label\": \"Villain\", \"parent\": \"antagonist\" } } }\n```\n\nAn entity holds values in `class` (`\"class\": { \"role\": [\"ally\"] }`) and free tags in `tags`.\n\n- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ \"type\": \"member_of\", \"to\": \"harbor_guild\", \"fields\": { \"role\": \"Quartermaster\" } }`.\n- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `\"dying\"`, someone who died is `\"dead\"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ \"unconscious\": { \"label\": \"Unconscious\", \"acts\": false, \"reads\": \"lies unconscious\" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`.\n\n```json\n{ \"id\": \"old_bram\", \"kind\": \"person\", \"name\": \"Old Bram\", \"tier\": \"supporting\", \"life\": \"dead\", \"fields\": { \"place\": \"net_loft\" }, \"relations\": [] }\n```\n\n- **Cues** are what the narrator sees someone do while a secret of theirs stays hidden. Each cue stands for exactly one secret: a secret `track` (while it hides something), a secret `lore` entry (until its gate holds) or a story `flag` (until it is set). Write behaviour, never the secret, and name no one the POV doesn't know.\n\n```json\n\"cues\": [{ \"text\": \"Changes the subject whenever the guild comes up.\", \"track\": \"silas_debt\" }]\n```\n\n## Places, routes and maps\n\n- **Places** form a tree with `parent`: a region holds a town, a town its streets and buildings, a building its rooms. Give each a `name`, and a `fields.description` when the story describes it. A place the POV hasn't heard of yet gets `\"visibility\": \"discoverable\"`; a hidden one `\"secret\"`.\n\n```json\n{ \"id\": \"salt_quay\", \"name\": \"Salt Quay\", \"parent\": \"port_veil\", \"fields\": { \"description\": \"Tar-black pilings and fish crates.\" } }\n```\n\n- **Routes** join places the story travels between, with minutes per mode (`walk`, `road`, `offroad`, `water`). Estimate from the story: a few minutes across a town, an hour on foot between villages.\n\n```json\n{ \"id\": \"quay_to_market\", \"from\": \"salt_quay\", \"to\": \"market_row\", \"modes\": { \"walk\": { \"minutes\": 6 } }, \"bidirectional\": true }\n```\n\n- **Maps** draw a place's inside. A grid map's `layout` rows use `#` for walls, `.` for floor, `+` for doors and legend letters for rooms; a node map lists `places` and `links`. Draw one only when the story's space matters (a house, a ship, a dungeon). A map owns the places, grid and routes it compiles: edit the map, never what it made. `guide_lookup map` and `reference_lookup lre-map` for the details.\n\n## Money\n\n- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ \"code\": \"GP\", \"symbol\": \"gp\", \"minorUnit\": \"copper\", \"decimals\": 2, \"format\": \"{sign}{amount} gp\" }`. Amounts are always integer minor units.\n- **At Money 1** a person's `wealth` band is all there is. Set it from how the story treats them.\n- **Accounts** hold real balances (Money 2 and up): one entity per purse, wallet, bank account or card, owned by its holder. Its `opening` is the balance **now**, at the story's present, not when the story began. Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.\n\n```json\n{ \"id\": \"rhea_purse\", \"kind\": \"account\", \"name\": \"Rhea's purse\", \"tier\": \"background\", \"fields\": { \"owner\": \"rhea\", \"type\": \"cash\", \"opening\": 4250 }, \"relations\": [] }\n```\n\n`type` is `cash`, `checking`, `savings`, `card`, `loan` or `brokerage`. A debt is a `loan` (or a `card`) whose opening is what is owed, as a negative amount.\n\n## Calendar and the start\n\n- `/start` is where and when play begins: `{ \"place\": \"salt_quay\", \"at\": \"2026-09-14T18:30\" }`, the POV's place and the story's present. Put the POV's `fields.place` at the same place.\n- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier (with an invented calendar, exactly the start day). Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).\n- Read the present from the transcript: the last date, weekday, time of day or season it states, or what the events imply (\"the next morning\" after a night scene). If the story never says, pick a plausible date and say so.\n- An invented calendar uses `\"system\": \"custom\"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`). Set its `epoch` to midnight of the start's own day (`0412-08-25T00:00`): LumiRPEngine counts the start's clock from the epoch as an ordinary calendar would, so any day between them would shift the date the player sees in the invented months.\n- `dayParts` name the parts of the day (`{ \"id\": \"morning\", \"label\": \"Morning\", \"start\": \"06:00\" }`).\n\n## Relations and regard\n\n- **Regard** is how one person feels about another, one directed relation with three axes from \u2212100 to 100: `warmth`, `trust` and `respect`. Write both directions when both matter; they differ more often than not. Calibrate from the story: 0 is a stranger, \xB120 an acquaintance's lean, \xB150 strong feeling, \xB180 and beyond for the defining bonds and feuds.\n\n```json\n{ \"type\": \"regard\", \"to\": \"rhea\", \"fields\": { \"warmth\": 35, \"trust\": 10, \"respect\": 40 } }\n```\n\n- **Knowledge.** `{ \"type\": \"knows\", \"to\": \"harbor_guild\" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.\n- **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ \"type\": \"knows\", \"to\": \"rhea\" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger (\"Silas doesn't know you.\"), so a person the POV spent the chat with would greet them as one.\n- **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.\n- **Things** are where they are: `fields.place` for something lying somewhere, `{ \"type\": \"in\", \"to\": \"rhea\" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns.\n\n## Quests and secrets as tracks\n\nA track is a small state machine: `start` names its first stage, and each stage's `next` lists `{ \"to\": stage, \"when\": formula }`. Formulas read the world: `at(pov, 'archive')`, `stage(track)`, `knows(pov, 'silas')`, `flag('vault_opened')`, `balance('rhea_purse') >= 5000`, `hour >= 18`. `reference_lookup formula` lists them all.\n\n- **Quests** are what the POV is pursuing. Start the track at the stage the story has **reached**, not at its beginning; earlier stages can stay for completeness, but `start` is today's stage. Give that stage a `cue` (what the player knows now) and `objectives` (`{ \"label\": \"Find the ledger\", \"when\": \"flag('ledger_found')\" }`). A quest whose stage has no `next` is finished.\n\n```json\n{ \"id\": \"lost_ledger\", \"kind\": \"quest\", \"label\": \"The lost ledger\", \"visibility\": \"public\", \"start\": \"searching\", \"stages\": {\n  \"searching\": { \"label\": \"Searching the archive\", \"cue\": \"Silas swears the ledger left the archive in May.\", \"next\": [{ \"to\": \"found\", \"when\": \"flag('ledger_found')\" }] },\n  \"found\": { \"label\": \"The ledger is found\", \"next\": [] } } }\n```\n\n- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above).\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"cue\": \"Silas flinches whenever the guild is mentioned.\", \"next\": [{ \"to\": \"known\", \"when\": \"at(pov, 'guild_office')\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **A secret the POV has already learned** must still be revealed in play. A track starts with nothing revealed, and the engine records a reveal only when a stage is entered, so a track that starts on its truth stage stays hidden: the Journal never shows it, and the narrator is kept from saying what the player already knows. Start it one stage earlier instead, and make that stage move on at once: `\"next\": [{ \"to\": \"known\", \"when\": \"true\" }]`. The first turn enters the truth stage and reveals it. Never start a secret track on a stage that has a `truth`.\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"next\": [{ \"to\": \"known\", \"when\": \"true\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`).\n\n## Lore entries with audiences\n\nLore is what the world knows, for the engine's helpers: places' histories, people's backgrounds, customs, factions. Convert each useful lore-book entry and each fact the chat established into an entry with a title, the text, `keys`, `aliases` (other names), `topics`, and `links` (the ids of the people and places it is about).\n\n```json\n{ \"id\": \"lore_port_veil\", \"title\": \"Port Veil\", \"content\": \"A salt-trading port of nine thousand\u2026\", \"keys\": [\"Port Veil\", \"the port\"], \"aliases\": [\"the Veil\"], \"topics\": [\"places\"], \"links\": [\"port_veil\"] }\n```\n\n- `\"visibility\": \"known_by\"` keeps an entry to what the POV knows (they must know every linked person and place).\n- A **secret** entry holds a secret itself: `\"secret\": true` with a `gate` formula (`\"stage('silas_debt') == 'known'\"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator.\n- A public entry must never repeat a track's truth (lint error `secret_truth`).\n- Keep macros (`{{user}}`, `{{char}}`) out of lore unless the source used them on purpose: the engine lists them for review on install.\n\n## Schedules\n\nSchedules give people routines: where they are (`target: \"place\"`) or what they do (`target: \"activity\"`) by time of day and weekday. The owner is an entity, a group, a kind or a selector. Base them on what the story shows (\"the baker opens at dawn\"); invent plausible ones for the rest of the cast only when it helps.\n\n```json\n{ \"id\": \"mara_days\", \"owner\": \"mara\", \"target\": \"place\", \"recurrence\": { \"every\": \"week\", \"weekdays\": [1, 2, 3, 4, 5] },\n  \"slots\": [{ \"start\": \"06:00\", \"end\": \"14:00\", \"value\": \"bakery\" }, { \"start\": \"14:00\", \"end\": \"22:00\", \"value\": \"mara_house\" }] }\n```\n\n## Realism and the rest\n\n- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money to 2 when the story tracks cash, Relationships when feelings drive it. A chat can change levels later.\n- Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).\n\n## Refining a world in play\n\nWhen the source chat already plays a world (`chat_state` says so), the draft starts from that world's head and becomes its **next revision**; the chat keeps running on its revision until the player chooses Upgrade in LumiRPEngine (**Settings \u2192 Pins and upgrade**), which shows every change and lets them take or keep each one. So:\n\n- Keep every id the chat uses. Renaming an id makes a new thing and strands the old one.\n- Add what the story introduced since the world was made: new people, places, quests, lore.\n- Fix definitions (a name, a description, a tier) freely; for state the chat has moved on (where someone is, a balance, a quest's stage), the Upgrade keeps the chat's value by default, which is usually right.\n- Don't remove what the chat still uses: the Upgrade keeps removed people unless the player picks Remove.\n- Install it as **a new revision** of the same world.\n\n## Before finishing\n\n- `draft_check` has no errors.\n- The POV exists, stands at the start place, and the start time is the story's present.\n- Every id an item names (a place, an owner, a relation target, a track in a formula) exists.\n- Everyone who has met the POV holds a `knows` or a `regard` toward them.\n- Each person's `life` is their state at the present, and the dead and dying are at the place they lie.\n- Everything someone owns names them in `fields.owner`.\n- Openings are today's balances, and quests start at the stage the story reached.\n- No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: \"true\"`, so the first turn reveals it.\n- No public text gives a secret away, and no cue states the secret it stands for.\n";
 
 // assets/REFERENCE.md
 var REFERENCE_default = "# LumiRPEngine reference\n\n<!-- Generated by `bun run reference` (scripts/reference/build.ts). Edit the packs, then run it again. -->\n\nWhat the engine and its packs register, as the registry has it: kinds and their fields, effects and the arguments they read, formula functions, actions, events, proposal channels, panels, slots, data tables and lint codes. Arguments and parameters marked `?` may be left out. The formula language is in [EXPRESSIONS.md](EXPRESSIONS.md), worked examples are in [RECIPES.md](RECIPES.md), and the [user guide](USER-GUIDE.md#authoring) shows the editors.\n\nEngine `0.1.0` \xB7 world format `lre-world-v1` \xB7 packs `engine` 1, `calendar` 1, `space` 1, `economy` 1, `gear` 1, `vehicles` 1, `weather` 1, `relationships` 1, `castlife` 1, `sheets` 1, `story` 1, `combat` 1.\n\n## Contents\n\n- [Engine built-ins](#engine-built-ins)\n- [Calendar & time pack](#calendar--time-pack-calendar)\n- [Cast life pack](#cast-life-pack-castlife)\n- [Combat pack](#combat-pack-combat)\n- [Economy pack](#economy-pack-economy)\n- [Gear & containers pack](#gear--containers-pack-gear)\n- [Relationships pack](#relationships-pack-relationships)\n- [Character sheets pack](#character-sheets-pack-sheets)\n- [Space & travel pack](#space--travel-pack-space)\n- [Story pack](#story-pack-story)\n- [Vehicles pack](#vehicles-pack-vehicles)\n- [Weather pack](#weather-pack-weather)\n\n## Engine built-ins\n\n### Core effects\n\n| Effect | Arguments |\n|---|---|\n| `add` | `entity`, `field`, `delta` |\n| `award` | `entity`, `progression`, `amount` |\n| `beat` | `hint` |\n| `check` | `check`, `actor?`, `target?`, `outcomes` |\n| `link` | `rel`, `from`, `to`, `until?`, `fields?` |\n| `move` | `entity`, `to` |\n| `note` | `text`, `visibility?` |\n| `post` | `lines`, `memo?` |\n| `recover` | `entity`, `field`, `amount?`, `full?` |\n| `set` | `entity`, `field`, `value` |\n| `signal` | `class`, `text`, `entity?`, `visibility?` |\n| `spawn` | `kind`, `name`, `id?`, `tier?`, `fields?`, `relations?`, `agent?`, `place?`, `class?`, `tags?` |\n| `stage` | `track`, `to` |\n| `unlink` | `rel`, `from`, `to` |\n\n### Formula functions\n\nMath: `abs`, `ceil`, `clamp`, `floor`, `max`, `min`, `round`. `min` and `max` take any number of arguments.\n\nThe engine's own:\n\n- `at(entity, place)`\n- `attempts(track)`\n- `band(entity, field)`\n- `count_at(place, kind?)`\n- `days(n)`\n- `field(entity, field)`\n- `fired(rule)`\n- `has_rel(entity, type, to?)`\n- `holiday()`\n- `hours(n)`\n- `knows(entity, subject)`\n- `level(entity, domain)`\n- `next_time(time)`\n- `place(entity)`\n- `rel(entity, type, to?)`\n- `rel_count(entity, type)`\n- `rel_field(from, type, to, field)`\n- `revealed(track, stage?)`\n- `roll(notation)`: effect arguments only\n- `since(track)`\n- `stage(track)`\n- `table(table, key, column)`\n- `table_step(table, value, column)`\n- `today_at(time)`\n\nTaxonomy:\n\n- `band_of(entity)`\n- `has_tag(entity, tag)`\n- `in_class(entity, facet, value)`\n- `kind_is(entity, kind)`\n- `member_of(entity, group)`\n- `tier_of(entity)`\n\n### Events\n\nCore: `add`, `clock`, `link`, `materialize`, `post`, `set`, `spawn`, `stage`, `timelapse`, `unlink`.\n\nEngine bookkeeping: `engine.adjudged`, `engine.attempt`, `engine.beat`, `engine.caught`, `engine.check`, `engine.choice`, `engine.class`, `engine.cursor`, `engine.entity`, `engine.fired`, `engine.note`, `engine.observed`, `engine.pause`, `engine.revealed`, `engine.signal`.\n\n### Relation types\n\nBuilt in: `in`, `owns`, `uses`, `worn_by`, `equipped`, `knows`, `member_of`, `regard`, `route`. Packs add the typed ones below.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `knows` | `knows` |\n| `spawn` | `spawn` |\n\n### Step purposes\n\n| Purpose | Outputs a world template may declare |\n|---|---|\n| `brief` | `text` |\n| `choices` | `text`, `effects` |\n| `contradiction` | `decision`, `text`, `effects` |\n| `extract` | `text`, `effects` |\n| `interpret` | `decision`, `text` |\n| `judge` | `decision`, `text` |\n| `npc.choose` | `decision`, `text` |\n| `outline` | `text` |\n| `puzzle.answer` | `decision`, `text` |\n\nSignals: `agents_present`, `always`, `beat`, `classifier`, `conflict`, `day_start`, `invitation`, `never`, `offscreen`, `present`, `reply`, `scene_change`, `slot_crossed`, `tie_zone`, `timelapse`, `typed_input`, and `every_n:<k>`.\n\nTemplate placeholders: `beats`, `brief`, `clock`, `facts`, `outcome`, `place`, `pov`, `present`, `recent`, `reply`, `scene`, `user`, `world`.\n\n### Sections\n\nThe slots a world gets when it defines none, kept in rank order on the section budget.\n\n| Slot | Label | Rank |\n|---|---|---|\n| `outcome` | Outcome | 0 |\n| `montage` | Montage | 1 |\n| `scene` | Scene | 2 |\n| `people` | People | 3 |\n| `money` | Money | 4 |\n| `gear` | Gear | 5 |\n| `vehicles` | Vehicles | 6 |\n| `quest` | Quest | 7 |\n| `outline` | Outline | 8 |\n\n### Realism\n\nDomains: `money`, `gear`, `vehicles`, `castlife`, `relationships`, `space`, `calendar`, `weather`, `sheets`; each at a level from 0 to 4.\n\nDetail bands: `principal` (Leads), `supporting` (Supporting), `background` (Background).\n\nInterrupt classes: `invitation`, `bill`, `decline`, `incident`, `quest`, `rule`, `arrival`, `overdue`, `needs`, `weather`.\n\n### Adjudication presets\n\n| Value | `narrative` | `balanced` | `crunchy` |\n|---|---|---|---|\n| `checks` | `\"risky\"` | `\"every\"` | `\"every\"` |\n| `riskyAt` | `0.75` | `0.75` | `0.75` |\n| `trivialAt` | `null` | `0.95` | `null` |\n| `impossibleAt` | `null` | `0.05` | `null` |\n| `description` | `{\"weight\":\"none\",\"max\":3,\"advantageAt\":2}` | `{\"weight\":\"bonus\",\"max\":2,\"advantageAt\":2}` | `{\"weight\":\"none\",\"max\":2,\"advantageAt\":2}` |\n| `authority` | `\"narrative\"` | `\"hybrid\"` | `\"mechanics\"` |\n| `closeBy` | `2` | `2` | `2` |\n| `retry` | `\"changed\"` | `\"changed\"` | `\"free\"` |\n| `retryAfter` | `60` | `60` | `60` |\n\n## Calendar & time pack (`calendar`)\n\nVersion 1 \xB7 realism domain `calendar` \xB7 requires none.\n\n### Formula functions\n\n- `days_until(date)`\n- `is_day_off()`\n- `is_weekend()`\n- `minutes_until(at)`\n- `weekday_name()`\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `time_advance` | `duration` |\n\n### Panels and slots\n\nPanels: `calendar.calendar`. Slots it writes: `scene`.\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `calendar.dst` | Daylight saving time, time zones and daylight hours | `lre-table/calendar.dst/v1` | start (json), end (json), duration_weeks_approx (int), exceptions (list), standard_offsets_h (json), note (text), daylight_hours (json) | 1 |\n| `calendar.holidays` | Federal holidays | `lre-table/calendar.holidays/v1` | name (text), rule_type (enum), month (int), day (int, optional), weekday (enum, optional), n (int, optional), federal_paid_day_off (bool), private_sector_paid_day_off (enum), observed_if_weekend (text, optional) | 11 |\n| `calendar.observances` | Common observances | `lre-table/calendar.observances/v1` | name (text), rule_type (enum), month (int, optional), day (int, optional), weekday (enum, optional), n (int, optional), base (ref, optional), offset_days (int, optional), algorithm (text, optional), window (text, optional), start (text, optional), end (text, optional), rule_text (text, optional), rule_note (text, optional) | 30 |\n| `calendar.school` | School year | `lre-table/calendar.school/v1` | title (text), values (json) | 2 |\n| `calendar.shifts` | Work shift patterns | `lre-table/calendar.shifts/v1` | name (text), description (text), days_per_week (number), typical_start (text), typical_shift_h (number), typical_hours_per_week (int), weekend_work (enum), notes (text) | 24 |\n| `calendar.work` | Work norms | `lre-table/calendar.work/v1` | full_time_hours_per_week (number), standard_work_year_h (int), overtime (text), vacation_days_after_1_year (int), vacation_days_after_5_years (int), vacation_days_after_10_years (int), sick_days_per_year (int), paid_time_off_note (text), paid_holidays_per_year (int), meal_break (text) | 1 |\n\n### Lint codes\n\n`calendar.epoch`, `calendar.schedule_times`, `calendar.unit_cap`.\n\n## Cast life pack (`castlife`)\n\nVersion 1 \xB7 realism domain `castlife` \xB7 requires `gear`, `relationships`, `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `castlife.decide` | `key`, `choice` |\n| `castlife.override` | `who`, `minutes?`, `place?`, `activity?` |\n| `castlife.satisfy` | `need`, `entity?` |\n\n### Formula functions\n\n- `busy(who)`\n- `invited(host)`\n- `need(who, need)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `accept_invitation` | Accept invitation | `host: ref \u2192 person` |  | `default` | `1` | accept, sure, let's, count me in |\n| `eat` | Eat |  |  | `default` | `30` | eat, have lunch, have dinner, grab a bite |\n| `rest` | Rest |  |  | `default` | `30` | rest, relax, take a break |\n| `sleep` | Go to bed |  |  | `default` | `5` | go to bed, sleep, turn in, hit the sack |\n\n### Events\n\nIts own: `castlife.decision`, `castlife.invitation`, `castlife.need`.\n\n### Panels and slots\n\nPanels: `castlife.cast`. Slots it writes: `people`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `castlife.agents` | `castlife` | 3 | each agent |\n| `castlife.trips` | `castlife` | 1 | the world |\n\n### Lint codes\n\n`castlife.double_booking`.\n\n## Combat pack (`combat`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `hostile` | Hostile to | `*` | `*` | many_many | yes |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `combat.end` | `winner?` |\n| `combat.end_turn` | `who?` |\n| `combat.spend` | `who?`, `cost` |\n| `combat.start` | `foes?` |\n\n### Formula functions\n\n- `budget_left(e, budget)`\n- `can_fight(e)`\n- `encounter_round()`\n- `has_turn(e)`\n- `in_encounter(e)`\n- `is_ally(a, b)`\n- `is_down(e)`\n- `is_foe(a, b)`\n- `standing(side)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `end_turn` | End turn |  |  | `default` | `0` | end my turn, end turn |\n| `fight` | Fight | `target: ref` |  | `default` | `0` | start a fight, pick a fight, draw my weapon |\n\n### Events\n\nIts own: `combat.act`, `combat.decision`, `combat.down`, `combat.end`, `combat.spend`, `combat.start`, `combat.turn`.\n\n### Panels and slots\n\nPanels: `combat.encounter`. Slots it writes: none.\n\n## Economy pack (`economy`)\n\nVersion 1 \xB7 realism domain `money` \xB7 requires `space`.\n\n### Kinds\n\n#### `account`: Account\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `apr_pct` | APR % | number | \u2265 0 |  |  |  | live from money 4 |\n| `apy_pct` | APY % | number | \u2265 0 |  |  |  | live from money 4 |\n| `autopay` | Autopay | text |  | `\"none\"` |  |  | live from money 3 |\n| `due_day` | Due day of month | number | 1 \u2026 31 |  |  |  | live from money 4 |\n| `institution` | Institution | text |  |  |  |  | live from money 3 |\n| `limit` | Credit limit | money | \u2265 0 |  |  |  | live from money 3 |\n| `min_floor` | Minimum payment floor | money |  | `3500` |  |  | live from money 4 |\n| `min_pct` | Minimum payment % of balance | number |  | `1` |  |  | live from money 4 |\n| `opening` | Opening balance | money |  |  |  |  | locked |\n| `owner` | Owner | ref |  |  |  |  | live from money 2 |\n| `payment` | Loan payment | money |  |  |  |  | live from money 4 |\n| `remaining_months` | Months left (loans) | number | \u2265 0 |  |  |  | live from money 4 |\n| `statement_day` | Statement day | number | 1 \u2026 28 | `1` |  |  | live from money 4 |\n| `symbol` | Holding | text |  | `\"broad_us_equity_index\"` |  |  | live from money 4 |\n| `type` | Type | enum: cash, checking, savings, card, loan, brokerage |  |  |  |  | live from money 2 |\n| `units` | Units held | number | \u2265 0 |  |  |  | live from money 4; locked |\n\n#### `business`: Business\n\nExtends `thing`.\n\nNo fields of its own.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `economy.buy` | `item?`, `category?`, `qty?`, `price?`, `exact?`, `stated?`, `name?`, `payer?`, `method?`, `from?`, `payee?`, `keep?` |\n| `economy.invest` | `cents`, `owner?`, `sell?` |\n| `economy.lose` | `item`, `thief?` |\n| `economy.move` | `from`, `to`, `cents`, `memo?` |\n| `economy.pay_card` | `card`, `from?`, `cents?` |\n| `economy.price_modifier` | `percent`, `scope?`, `place?`, `minutes?`, `id?`, `clear?` |\n| `economy.transfer` | `to`, `cents`, `from?`, `memo?`, `method?` |\n\n### Formula functions\n\n- `balance(account)`\n- `can_afford(who, cents)`\n- `net_worth(who)`\n- `price(item)`\n- `wealth(who)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `buy` | Buy | `item: text`, `qty?: number`, `price?: money`, `method?: text` |  | `default` | `5` | buy, purchase, order, pick up a |\n| `invest` | Invest | `amount: money` |  | `default` | `2` | invest, buy stocks, buy shares |\n| `move_money` | Transfer between accounts | `from: ref \u2192 account`, `to: ref \u2192 account`, `amount: money` |  | `default` | `2` | transfer, move money, put into savings |\n| `pay` | Pay | `to: ref \u2192 person`, `amount: money` |  | `default` | `1` | pay, give money, send money, venmo |\n| `pay_card` | Pay card | `card: ref \u2192 account`, `amount?: money` |  | `default` | `2` | pay off the card, pay the card, pay my credit card |\n| `sell_investments` | Sell investments | `amount: money` |  | `default` | `2` | sell stocks, sell shares, cash out |\n\n### Events\n\nIts own: `economy.anchor`, `economy.card_paid`, `economy.decline`, `economy.modifier`, `economy.note`, `economy.price`, `economy.statement`, `economy.txn`.\n\nChecks it adds to: `post`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `purchase` | `money` |\n| `transfer` | `money` |\n\n### Panels and slots\n\nPanels: `economy.money`. Slots it writes: `money`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `economy.accounts` | `money` | 3 | the world |\n| `economy.banking` | `money` | 4 | the world |\n| `economy.bills` | `money` | 3 | the world |\n| `economy.cards` | `money` | 3 | the world |\n| `economy.living` | `money` | 3 | the world |\n| `economy.markets` | `money` | 4 | the world |\n| `economy.payroll` | `money` | 3 | the world |\n\nDetail on demand: `money` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `economy.catalog` | Price catalog | `lre-table/economy.catalog/v1` | name (text), category (ref), unit (text), price_cents (band), notes (text, optional) | 340 |\n| `economy.categories` | Price categories | `lre-table/economy.categories/v1` | name (text), basis (text), notes (text, optional), price_unit_note (text, optional), item_count (int), price_cents (band) | 19 |\n| `economy.finance` | Finance parameters | `lre-table/economy.finance/v1` | title (text), values (json) | 7 |\n| `economy.occupations` | Occupations and pay | `lre-table/economy.occupations/v1` | title (text), category (enum), median_cents_per_h (int), median_cents_per_year (int), typical_earnings_cents_per_year (int), schedule_pattern (ref), typical_hours_per_week (number), weeks_per_year (number), weekend_work (enum), shifts (list), pay_frequency (enum), benefits (enum), benefits_note (text), withholding_rate_pct (number), description (text), wage_basis (text), tipped (bool, optional), tipped_cash_wage_cents_per_h (int, optional), self_employed (bool, optional), fica_exempt (bool, optional), estimated_tax_set_aside_pct (number, optional), withholding_note (text, optional) | 56 |\n| `economy.regions` | Regions (US states, DC and the national baseline) | `lre-table/economy.regions/v1` | name (text), abbr (text), scope (enum), census_region (enum, optional), census_division (enum, optional), time_zones (list, optional), observes_dst (bool, optional), state_income_tax_effective_pct (number, optional), local_income_tax_pct_typical (number, optional), sales_tax_combined_avg_pct (number), cost_of_living_multiplier (number), median_rent_1br_cents_per_month (int), median_rent_2br_cents_per_month (int), residential_electricity_cents_per_kwh (number), minimum_wage_cents_per_h (int), notes (text, optional) | 52 |\n\n### Lint codes\n\n`economy.accounts`, `economy.unpriced_cap`.\n\n## Gear & containers pack (`gear`)\n\nVersion 1 \xB7 realism domain `gear` \xB7 requires `space`.\n\n### Kinds\n\n#### `container`: Container\n\nExtends `item`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `capacity_l` | Capacity (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `max_load_kg` | Max load (kg) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `stock` | Contents category (sampled when first opened) | text |  |  |  |  |  |\n\n#### `item`: Item\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `catalog` | Catalog item | text (row of economy.catalog) |  |  |  |  |  |\n| `category` | Category | text |  |  |  |  |  |\n| `condition` | Condition | number | 0 \u2026 100 | `100` |  |  | live from gear 3; bound auto, \xB125 a turn; bands: broken, worn, good, like new |\n| `consumable` | Consumable | bool |  |  |  |  | live from gear 4 |\n| `from_kit` | From kit | ref |  |  |  |  | locked |\n| `notable` | Notable | bool |  |  |  |  | live from gear 1 |\n| `overdue` | Overdue | bool |  |  |  |  | locked |\n| `piece` | Kit piece | text |  |  |  |  | locked |\n| `qty` | Quantity | number | \u2265 0 | `1` |  |  | live from gear 2; bound confirm, \xB110 a turn |\n| `slot` | Equip slot | text |  |  |  |  | live from gear 3 |\n| `uses` | Uses left | number | \u2265 0 |  |  |  | live from gear 4 |\n| `volume_l` | Volume (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `weight_g` | Weight (g) | number | \u2265 0 |  |  |  | live from gear 2 |\n\n#### `kit`: Kit\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `kit` | Kit template | text |  |  |  |  | live from gear 3 |\n| `piece_count` | Piece count | number |  |  |  |  | live from gear 3 |\n| `pieces` | Pieces | list |  |  |  |  | live from gear 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `equipped` | Equipped by | `item` | `*` | many_one |  |  | `slot` |\n| `uses` | Uses (granted until) | `*` | `*` | many_many |  |  | none |\n| `worn_by` | Worn by | `item` | `*` | many_one |  |  | `slot` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `gear.drop` | `item`, `place?` |\n| `gear.give` | `item`, `from`, `to` |\n| `gear.lend` | `item`, `to`, `until?`, `said?` |\n| `gear.lose` | `item`, `thief?` |\n| `gear.receive` | `name`, `to`, `from?` |\n| `gear.remove` | `item` |\n| `gear.retrieve` | `item` |\n| `gear.take_piece` | `kit`, `piece`, `to` |\n| `gear.transfer` | `item`, `to` |\n| `gear.use` | `item`, `user?` |\n| `gear.wear` | `item`, `wearer`, `slot?` |\n\n### Formula functions\n\n- `carried_kg(holder)`\n- `carries(holder, item)`\n- `has_item(holder, what)`\n- `kit_complete(kit)`\n- `kit_present(kit)`\n- `lent_out(thing)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drop` | Drop | `item: ref \u2192 item` |  | `default` | `1` | drop, put down, leave |\n| `give` | Give | `item: ref \u2192 item`, `to: ref \u2192 person` |  | `default` | `1` | give, hand, pass |\n| `lend` | Lend | `item: ref \u2192 item`, `to: ref \u2192 person`, `days?: number`, `until?: text` |  | `default` | `2` | lend, loan, let borrow |\n| `lose` | Lose something | `item: ref \u2192 item` |  | `default` | `1` | lost my, lose, can't find my, is gone, is missing |\n| `reclaim` | Take back | `item: ref \u2192 item` |  | `default` | `5` | take back, get back, reclaim |\n| `remove` | Take off | `item: ref \u2192 item` |  | `default` | `2` | take off, remove, unequip |\n| `take` | Take | `item: ref \u2192 item` |  | `default` | `1` | take, pick up, grab |\n| `take_piece` | Take from a kit | `kit: ref \u2192 kit`, `piece: text` |  | `default` | `1` | take the, grab a, get a |\n| `use` | Use | `item: ref \u2192 item` |  | `default` | `5` | use, apply |\n| `wear` | Wear or equip | `item: ref \u2192 item` |  | `default` | `2` | wear, put on, equip |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `give` | `ref` |\n| `quantity` | `number` |\n\n### Panels and slots\n\nPanels: `gear.gear`. Slots it writes: `gear`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `gear.grants` | `gear` | 1 | the world |\n\nDetail on demand: `gear` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `gear.containers` | Containers | `lre-table/gear.containers/v1` | name (text), capacity_l (number), max_load_kg (number), empty_weight_g (int), location (enum), equip_slot (ref), price_cents (band), notes (text, optional) | 34 |\n| `gear.items` | Gear items | `lre-table/gear.items/v1` | name (text), category (enum), equip_slot (ref), weight_g (int), volume_l (number), price_cents (band), notes (text, optional) | 90 |\n| `gear.kits` | Kits | `lre-table/gear.kits/v1` | name (text), recommended_container (ref), description (text), piece_count (int), pieces_total_weight_g (number), packed_volume_l (number), price_cents (band), pieces (list), notes (text, optional) | 5 |\n| `gear.slots` | Equip slots | `lre-table/gear.slots/v1` | description (text) | 20 |\n\n### Lint codes\n\n`gear.kits`.\n\n## Relationships pack (`relationships`)\n\nVersion 1 \xB7 realism domain `relationships` \xB7 requires `space`.\n\n### Kinds\n\n#### `company`: Company\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `faction`: Faction\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `family`: Family\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `group`: Group\n\nExtends `thing`.\n\nNo fields of its own.\n\n#### `household`: Household\n\nExtends `group`.\n\nNo fields of its own.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `child_of` | Child of | `person` | `person` | many_many |  | `parent_of` | none |\n| `knows` | Knows | `*` | `*` | many_many |  |  | none |\n| `member_of` | Member of | `*` | `group` | many_many |  |  | `rank`, `role`, `since` |\n| `parent_of` | Parent of | `person` | `person` | many_many |  | `child_of` | none |\n| `partner_of` | Partner of | `person` | `person` | many_many | yes |  | `since` |\n| `regard` | Regard | `*` | `*` | many_many |  |  | `respect`, `trust`, `warmth` |\n| `sibling_of` | Sibling of | `person` | `person` | many_many | yes |  | none |\n| `spouse_of` | Spouse of | `person` | `person` | many_many | yes |  | `since` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `relationships.adjust` | `from`, `to`, `delta`, `axis?`, `why?` |\n| `relationships.appraise` | `from`, `to`, `appraisal`, `why?`, `mutual?` |\n\n### Formula functions\n\n- `faction_regard(group, to)`\n- `regard(from, to, axis)`\n- `regard_band(from, to)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `chat_with` | Chat with | `target: ref \u2192 person` |  | `default` | `15` | chat with, talk to, catch up with |\n| `give_gift` | Give a gift | `target: ref \u2192 person` |  | `default` | `5` | give a gift, surprise |\n\n### Events\n\nIts own: `relationships.regard`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `regard` | `number` |\n\n### Panels and slots\n\nPanels: none. Slots it writes: `people`.\n\n### Lint codes\n\n`relationships.axes`.\n\n## Character sheets pack (`sheets`)\n\nVersion 1 \xB7 realism domain `sheets` \xB7 requires `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `sheets.condition` | `condition`, `who?`, `label?`, `mod?`, `minutes?`, `clear?` |\n\n### Formula functions\n\n- `condition_mod(who)`\n- `derived(who, id)`\n- `difficulty_of(v)`\n- `has_condition(who, id)`\n- `stat(who, stat)`\n- `stat_mod(who, stat)`\n- `stat_word(who, stat)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `attempt` | Attempt | `stat: text`, `difficulty?: text` | `1d20` | `failure`, `great`, `success` | `5` | try to, attempt, check |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `condition` | `list` |\n\n### Panels and slots\n\nPanels: `sheets.you`. Slots it writes: `outcome`.\n\n### Lint codes\n\n`sheets.stat_range`.\n\n## Space & travel pack (`space`)\n\nVersion 1 \xB7 realism domain `space` \xB7 requires `calendar`.\n\n### Kinds\n\n#### `person`: Person\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `activity` | Activity | text |  | `\"idle\"` |  |  | live from castlife 1 |\n| `activity_until` | Activity ends | number |  |  |  |  | live from castlife 1; locked |\n| `agility` | Agility | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `appointments` | Appointments | list |  |  |  |  | live from castlife 2 |\n| `charm` | Charm | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `chores` | Chores | list |  |  |  |  | live from castlife 3 |\n| `conditions` | Conditions | list |  |  |  |  | live from sheets 4 |\n| `employer` | Employer | ref |  |  |  |  | live from money 3 |\n| `grit` | Grit | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `home` | Home | ref |  |  |  |  | live from space 1 |\n| `might` | Might | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `needs` | Needs | list |  |  |  |  | live from castlife 4; locked |\n| `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |\n| `region` | Region | text (row of economy.regions) |  |  |  |  | live from money 3 |\n| `scene` | Scene type | text |  |  |  |  |  |\n| `trips` | Trips | list |  |  |  |  | live from castlife 1 |\n| `wealth` | Wealth | text |  |  |  |  | live from money 1 |\n| `wits` | Wits | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n\n#### `thing`: Thing\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `owner` | Owner | ref |  |  |  |  |  |\n| `place` | Place | ref |  |  |  |  | live from space 1 |\n| `x` | Grid x | number |  |  |  |  | live from space 3 |\n| `y` | Grid y | number |  |  |  |  | live from space 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `in` | In | `*` | `*` | many_one |  |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `space.set_route` | `route`, `open?` |\n| `space.step` | `x`, `y`, `entity?` |\n\n### Formula functions\n\n- `distance_km(from, to, mode)`\n- `grid_minutes(place, x, y)`\n- `grid_reachable(place, x, y)`\n- `on_grid(thing)`\n- `reach(a, b)`\n- `route_exists(from, to, mode)`\n- `route_open(route)`\n- `travel_minutes(from, to, mode)`\n- `within(place, ancestor)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `go` | Go to | `to: ref \u2192 place` |  | `default` | `level.space < 2 ? (level.space < 1 ? 0 : 15) : travel_minutes(here, to, 'walk')` | go to, walk to, head to, head over to, leave for |\n| `step` | Move on the map | `x: number`, `y: number` |  | `default` | `grid_minutes(here, x, y)` | walk over to, cross to, move to |\n\n### Events\n\nIts own: `space.pos`, `space.route`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `location` | `ref` |\n\n### Panels and slots\n\nPanels: `space.map`. Slots it writes: `scene`.\n\n### Lint codes\n\n`space.grid`, `space.maps`, `space.references`.\n\n## Story pack (`story`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `story.answer` | `track`, `answer`, `decision?` |\n| `story.flag` | `name`, `value?` |\n\n### Formula functions\n\n- `flag(name)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `answer` | Answer | `puzzle?: text`, `answer: text`, `decision?: number` |  | `default` | `1` | the answer is, i think it's, solve, answer, the code is, the combination is, try the combination, dial, enter the code |\n\n### Events\n\nIts own: `story.flag`.\n\n### Panels and slots\n\nPanels: `story.quests`. Slots it writes: `quest`.\n\n### Lint codes\n\n`story.leaky_label`.\n\n## Vehicles pack (`vehicles`)\n\nVersion 1 \xB7 realism domain `vehicles` \xB7 requires `economy`, `gear`, `space`.\n\n### Kinds\n\n#### `vehicle`: Vehicle\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `class` | Vehicle class | text |  |  |  |  |  |\n| `engine_hours` | Engine hours | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `fuel_pct` | Fuel % | number | 0 \u2026 100 |  |  |  | live from vehicles 2; bound auto, \xB130 a turn |\n| `home` | Home base | ref |  |  |  |  | live from vehicles 3 |\n| `last_service` | Last service (mi or h) | number | \u2265 0 |  |  |  | live from vehicles 4 |\n| `odometer_mi` | Odometer (mi) | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `status` | Status | enum: ok, needs_service, broken |  | `\"ok\"` |  |  | live from vehicles 1; bound confirm |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `vehicles.drive` | `vehicle`, `to`, `driver?`, `riders?` |\n| `vehicles.refuel` | `vehicle`, `payer?`, `pct?` |\n| `vehicles.service` | `vehicle`, `payer?`, `repair?` |\n\n### Formula functions\n\n- `drive_minutes(vehicle, to)`\n- `fuel_ok(vehicle, to)`\n- `fuel_pct(vehicle)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drive` | Drive | `vehicle: ref \u2192 vehicle`, `to: ref \u2192 place` |  | `default` | `drive_minutes(vehicle, to)` | drive to, drive over to, take the truck, take the car, sail to, ride to |\n| `refuel` | Refuel | `vehicle: ref \u2192 vehicle` |  | `default` | `10` | refuel, fill up, gas up, charge the car |\n| `repair_vehicle` | Repair | `vehicle: ref \u2192 vehicle` |  | `default` | `180` | repair, fix the truck, fix the car, get it towed |\n| `service_vehicle` | Service | `vehicle: ref \u2192 vehicle` |  | `default` | `60` | service, oil change, tune up |\n\n### Panels and slots\n\nPanels: `vehicles.garage`. Slots it writes: `vehicles`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `vehicles.upkeep` | `vehicles` | 4 | the world |\n\nDetail on demand: `vehicles` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `vehicles.classes` | Vehicle classes | `lre-table/vehicles.classes/v1` | name (text), domain (enum), fuel_type (enum), factor_guide (ref), tank_capacity_gal (number, optional), tank_capacity_l (number, optional), usable_battery_kwh (number, optional), consumption_unit (enum), consumption (json), range_mi (int, optional), range_h (number, optional), price_new_cents (band), price_used_cents (band), insurance_liability_cents_per_month (int), insurance_full_cents_per_month (int), registration_cents_per_year (band), annual_maintenance_cents_per_year (int), maintenance (json), passengers (int), cargo_l (number), payload_kg (number), towing_kg (number, optional), charging (json, optional), notes (text) | 19 |\n| `vehicles.factors` | Consumption factor guides | `lre-table/vehicles.factors/v1` | basis (text), factors (json), note (text, optional) | 3 |\n\n### Lint codes\n\n`vehicles.classes`.\n\n## Weather pack (`weather`)\n\nVersion 1 \xB7 realism domain `weather` \xB7 requires `space`.\n\n### Kinds\n\n#### `region`: Weather region\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `climate` | Climate | text |  | `\"temperate\"` |  |  |  |\n| `temp_c` | Temperature (\xB0C) | number |  |  |  |  | live from weather 3; bound never |\n| `weather` | Weather | text |  | `\"clear\"` |  |  | live from weather 2; bound never |\n| `weather_hold` | Weather held until | number |  |  |  |  | live from weather 2; locked |\n| `weather_hold_until` | Weather held until (condition) | text |  |  |  |  | live from weather 2; locked |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `weather.clear` | `region`, `state?` |\n| `weather.set` | `region`, `state`, `minutes?`, `until?` |\n\n### Formula functions\n\n- `season()`\n- `weather(place)`\n\n### Panels and slots\n\nPanels: `weather.now`. Slots it writes: `scene`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `weather.climate` | `weather` | 2 | the world |\n\n### Lint codes\n\n`weather.climates`.\n";
@@ -40220,16 +40227,30 @@ function lookupReference(query) {
 }
 
 // src/backend/tools.ts
-var MESSAGE_CLIP = 4000;
-var READ_BUDGET = 30000;
+var OUTPUT_LIMIT = 24000;
+var BODY_LIMIT = OUTPUT_LIMIT - 1000;
 var DRAFT_READ_LIMIT = 16000;
-var ENTRY_CLIP = 8000;
+var CARD_FIELDS = {
+  description: { label: "Description", preview: 6000, text: (c) => c.description },
+  personality: { label: "Personality", preview: 2500, text: (c) => c.personality },
+  scenario: { label: "Scenario", preview: 2500, text: (c) => c.scenario },
+  greeting: { label: "Greeting", preview: 3000, text: (c) => c.firstMessage },
+  alternate_greetings: { label: "Other greetings", preview: 0, text: (c) => c.alternateGreetings.map((g, i) => `(${i + 1}) ${g}`).join(`
+
+`) },
+  examples: { label: "Example messages", preview: 2500, text: (c) => c.exampleMessages },
+  creator_notes: { label: "Creator notes", preview: 1500, text: (c) => c.creatorNotes }
+};
 var obj = (properties, required = []) => ({ type: "object", properties, required, additionalProperties: false });
 var TOOLS = [
   {
     name: "transcript_read",
-    description: "Read a range of the source chat's messages, oldest first (0 is the first message). Each line is `#index [role] name: text`.",
-    parameters: obj({ from: { type: "integer", minimum: 0, description: "Index of the first message" }, count: { type: "integer", minimum: 1, maximum: 60, description: "How many messages (at most 60)" } }, ["from"])
+    description: "Read a range of the source chat's messages, oldest first (0 is the first message). Each line is `#index [role] name: text`. The answer stops before a message that wouldn't fit, and says where to read on. A message too long for one answer comes in pieces: give `offset` to read message `from` alone from that character.",
+    parameters: obj({
+      from: { type: "integer", minimum: 0, description: "Index of the first message" },
+      count: { type: "integer", minimum: 1, maximum: 60, description: "How many messages (at most 60)" },
+      offset: { type: "integer", minimum: 0, description: "Read message `from` alone, from this character" }
+    }, ["from"])
   },
   {
     name: "transcript_search",
@@ -40238,8 +40259,8 @@ var TOOLS = [
   },
   {
     name: "cards_read",
-    description: "Read the source's character cards (description, personality, scenario, greeting, examples, notes). Give a name to read one.",
-    parameters: obj({ name: { type: "string" } })
+    description: "Read the source's character cards (description, personality, scenario, greeting, examples, notes); give a name to read one. Long fields are shown in part: give `field` (and `offset`) to read one whole.",
+    parameters: obj({ name: { type: "string" }, field: { type: "string", enum: Object.keys(CARD_FIELDS) }, offset: { type: "integer", minimum: 0 } })
   },
   {
     name: "lore_list",
@@ -40253,13 +40274,13 @@ var TOOLS = [
   },
   {
     name: "lore_read",
-    description: "Read lore entries in full by their ids (at most 12 at once).",
-    parameters: obj({ ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 12 } }, ["ids"])
+    description: "Read lore entries whole by their ids (at most 12 at once). The answer stops before an entry that wouldn't fit, and says which to read next; an entry too long for one answer comes in pieces: give `offset` to read the first id alone from that character.",
+    parameters: obj({ ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 12 }, offset: { type: "integer", minimum: 0 } }, ["ids"])
   },
   {
     name: "pasted_read",
-    description: "Read text the user pasted into the draft's sources. Without an index, lists the pasted texts; with one, reads it from `offset` (characters).",
-    parameters: obj({ index: { type: "integer", minimum: 0 }, offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 200, maximum: 30000 } })
+    description: "Read text the user pasted into the draft's sources. Without an index, lists the pasted texts; with one, reads it from `offset` (characters) and says where to read on.",
+    parameters: obj({ index: { type: "integer", minimum: 0 }, offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 200, maximum: BODY_LIMIT } })
   },
   {
     name: "chat_state",
@@ -40314,6 +40335,10 @@ function str4(v) {
 function clip(text, max) {
   return text.length > max ? `${text.slice(0, max)} \u2026[${text.length - max} more characters]` : text;
 }
+function piece(text, offset, room = BODY_LIMIT) {
+  const end = Math.min(text.length, offset + Math.max(1, room));
+  return { body: text.slice(offset, end), end };
+}
 function words2(query) {
   return [...new Set(query.toLowerCase().split(/\s+/).filter((w) => w.length > 0))];
 }
@@ -40330,6 +40355,25 @@ function done(content, summary, changed = false) {
 function refused(content, summary) {
   return { content, error: true, summary, changed: false };
 }
+function cardText(c) {
+  const parts = [`# ${c.name} (${c.id})`];
+  for (const [key, field] of Object.entries(CARD_FIELDS)) {
+    const text = field.text(c);
+    if (!text)
+      continue;
+    const more = `cards_read name="${c.name}" field="${key}"`;
+    if (field.preview === 0)
+      parts.push(`${field.label}: ${c.alternateGreetings.length} (read them with ${more})`);
+    else
+      parts.push(`${field.label}:
+${text.length > field.preview ? `${text.slice(0, field.preview)} \u2026[${text.length - field.preview} more characters: ${more} offset=${field.preview}]` : text}`);
+  }
+  if (c.tags.length > 0)
+    parts.push(`Tags: ${c.tags.join(", ")}`);
+  return parts.join(`
+
+`);
+}
 function readable(value, path) {
   const json = JSON.stringify(value, null, 1);
   if (json.length <= DRAFT_READ_LIMIT && path !== "")
@@ -40339,14 +40383,23 @@ function readable(value, path) {
   if (!isRecord2(value))
     return clip(json, DRAFT_READ_LIMIT);
   const lines = [`Outline of ${path || "the draft"} (read a deeper path for an item):`];
-  for (const [key, v] of Object.entries(value)) {
+  let used = lines[0]?.length ?? 0;
+  const entries = Object.entries(value);
+  for (const [i, [key, v]] of entries.entries()) {
+    let line;
     if (isRecord2(v)) {
       const ids = Object.keys(v);
-      lines.push(`- ${key}: ${ids.length} item${ids.length === 1 ? "" : "s"}${ids.length > 0 ? ` (${ids.slice(0, 80).join(", ")}${ids.length > 80 ? ", \u2026" : ""})` : ""}`);
+      line = `- ${key}: ${ids.length} item${ids.length === 1 ? "" : "s"}${ids.length > 0 ? ` (${ids.slice(0, 80).join(", ")}${ids.length > 80 ? ", \u2026" : ""})` : ""}`;
     } else if (Array.isArray(v))
-      lines.push(`- ${key}: a list of ${v.length}`);
+      line = `- ${key}: a list of ${v.length}`;
     else
-      lines.push(`- ${key}: ${JSON.stringify(v)}`);
+      line = `- ${key}: ${clip(JSON.stringify(v), 300)}`;
+    if (used + line.length > DRAFT_READ_LIMIT) {
+      lines.push(`(${entries.length - i} more keys: read ${path}/<key>)`);
+      break;
+    }
+    lines.push(line);
+    used += line.length + 1;
   }
   return lines.join(`
 `);
@@ -40367,26 +40420,59 @@ async function run(name, args, ctx) {
       if (messages.length === 0)
         return refused("This draft has no chat to read.", "No chat in the sources");
       const from = int(args.from, 0, messages.length - 1, 0);
-      const count = int(args.count, 1, 60, 30);
+      if (args.offset !== undefined) {
+        const m = messages[from];
+        if (!m)
+          return refused(`There is no message #${from}.`, "No such message");
+        const offset = int(args.offset, 0, Math.max(0, m.content.length - 1), 0);
+        const { body, end } = piece(m.content, offset);
+        const more = end < m.content.length ? `
+
+(Message #${from} continues: read on with from=${from} offset=${end}.)` : from + 1 < messages.length ? `
+
+(That is the end of #${from}; the next message is from=${from + 1}.)` : "";
+        return done(`Message #${from} [${m.role}] ${m.name}, characters ${offset}\u2013${end} of ${m.content.length}:
+
+${body}${more}`, `Read message ${from}, characters ${offset}\u2013${end}`);
+      }
+      const end = Math.min(messages.length, from + int(args.count, 1, 60, 30));
       const lines = [];
       let used = 0;
-      let last = from - 1;
-      for (let i = from;i < Math.min(messages.length, from + count); i++) {
+      let cut = null;
+      for (let i = from;i < end; i++) {
         const m = messages[i];
         if (!m)
           break;
-        const line = `#${i} [${m.role}] ${m.name}: ${clip(m.content, MESSAGE_CLIP)}`;
-        if (used + line.length > READ_BUDGET && lines.length > 0)
+        const head = `#${i} [${m.role}] ${m.name}: `;
+        if (lines.length === 0 && head.length + m.content.length > BODY_LIMIT) {
+          const { body, end: at } = piece(m.content, 0, BODY_LIMIT - head.length);
+          lines.push(`${head}${body}`);
+          cut = { index: i, at };
+          break;
+        }
+        const line = `${head}${m.content}`;
+        if (lines.length > 0 && used + line.length > BODY_LIMIT)
           break;
         lines.push(line);
-        used += line.length;
-        last = i;
+        used += line.length + 2;
       }
+      const last = from + lines.length - 1;
+      if (cut)
+        return done(`Message ${from} of ${messages.length}, in part (0 is the first):
+
+${lines.join(`
+
+`)}
+
+(Message #${cut.index} continues: read on with from=${cut.index} offset=${cut.at}.)`, `Read part of message ${from}`);
+      const more = last + 1 < end ? `
+
+(Stopped after #${last} to keep this answer whole; read on with from=${last + 1}.)` : "";
       return done(`Messages ${from}\u2013${last} of ${messages.length} (0 is the first):
 
 ${lines.join(`
 
-`)}`, `Read messages ${from}\u2013${last} of ${messages.length}`);
+`)}${more}`, `Read messages ${from}\u2013${last} of ${messages.length}`);
     }
     case "transcript_search": {
       const query = str4(args.query);
@@ -40408,30 +40494,42 @@ ${lines.join(`
     case "cards_read": {
       const name = str4(args.name).toLowerCase();
       const cards = (await reader.cards()).filter((c) => !name || c.name.toLowerCase().includes(name));
-      if (cards.length === 0)
+      const first = cards[0];
+      if (!first)
         return refused(name ? `No source card is named like "${args.name}".` : "This draft has no character cards.", "No cards");
-      const text = cards.map((c) => [
-        `# ${c.name} (${c.id})`,
-        c.description && `Description:
-${clip(c.description, 8000)}`,
-        c.personality && `Personality:
-${clip(c.personality, 3000)}`,
-        c.scenario && `Scenario:
-${clip(c.scenario, 3000)}`,
-        c.firstMessage && `Greeting:
-${clip(c.firstMessage, 4000)}`,
-        c.alternateGreetings.length > 0 && `Other greetings: ${c.alternateGreetings.length}`,
-        c.exampleMessages && `Example messages:
-${clip(c.exampleMessages, 3000)}`,
-        c.creatorNotes && `Creator notes:
-${clip(c.creatorNotes, 2000)}`,
-        c.tags.length > 0 && `Tags: ${c.tags.join(", ")}`
-      ].filter(Boolean).join(`
+      const key = str4(args.field);
+      if (key) {
+        const field = hasOwn5(CARD_FIELDS, key) ? CARD_FIELDS[key] : undefined;
+        if (!field)
+          return refused(`A card has no field "${key}"; the fields are ${Object.keys(CARD_FIELDS).join(", ")}.`, "No such field");
+        const text = field.text(first);
+        if (!text)
+          return done(`${first.name} has no ${field.label.toLowerCase()}.`, `${first.name}: no ${field.label.toLowerCase()}`);
+        const offset = int(args.offset, 0, Math.max(0, text.length - 1), 0);
+        const { body, end } = piece(text, offset);
+        const more = end < text.length ? `
 
-`)).join(`
+(Read on with offset=${end}.)` : "";
+        return done(`${first.name} \xB7 ${field.label}, characters ${offset}\u2013${end} of ${text.length}:
 
-`);
-      return done(text, `Read ${cards.map((c) => c.name).join(", ")}`);
+${body}${more}`, `Read ${first.name}'s ${field.label.toLowerCase()}`);
+      }
+      const parts = [];
+      const shown = [];
+      let used = 0;
+      for (const [i, c] of cards.entries()) {
+        const text = cardText(c);
+        if (parts.length > 0 && used + text.length > BODY_LIMIT) {
+          parts.push(`(Not shown, to keep this answer whole: ${cards.slice(i).map((x) => x.name).join(", ")}. Read each by name.)`);
+          break;
+        }
+        parts.push(clip(text, BODY_LIMIT));
+        shown.push(c.name);
+        used += Math.min(text.length, BODY_LIMIT) + 2;
+      }
+      return done(parts.join(`
+
+`), `Read ${shown.join(", ")}`);
     }
     case "lore_list": {
       const want = str4(args.book).toLowerCase();
@@ -40449,11 +40547,19 @@ ${clip(c.creatorNotes, 2000)}`,
       if (!book)
         return refused(`No source book matches "${args.book}".`, "No such book");
       const entries = await reader.entries(book.id);
-      const lines = entries.slice(0, 300).map((e) => `- [${e.id}] ${e.comment || "(untitled)"}${e.keys.length > 0 ? ` (keys: ${e.keys.slice(0, 8).join(", ")})` : ""}, ${e.content.length} chars${e.disabled ? ", switched off" : ""}${e.constant ? ", always on" : ""}`);
-      return done(`${book.name}: ${entries.length} entries
+      const lines = [];
+      let used = 0;
+      for (const e of entries) {
+        const line = `- [${e.id}] ${e.comment || "(untitled)"}${e.keys.length > 0 ? ` (keys: ${e.keys.slice(0, 8).join(", ")})` : ""}, ${e.content.length} chars${e.disabled ? ", switched off" : ""}${e.constant ? ", always on" : ""}`;
+        if (used + line.length > BODY_LIMIT)
+          break;
+        lines.push(line);
+        used += line.length + 1;
+      }
+      const rest = entries.length - lines.length;
+      return done(`${book.name}: ${entries.length} entries${rest > 0 ? `; the first ${lines.length} are listed here (find the other ${rest} with lore_search)` : ""}
 ${lines.join(`
-`)}${entries.length > 300 ? `
-\u2026` : ""}`, `Listed ${book.name} (${entries.length} entries)`);
+`)}`, `Listed ${book.name} (${entries.length} entries)`);
     }
     case "lore_search": {
       const query = str4(args.query);
@@ -40477,23 +40583,55 @@ ${lines.join(`
       if (ids.length === 0)
         return refused("Give the ids of the entries to read (from lore_list or lore_search).", "No entries named");
       const all = await reader.allEntries();
+      const head = (id) => {
+        const found = all.find((x) => x.entry.id === id);
+        return found ? `# ${found.entry.comment || "(untitled)"} [${id}] \xB7 ${found.book.name}${found.entry.keys.length > 0 ? `
+Keys: ${found.entry.keys.join(", ")}` : ""}
+` : null;
+      };
+      if (args.offset !== undefined) {
+        const id = ids[0] ?? "";
+        const text = all.find((x) => x.entry.id === id)?.entry.content;
+        if (text === undefined)
+          return refused(`[${id}] isn't an entry of the source books.`, "No such entry");
+        const offset = int(args.offset, 0, Math.max(0, text.length - 1), 0);
+        const { body, end } = piece(text, offset);
+        const more = end < text.length ? `
+
+(Read on with ids=["${id}"] offset=${end}.)` : "";
+        return done(`${head(id) ?? ""}Characters ${offset}\u2013${end} of ${text.length}:
+
+${body}${more}`, `Read part of lore entry ${id}`);
+      }
       const parts = [];
       let used = 0;
-      for (const id of ids) {
-        const found = all.find((x) => x.entry.id === id);
-        const text = found ? `# ${found.entry.comment || "(untitled)"} [${id}] \xB7 ${found.book.name}${found.entry.keys.length > 0 ? `
-Keys: ${found.entry.keys.join(", ")}` : ""}
-${clip(found.entry.content, ENTRY_CLIP)}` : `# [${id}]: not an entry of the source books`;
-        if (used + text.length > READ_BUDGET && parts.length > 0) {
-          parts.push(`(stopped before ${id}: read the rest in another call)`);
+      let read = 0;
+      for (const [i, id] of ids.entries()) {
+        const top = head(id);
+        const content = all.find((x) => x.entry.id === id)?.entry.content ?? "";
+        const text = top === null ? `# [${id}]: not an entry of the source books` : `${top}${content}`;
+        if (top !== null && parts.length === 0 && text.length > BODY_LIMIT) {
+          const { body, end } = piece(content, 0, BODY_LIMIT - top.length);
+          parts.push(`${top}${body}
+
+(Entry ${id} continues: read on with ids=["${id}"] offset=${end}.)`);
+          read++;
+          if (i + 1 < ids.length)
+            parts.push(`(Not read, to keep this answer whole: ${ids.slice(i + 1).join(", ")}. Read them in another call.)`);
+          break;
+        }
+        if (parts.length > 0 && used + text.length > BODY_LIMIT) {
+          parts.push(`(Not read, to keep this answer whole: ${ids.slice(i).join(", ")}. Read them in another call.)`);
           break;
         }
         parts.push(text);
-        used += text.length;
+        used += text.length + 2;
+        if (top !== null)
+          read++;
       }
       return done(parts.join(`
 
-`), `Read ${ids.length} lore entr${ids.length === 1 ? "y" : "ies"}`);
+`), `Read ${read} lore entr${read === 1 ? "y" : "ies"}`);
     }
     case "pasted_read": {
       const pasted = reader.source.pasted;
@@ -40506,11 +40644,13 @@ ${clip(found.entry.content, ENTRY_CLIP)}` : `# [${id}]: not an entry of the sour
       if (!item)
         return refused("No pasted text has that index.", "No such text");
       const offset = int(args.offset, 0, Math.max(0, item.text.length - 1), 0);
-      const length = int(args.length, 200, READ_BUDGET, 20000);
-      const end = Math.min(item.text.length, offset + length);
+      const { body, end } = piece(item.text, offset, int(args.length, 200, BODY_LIMIT, BODY_LIMIT));
+      const more = end < item.text.length ? `
+
+(Read on with offset=${end}.)` : "";
       return done(`${item.title}, characters ${offset}\u2013${end} of ${item.text.length}:
 
-${item.text.slice(offset, end)}`, `Read ${item.title}`);
+${body}${more}`, `Read ${item.title}`);
     }
     case "chat_state": {
       const chatId = reader.source.chatId;
@@ -40524,7 +40664,7 @@ ${item.text.slice(offset, end)}`, `Read ${item.title}`);
         state.place ? `The POV is at ${state.place.name}${state.place.id ? ` (${state.place.id})` : ""}.` : "The POV's place isn't shown.",
         state.clock ? `Clock: ${state.clock.label} (${state.clock.dayPart}, minute ${state.clock.minutes} of the calendar).` : "",
         state.cash ? `Cash: ${state.cash}.` : "",
-        state.present.length > 0 ? `Present: ${state.present.map((p) => `${p.name} (${p.id})`).join(", ")}.` : "Nobody else is present.",
+        state.present.length > 0 ? `Present: ${state.present.map((p) => `${p.name} (${p.id}${p.life ? `, ${p.life.toLowerCase()}` : ""})`).join(", ")}.` : "Nobody else is present.",
         state.quests.length > 0 ? `Open quests:
 ${state.quests.map((q) => `- ${q.label} (${q.id}, ${q.kind}) at "${q.stage}"${q.cue ? `: ${q.cue}` : ""}`).join(`
 `)}` : "No open quests."
@@ -40559,7 +40699,9 @@ ${readable(value, path)}`, `Read ${read.name}${path ? ` at ${path}` : ""}`);
     case "draft_patch": {
       if (!Array.isArray(args.ops) || args.ops.length === 0)
         return refused("Give ops: a list of JSON Patch operations.", "No operations");
-      const ops = args.ops.slice(0, 200).map((raw, i) => readOp(raw, i));
+      if (args.ops.length > 200)
+        return refused(`That is ${args.ops.length} operations; send at most 200 in one draft_patch (about 40 makes a good batch). Nothing was changed.`, `Refused ${args.ops.length} operations`);
+      const ops = args.ops.map((raw, i) => readOp(raw, i));
       let report = { text: "", errors: 0, warnings: 0 };
       await ctx.drafts.update(ctx.userId, ctx.draftId, (draft) => {
         const next = applyPatch(draft.proposed ?? draft.doc, ops);
@@ -40589,20 +40731,28 @@ ${readable(value, path)}`, `Read ${read.name}${path ? ` at ${path}` : ""}`);
 async function runTool(name, args, ctx) {
   if (!hasOwn5(TOOL_NAMES, name))
     return refused(`There is no tool called ${name}. The tools are: ${TOOLS.map((t) => t.name).join(", ")}.`, `Unknown tool ${name}`);
+  let outcome;
   try {
-    return await run(name, args, ctx);
+    outcome = await run(name, args, ctx);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return refused(error instanceof PatchError ? `Nothing was changed: ${message}` : message, `${name} failed: ${clip(message, 120)}`);
+    outcome = refused(error instanceof PatchError ? `Nothing was changed: ${message}` : message, `${name} failed: ${clip(message, 120)}`);
   }
+  return outcome.content.length <= OUTPUT_LIMIT ? outcome : { ...outcome, content: `${outcome.content.slice(0, OUTPUT_LIMIT - 100)}
+\u2026[cut here: the answer passed ${OUTPUT_LIMIT} characters; ask for less]` };
 }
 
 // src/backend/assistant.ts
 var MAX_TOKENS = 8192;
 var CALL_TIMEOUT_MS = 240000;
-var RESULT_KEEP = 12000;
 var RUN_BUDGET = 160000;
 var TRIMMED = 600;
+var CALLS_KEPT = 2;
+var ARGS_KEPT = 600;
+var PATHS_KEPT = 40;
+var CUT_OFF = /^(length|max_tokens|max_output_tokens)$/i;
+var CUT_OFF_LIMIT = 3;
+var CUT_OFF_NOTE = "The model's last answer ran past its length limit and was lost, with any tool call it was writing. Carry on in smaller steps: at most about 30 operations per draft_patch, and short thoughts.";
 var INSTRUCTIONS = `You are the assistant of LumiRPEngine Studio. You build LumiRPEngine worlds (lre-world-v1 documents) in the user's draft: from scratch, or, above all, by converting a chat the user is already in, its character cards, its lore books and pasted text into a complete world whose start is the story's present. You also refine worlds that chats already play.
 
 How you work:
@@ -40622,7 +40772,7 @@ function systemPrompt(draft, sources, chatState) {
   const doc = draft.doc;
   const counts = Object.entries(doc).flatMap(([key, value]) => value && typeof value === "object" && !Array.isArray(value) && ["entities", "places", "routes", "maps", "tracks", "lore", "schedules", "rules", "actions", "classifications", "kinds"].includes(key) ? [`${key} ${Object.keys(value).length}`] : []).join(", ");
   const state = chatState ? `
-The source chat already plays LumiRPEngine world ${chatState.worldId} at revision ${chatState.revision}: the POV is at ${chatState.place?.name ?? "an unknown place"}, ${chatState.clock?.label ?? "at an unknown time"}${chatState.cash ? `, with ${chatState.cash}` : ""}; present: ${chatState.present.map((p) => p.name).join(", ") || "nobody"}; open quests: ${chatState.quests.map((q) => q.label).join(", ") || "none"}. Refine that world as a new revision (see the guide's "Refining a world in play").` : "";
+The source chat already plays LumiRPEngine world ${chatState.worldId} at revision ${chatState.revision}: the POV is at ${chatState.place?.name ?? "an unknown place"}, ${chatState.clock?.label ?? "at an unknown time"}${chatState.cash ? `, with ${chatState.cash}` : ""}; present: ${chatState.present.map((p) => p.life ? `${p.name} (${p.life.toLowerCase()})` : p.name).join(", ") || "nobody"}; open quests: ${chatState.quests.map((q) => q.label).join(", ") || "none"}.${draft.link?.worldId === chatState.worldId ? ` This draft started from that world: refine it as a new revision (see the guide's "Refining a world in play").` : " This draft didn't start from that world, so it builds a world of its own."}` : "";
   return [
     INSTRUCTIONS,
     `# The conversion guide
@@ -40637,6 +40787,14 @@ Engine: LumiRPEngine studio API ${ENGINE_VERSION}.`
 
 `);
 }
+function shortArgs(name, args) {
+  if (name === "draft_patch" && Array.isArray(args.ops)) {
+    const ops = args.ops.flatMap((op) => isRecord2(op) && typeof op.op === "string" && typeof op.path === "string" ? [`${op.op} ${op.path}`] : []);
+    return { sent_in_short: `${ops.length} operation${ops.length === 1 ? "" : "s"}: ${ops.slice(0, PATHS_KEPT).join(", ")}${ops.length > PATHS_KEPT ? ", \u2026" : ""}` };
+  }
+  const json = JSON.stringify(args);
+  return json.length > ARGS_KEPT ? { sent_in_short: `${json.slice(0, ARGS_KEPT)}\u2026` } : args;
+}
 async function describeSources(reader) {
   const s = reader.source;
   const lines = [`Sources: ${s.label}.`];
@@ -40645,6 +40803,8 @@ async function describeSources(reader) {
   const cards = await reader.cards().catch(() => []);
   if (cards.length > 0)
     lines.push(`Character cards: ${cards.map((c) => c.name).join(", ")}.`);
+  if (s.persona)
+    lines.push(`The user's persona is ${s.persona.name} (cards_read name="${s.persona.name}"): who they play in the chat, usually the POV.`);
   if (s.books.length > 0)
     lines.push(`Lore books: ${s.books.map((b) => `${b.name} (${b.scope})`).join(", ")}.`);
   if (s.pasted.length > 0)
@@ -40676,6 +40836,7 @@ ${text}`;
       used += r.content.length;
     }
   }
+  const whole = new Set(chat.filter((e) => e.kind === "assistant" && e.run === run && e.calls.length > 0).slice(-CALLS_KEPT));
   const waiting = [];
   let calling = false;
   for (const e of chat) {
@@ -40693,7 +40854,7 @@ ${text}`;
           say("assistant", text);
         continue;
       }
-      const parts = [...e.text ? [{ type: "text", text: e.text }] : [], ...e.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: c.args, ...c.signature ? { signature: c.signature } : {} }))];
+      const parts = [...e.text ? [{ type: "text", text: e.text }] : [], ...e.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: whole.has(e) ? c.args : shortArgs(c.name, c.args), ...c.signature ? { signature: c.signature } : {} }))];
       out.push({ role: "assistant", content: parts, ...e.reasoning ? { reasoning: e.reasoning } : {} });
       calling = true;
     } else if (e.run === run && calling) {
@@ -40773,6 +40934,7 @@ class Assistant {
     const sources = await describeSources(reader);
     const chatState = first.source.chatId ? await this.bridge.chatState(userId, first.source.chatId) : null;
     const ctx = { userId, draftId, drafts: this.drafts, reader, bridge: this.bridge };
+    let cutOffs = 0;
     for (let round = 0;; round++) {
       if (signal.aborted) {
         await this.note(userId, draftId, "You stopped the assistant.");
@@ -40792,6 +40954,8 @@ class Assistant {
         await this.note(userId, draftId, signal.aborted ? "You stopped the assistant." : `The model call failed: ${error instanceof Error ? error.message : String(error)}`);
         break;
       }
+      const cutOff = CUT_OFF.test(reply.finishReason);
+      cutOffs = cutOff ? cutOffs + 1 : 0;
       const text = reply.content.trim();
       const calls = reply.toolCalls;
       const at = Date.now();
@@ -40800,7 +40964,15 @@ class Assistant {
       });
       if (text)
         this.activity(userId, draftId, { kind: "assistant", text, at });
+      if (cutOff && cutOffs >= CUT_OFF_LIMIT) {
+        await this.note(userId, draftId, `The model ran past its length limit ${CUT_OFF_LIMIT} times in a row, so the assistant stopped. Ask for less at a time, or use a connection that allows longer answers.`);
+        break;
+      }
       if (calls.length === 0) {
+        if (cutOff) {
+          await this.note(userId, draftId, CUT_OFF_NOTE);
+          continue;
+        }
         if (!text)
           await this.note(userId, draftId, "The model answered with nothing. Try again, or pick another connection in the Studio's settings.");
         break;
@@ -40808,12 +40980,14 @@ class Assistant {
       const results = [];
       for (const call of calls) {
         const outcome = signal.aborted ? { content: "The user stopped the assistant before this ran.", error: true, summary: "Stopped", changed: false } : await runTool(call.name, call.args, ctx);
-        results.push({ id: call.id, name: call.name, content: clip2(outcome.content, RESULT_KEEP), error: outcome.error, summary: outcome.summary });
+        results.push({ id: call.id, name: call.name, content: outcome.content, error: outcome.error, summary: outcome.summary });
         this.activity(userId, draftId, { kind: "tool", name: call.name, summary: outcome.summary, error: outcome.error, at: Date.now() });
       }
       await this.drafts.update(userId, draftId, (d) => {
         d.chat.push({ kind: "results", at: Date.now(), run, results });
       });
+      if (cutOff)
+        await this.note(userId, draftId, CUT_OFF_NOTE);
       await this.changed(userId, draftId);
     }
     await this.drafts.update(userId, draftId, (d) => {
@@ -40870,7 +41044,7 @@ function readChats(value) {
       return [];
     const place = isRecord2(c.place) && str5(c.place.name) ? { id: str5(c.place.id) ? c.place.id : null, name: c.place.name } : null;
     const clock = isRecord2(c.clock) && typeof c.clock.minutes === "number" && str5(c.clock.label) ? { minutes: c.clock.minutes, label: c.clock.label, dayPart: str5(c.clock.dayPart) ? c.clock.dayPart : "" } : null;
-    const present = Array.isArray(c.present) ? c.present.flatMap((p) => isRecord2(p) && str5(p.id) && str5(p.name) ? [{ id: p.id, name: p.name, label: str5(p.label) ? p.label : p.name }] : []) : [];
+    const present = Array.isArray(c.present) ? c.present.flatMap((p) => isRecord2(p) && str5(p.id) && str5(p.name) ? [{ id: p.id, name: p.name, label: str5(p.label) ? p.label : p.name, ...str5(p.life) ? { life: p.life } : {} }] : []) : [];
     const quests = Array.isArray(c.quests) ? c.quests.flatMap((q) => isRecord2(q) && str5(q.id) && str5(q.label) ? [{ id: q.id, kind: str5(q.kind) ? q.kind : "quest", label: q.label, stage: str5(q.stage) ? q.stage : "", cue: str5(q.cue) ? q.cue : null }] : []) : [];
     return [{ chatId: c.chatId, worldId: c.worldId, revision: c.revision, definitionsFrom: str5(c.definitionsFrom) ? c.definitionsFrom : null, status: str5(c.status) ? c.status : "idle", place, clock, cash: str5(c.cash) ? c.cash : null, present, quests, at: typeof c.at === "number" ? c.at : 0 }];
   });
@@ -41334,6 +41508,13 @@ class Dispatcher {
         });
         return { draft: this.view(userId, draft) };
       }
+      case "review.change": {
+        const draft = await this.draft(userId, r.draftId);
+        if (!draft.proposed)
+          throw new Error("There is nothing to review.");
+        const at = parsePointer(r.key);
+        return { before: getAt(toJson(draft.doc), at) ?? null, after: getAt(toJson(draft.proposed), at) ?? null };
+      }
       case "assistant.send": {
         await this.draft(userId, r.draftId);
         await this.assistant.send(userId, r.draftId, r.text);
@@ -41342,6 +41523,18 @@ class Dispatcher {
       }
       case "assistant.stop":
         return { stopped: this.assistant.stop(userId, r.draftId) };
+      case "offer.withdraw": {
+        const draft = await this.draft(userId, r.draftId);
+        if (draft.offer)
+          await this.bridge.withdraw(userId, draft.offer.offerId);
+        const updated = await this.drafts.update(userId, r.draftId, (d) => {
+          if (!d.offer)
+            return;
+          d.offer = null;
+          d.chat.push({ kind: "note", text: "You withdrew the offer, so LumiRPEngine no longer sees it.", at: Date.now() });
+        });
+        return { draft: this.view(userId, updated) };
+      }
       case "install":
         return this.install(userId, r.draftId, r.mode, r.worldId, r.attachChatId);
       case "installed": {
@@ -41380,11 +41573,15 @@ class Dispatcher {
       }
       case "chat": {
         const chat = await ownChat(this.host, userId, spec.chatId);
+        const playing = await this.bridge.chatState(userId, chat.id).catch(() => null);
+        if (playing)
+          return this.create(userId, name, { kind: "world", worldId: playing.worldId, chatId: chat.id });
         const ids = chatCharacterIds(chat);
         const cards = await cardsOf(this.host, userId, ids);
         const books = await booksFor(this.host, userId, chat, cards);
         const world = title || chat.name || "New world";
-        const source = { ...empty, label: `Chat: ${chat.name}`, chatId: chat.id, characterIds: ids, books };
+        const persona = await this.host.personas.active(userId).catch(() => null);
+        const source = { ...empty, label: `Chat: ${chat.name}`, chatId: chat.id, characterIds: ids, books, persona: persona ? { id: persona.id, name: persona.name } : null };
         return this.drafts.create(userId, { name: world, source, doc: newWorld(slug2(world), world), link: null, note: `Started from the chat \u201C${chat.name}\u201D${cards.length > 0 ? ` with ${cards.map((c) => c.name).join(", ")}` : ""}${books.length > 0 ? `, reading ${books.length} lore book${books.length === 1 ? "" : "s"}` : ""}.` });
       }
       case "character": {
@@ -41419,7 +41616,8 @@ class Dispatcher {
           const chat = await ownChat(this.host, userId, spec.chatId);
           const ids = chatCharacterIds(chat);
           const cards = await cardsOf(this.host, userId, ids);
-          source = { ...source, label: `World: ${read.name}, played in \u201C${chat.name}\u201D`, chatId: chat.id, characterIds: ids, books: await booksFor(this.host, userId, chat, cards) };
+          const persona = await this.host.personas.active(userId).catch(() => null);
+          source = { ...source, label: `World: ${read.name}, played in \u201C${chat.name}\u201D`, chatId: chat.id, characterIds: ids, books: await booksFor(this.host, userId, chat, cards), persona: persona ? { id: persona.id, name: persona.name } : null };
         }
         return this.drafts.create(userId, { name: title || read.name, source, doc: loaded.world, link: { worldId: read.worldId, revision: read.head }, note: `Started from LumiRPEngine's ${read.name} at its head revision ${read.head.slice(0, 8)}.` });
       }
@@ -41439,8 +41637,19 @@ class Dispatcher {
     if (attachChatId)
       await ownChat(this.host, userId, attachChatId);
     const doc = worldId ? { ...loaded.world, id: worldId } : loaded.world;
-    const offer = { offerId: `o_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, doc: toJson(doc), mode, ...worldId ? { worldId } : {}, ...attachChatId ? { attachChatId } : {}, createdAt: Date.now() };
+    const offer = { offerId: `o_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, doc: toJson(doc), mode, ...worldId ? { worldId } : {}, ...worldId && worldId === draft.link?.worldId && draft.link.revision ? { baseRevision: draft.link.revision } : {}, ...attachChatId ? { attachChatId } : {}, createdAt: Date.now() };
+    const replaced = await this.bridge.pending(userId);
     await this.bridge.publish(userId, draftId, offer);
+    if (replaced && replaced.draftId !== draftId) {
+      await this.drafts.update(userId, replaced.draftId, (d) => {
+        if (d.offer?.offerId !== replaced.offer.offerId)
+          return;
+        d.offer = null;
+        d.chat.push({ kind: "note", text: "Another draft's offer replaced this one in LumiRPEngine.", at: Date.now() });
+      }).catch(() => {
+        return;
+      });
+    }
     await this.drafts.update(userId, draftId, (d) => {
       d.offer = { offerId: offer.offerId, mode, createdAt: offer.createdAt };
       d.chat.push({ kind: "note", text: `Offered to LumiRPEngine as ${mode === "new" ? "a new world" : `a new revision of world ${worldId}`}${attachChatId ? ", to attach to a chat" : ""}. Review and install it in LumiRPEngine's Build tab.`, at: offer.createdAt });
@@ -41499,6 +41708,9 @@ function startStudio(host) {
 }
 
 // src/backend/spindle-host.ts
+function persona(p) {
+  return { id: p.id, name: p.name, description: p.description, bookId: p.attached_world_book_id };
+}
 var PAGE = 200;
 function text3(o, key) {
   return isRecord2(o) && typeof o[key] === "string" ? o[key] : "";
@@ -41597,8 +41809,13 @@ function createSpindleHost() {
       global: (userId) => spindle.world_books.getGlobal(userId)
     },
     personas: {
-      async activeBookId(userId) {
-        return (await spindle.personas.getActive(userId))?.attached_world_book_id ?? null;
+      async active(userId) {
+        const p = await spindle.personas.getActive(userId);
+        return p ? persona(p) : null;
+      },
+      async get(personaId, userId) {
+        const p = await spindle.personas.get(personaId, userId);
+        return p ? persona(p) : null;
       }
     },
     models: {
