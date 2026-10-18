@@ -3,9 +3,9 @@
 // assistant works on a proposal the user reviews, and Install only offers the accepted draft to
 // LumiRPEngine, where the player confirms it.
 
+import type { StudioOffer } from "lumi-rp-engine/studio";
 import { exportFile, newWorld, readWorldDoc } from "../engine";
 import type { WorldDoc } from "../engine";
-import type { StudioOffer } from "../shared/bridge";
 import { isRecord, toJson } from "../shared/json";
 import type { JsonValue } from "../shared/json";
 import type { BackendToFrontend, BookRef, DraftSource, FrontendToBackend, ResultBodies, SourceSpec } from "../shared/protocol";

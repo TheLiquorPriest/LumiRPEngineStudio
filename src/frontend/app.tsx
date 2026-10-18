@@ -4,12 +4,19 @@
 // LumiRPEngine. The backend does the work; this file routes clicks and shows what it sends.
 
 import { useEffect, useRef, useState } from "preact/hooks";
-import type { EngineWorldEntry } from "../shared/bridge";
-import { INSTALLED_EVENT, OFFER_EVENT, OFFER_INBOUND, readInstalled, STATE_EVENT, STATE_REQUEST_EVENT } from "../shared/bridge";
+import { STATE_EVENT, STATE_REQUEST_EVENT, STUDIO_INBOUND, STUDIO_INSTALLED_EVENT, STUDIO_OFFER_EVENT } from "lumi-rp-engine/studio-bridge";
+import type { StudioInstalled, StudioWorldEntry } from "lumi-rp-engine/studio-bridge";
 import { isRecord } from "../shared/json";
 import type { JsonValue } from "../shared/json";
 import type { ChatInfo, ConnectionView, DraftSummary, DraftView, SourceSpec, StudioSettings } from "../shared/protocol";
 import type { Client } from "./client";
+
+/** LumiRPEngine's `lre-studio-installed-v1` detail (`StudioInstalled`), or null when it isn't one. */
+function readInstalled(value: unknown): StudioInstalled | null {
+  if (!isRecord(value) || typeof value.offerId !== "string" || typeof value.worldId !== "string" || typeof value.revision !== "string") return null;
+  if (value.mode !== "new" && value.mode !== "revision") return null;
+  return { offerId: value.offerId, mode: value.mode, worldId: value.worldId, revision: value.revision };
+}
 
 export interface FrontendHost {
   /** The chat open in Lumiverse, if any. */
@@ -70,7 +77,10 @@ export function App(props: { client: Client; host: FrontendHost }) {
     });
     const onState = (event: Event) => {
       const detail: unknown = (event as CustomEvent).detail;
-      if (isRecord(detail) && typeof detail.engineVersion === "string") setEngine({ version: detail.engineVersion, offers: Array.isArray(detail.inbound) && detail.inbound.includes(OFFER_INBOUND) });
+      if (!isRecord(detail) || typeof detail.engineVersion !== "string") return;
+      const inbound: unknown[] = Array.isArray(detail.inbound) ? detail.inbound : [];
+      // Install needs an engine that takes worlds in every way the pinned contract names: a file, and this extension's offer.
+      setEngine({ version: detail.engineVersion, offers: STUDIO_INBOUND.every((way) => inbound.includes(way)) });
     };
     const onInstalled = (event: Event) => {
       const installed = readInstalled((event as CustomEvent).detail);
@@ -81,14 +91,14 @@ export function App(props: { client: Client; host: FrontendHost }) {
       }, (error: unknown) => setNotice({ text: `The Studio couldn't record what LumiRPEngine installed: ${error instanceof Error ? error.message : String(error)}`, error: true }));
     };
     window.addEventListener(STATE_EVENT, onState);
-    window.addEventListener(INSTALLED_EVENT, onInstalled);
+    window.addEventListener(STUDIO_INSTALLED_EVENT, onInstalled);
     window.dispatchEvent(new CustomEvent(STATE_REQUEST_EVENT, { detail: { version: 1 } }));
     const offChat = host.onChatChange(() => setChatId(host.activeChat()));
     return () => {
       offPush();
       offChat();
       window.removeEventListener(STATE_EVENT, onState);
-      window.removeEventListener(INSTALLED_EVENT, onInstalled);
+      window.removeEventListener(STUDIO_INSTALLED_EVENT, onInstalled);
     };
   }, []);
 
@@ -184,7 +194,7 @@ function NewDraft(props: { client: Client; chatId: string | null; busy: boolean;
   const [chat, setChat] = useState<ChatInfo | null>(null);
   const [characters, setCharacters] = useState<{ id: string; name: string }[] | null>(null);
   const [books, setBooks] = useState<{ id: string; name: string }[] | null>(null);
-  const [worlds, setWorlds] = useState<EngineWorldEntry[] | null>(null);
+  const [worlds, setWorlds] = useState<StudioWorldEntry[] | null>(null);
   const [pick, setPick] = useState<string>("");
   const [picked, setPicked] = useState<string[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -295,7 +305,7 @@ function DraftPanel(props: {
   const [pasteText, setPasteText] = useState("");
   const [declined, setDeclined] = useState<string[]>([]);
   const [item, setItem] = useState<{ collection: string; id: string; proposed: boolean; value: JsonValue | null }>({ collection: "", id: "", proposed: false, value: null });
-  const [worlds, setWorlds] = useState<EngineWorldEntry[] | null>(null);
+  const [worlds, setWorlds] = useState<StudioWorldEntry[] | null>(null);
   const [target, setTarget] = useState<string>(draft.link?.worldId ?? "");
   const fileInput = useRef<HTMLInputElement>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
@@ -311,7 +321,7 @@ function DraftPanel(props: {
     act(async () => {
       if (attach && !props.chatId) throw new Error("Open the chat to attach it to first.");
       const r = await client.request({ type: "install", draftId: draft.id, mode, worldId: mode === "revision" ? target || null : null, attachChatId: attach ? props.chatId : null });
-      window.dispatchEvent(new CustomEvent(OFFER_EVENT, { detail: { offerId: r.offerId } }));
+      window.dispatchEvent(new CustomEvent(STUDIO_OFFER_EVENT, { detail: { offerId: r.offerId } }));
       props.setDraft((await client.request({ type: "draft.open", draftId: draft.id })).draft);
       props.notify("Offered to LumiRPEngine: review it in its Build tab and tap Install there.");
     });

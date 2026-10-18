@@ -5,8 +5,8 @@
 // or after the round limit. Thinking models get their reasoning echoed on the continuation, as a
 // tool-call continuation needs.
 
+import type { StudioChatSummary } from "lumi-rp-engine/studio";
 import { ENGINE_VERSION } from "../engine";
-import type { EngineChatSummary } from "../shared/bridge";
 import { isRecord } from "../shared/json";
 import type { JsonObject } from "../shared/json";
 import type { ChatLine } from "../shared/protocol";
@@ -57,7 +57,7 @@ How you work:
 - When you finish, answer in a few sentences: what the world holds now, what you assumed, and what the user should check.`;
 
 /** The draft and its sources as the model starts each round with them. */
-export function systemPrompt(draft: Draft, sources: string, chatState: EngineChatSummary | null): string {
+export function systemPrompt(draft: Draft, sources: string, chatState: StudioChatSummary | null): string {
   const doc = draft.doc as unknown as Record<string, unknown>;
   const counts = Object.entries(doc)
     .flatMap(([key, value]) => (value && typeof value === "object" && !Array.isArray(value) && ["entities", "places", "routes", "maps", "tracks", "lore", "schedules", "rules", "actions", "classifications", "kinds"].includes(key) ? [`${key} ${Object.keys(value).length}`] : []))

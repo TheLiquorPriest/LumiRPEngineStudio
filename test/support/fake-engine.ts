@@ -1,12 +1,10 @@
 // LumiRPEngine's side of the bridge as its docs/STUDIO.md ("The Studio bridge") defines it, played
-// with the pinned engine's studio API: per-user endpoints only the Studio may read (worlds, each
+// with the pinned engine's studio API and bridge contract: per-user endpoints only the Studio may read (worlds, each
 // world's head, world chats), and an install that reads the Studio's offer as the engine, checks
 // it as Build's review does, installs it, and attaches it to the chat it names.
 
-import { lint, load, revisionOf } from "lumi-rp-engine/studio";
-import type { WorldDoc } from "lumi-rp-engine/studio";
-import { channelId, ENGINE_EXTENSION, STUDIO_EXTENSION } from "../../src/shared/bridge";
-import type { StudioInstalled } from "../../src/shared/bridge";
+import { chatsChannel, ENGINE_EXTENSION, lint, load, offerEndpoint, revisionOf, STUDIO_EXTENSION, worldChannel, worldsChannel } from "lumi-rp-engine/studio";
+import type { StudioChats, StudioInstalled, StudioWorldList, StudioWorldRead, WorldDoc } from "lumi-rp-engine/studio";
 import { isRecord } from "../../src/shared/json";
 import type { JsonValue } from "../../src/shared/json";
 import type { FakeRpcPool } from "./fake-host";
@@ -26,12 +24,11 @@ export class FakeEngine {
     private readonly pool: FakeRpcPool,
     private readonly userId: string,
   ) {
-    const user = channelId(userId);
-    pool.handle(ENGINE_EXTENSION, `studio-worlds.${user}`, [], async (requester) => {
+    pool.handle(ENGINE_EXTENSION, worldsChannel(userId), [], async (requester): Promise<StudioWorldList> => {
       guard(requester);
       return { v: 1, worlds: [...this.worlds].map(([id, w]) => ({ id, name: w.name, head: w.revisions.at(-1)?.id ?? "", revisions: w.revisions.map((r) => r.id), revisionCount: w.revisions.length })) };
     });
-    pool.handle(ENGINE_EXTENSION, `studio-chats.${user}`, ["chats"], async (requester) => {
+    pool.handle(ENGINE_EXTENSION, chatsChannel(userId), ["chats"], async (requester): Promise<StudioChats> => {
       guard(requester);
       return { v: 1, chats: [...this.attached].map(([chatId, a]) => ({ chatId, worldId: a.worldId, revision: a.revision, status: "idle", place: { id: "home", name: "Home" }, clock: { minutes: 480, label: "Mon 08:00", dayPart: "morning" }, cash: null, present: [], quests: [], at: 1 })) };
     });
@@ -41,7 +38,7 @@ export class FakeEngine {
   addWorld(world: WorldDoc): string {
     const id = world.id;
     this.worlds.set(id, { name: world.name, revisions: [{ id: revisionOf(world), doc: world }] });
-    this.pool.handle(ENGINE_EXTENSION, `studio-world.${channelId(this.userId)}.${channelId(id)}`, [], async (requester) => {
+    this.pool.handle(ENGINE_EXTENSION, worldChannel(this.userId, id), [], async (requester): Promise<StudioWorldRead> => {
       guard(requester);
       const w = this.worlds.get(id);
       const head = w?.revisions.at(-1);
@@ -53,7 +50,7 @@ export class FakeEngine {
 
   /** Build's review and Install: reads the offer as the engine, refuses errors, installs, attaches. */
   async install(): Promise<StudioInstalled> {
-    const offer = await this.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(this.userId)}`, ENGINE_EXTENSION);
+    const offer = await this.pool.read(offerEndpoint(this.userId), ENGINE_EXTENSION);
     if (!isRecord(offer) || typeof offer.offerId !== "string" || (offer.mode !== "new" && offer.mode !== "revision")) throw new Error("no offer");
     const loaded = load(offer.doc as JsonValue);
     if (!loaded.ok) throw new Error(`not a world: ${loaded.issues.map((i) => i.message).join("; ")}`);

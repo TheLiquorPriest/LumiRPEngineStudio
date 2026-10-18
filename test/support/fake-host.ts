@@ -2,8 +2,8 @@
 // scripted model, and the shared RPC pool both extensions use. A fake LumiRPEngine (fake-engine.ts)
 // plays the engine's side of the bridge from LumiRPEngine's docs/STUDIO.md. No network, no models.
 
+import { ENGINE_EXTENSION, STUDIO_EXTENSION } from "lumi-rp-engine/studio";
 import type { HostBook, HostBookEntry, HostCharacter, HostChat, HostMessage, HostPersona, ModelReply, ModelRequest, StudioHost } from "../../src/backend/host";
-import { ENGINE_EXTENSION, STUDIO_EXTENSION } from "../../src/shared/bridge";
 import type { BackendToFrontend } from "../../src/shared/protocol";
 
 const SEGMENT = /^[a-z0-9][a-z0-9_-]*$/;

@@ -153,4 +153,12 @@ describe("tool answers", () => {
     // A list too long for one answer says how to find the rest.
     expect(answers[0]?.content).toContain("lore_search");
   });
+
+  test("draft_check reports mistakes in the keys the guide asks for: life, lifeKnownBy and cues", async () => {
+    const { ctx } = await setup();
+    const ghost = { id: "ghost", kind: "person", name: "Old Tom", tier: "background", life: "vanished", lifeKnownBy: ["nobody"], cues: [{ text: "" }], fields: { place: "home" }, relations: [] };
+    await runTool("draft_patch", { ops: [{ op: "add", path: "/entities/ghost", value: ghost }] }, ctx);
+    const out = await runTool("draft_check", {}, ctx);
+    for (const path of ["entities.ghost.life", "entities.ghost.lifeKnownBy", "entities.ghost.cues.0.text"]) expect(out.content).toContain(`error at ${path}:`);
+  });
 });

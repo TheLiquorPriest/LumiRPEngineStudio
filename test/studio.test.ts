@@ -4,7 +4,7 @@
 // nothing, user scoping, the bridge answering only the engine, tool calls going back as they were).
 
 import { describe, expect, test } from "bun:test";
-import { newWorld, validate } from "lumi-rp-engine/studio";
+import { ENGINE_EXTENSION, newWorld, offerEndpoint, STUDIO_EXTENSION, validate } from "lumi-rp-engine/studio";
 import manifest from "../spindle.json";
 import { modelMessages } from "../src/backend/assistant";
 import type { ChatEntry } from "../src/backend/drafts";
@@ -12,7 +12,6 @@ import type { ModelReply, ModelRequest } from "../src/backend/host";
 import { startStudio } from "../src/backend/main";
 import { applyPatch, readOp } from "../src/backend/pointer";
 import { acceptChanges, changesBetween } from "../src/backend/review";
-import { channelId, ENGINE_EXTENSION, STUDIO_EXTENSION } from "../src/shared/bridge";
 import { readWorldDoc } from "../src/engine";
 import { isRecord } from "../src/shared/json";
 import type { JsonObject, JsonValue } from "../src/shared/json";
@@ -142,7 +141,7 @@ describe("LumiRPEngine Studio", () => {
     expect(linked?.link).toEqual({ worldId: installed.worldId, revision: installed.revision });
     expect(linked?.offer).toBeNull();
     // With the offer taken, the engine finds nothing waiting.
-    expect(await host.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(USER)}`, ENGINE_EXTENSION)).toBeNull();
+    expect(await host.pool.read(offerEndpoint(USER), ENGINE_EXTENSION)).toBeNull();
   });
 
   test("a revision of an engine world keeps the world's id, and reads of the engine go through its endpoints", async () => {
@@ -154,7 +153,7 @@ describe("LumiRPEngine Studio", () => {
     expect(draft.link?.worldId).toBe("w_harbor");
     await send("install", { draftId: draft.id, mode: "revision", worldId: null, attachChatId: null });
     // The offer names the revision the draft was taken from, so LumiRPEngine can tell when the world moved on.
-    const offered = await host.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(USER)}`, ENGINE_EXTENSION);
+    const offered = await host.pool.read(offerEndpoint(USER), ENGINE_EXTENSION);
     expect([Boolean(draft.link?.revision), isRecord(offered) && offered.baseRevision]).toEqual([true, draft.link?.revision]);
     const installed = await engine.install();
     expect([installed.mode, installed.worldId, engine.worlds.get("w_harbor")?.revisions.length]).toEqual(["revision", "w_harbor", 2]);
@@ -166,7 +165,7 @@ describe("LumiRPEngine Studio", () => {
     await expect(send("draft.create", { name: "", source: { kind: "chat", chatId: "chat-x" } })).rejects.toThrow("isn't one of yours");
     const draft = (await send("draft.create", { name: "Mine", source: { kind: "blank" } })).draft;
     await send("install", { draftId: draft.id, mode: "new", worldId: null, attachChatId: null });
-    await expect(host.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(USER)}`, "another_ext")).rejects.toThrow(ENGINE_EXTENSION);
+    await expect(host.pool.read(offerEndpoint(USER), "another_ext")).rejects.toThrow(ENGINE_EXTENSION);
     expect((await send("draft.list", {}, "OtherUser9")).drafts).toEqual([]);
     await expect(send("draft.open", { draftId: draft.id }, "OtherUser9")).rejects.toThrow("gone");
   });
@@ -258,6 +257,6 @@ describe("offers", () => {
     await send("install", { draftId: second.id, mode: "new", worldId: null, attachChatId: null });
     expect((await studio.drafts.get(USER, first.id))?.offer ?? null).toBeNull();
     expect((await send("offer.withdraw", { draftId: second.id })).draft.offer).toBeNull();
-    expect(await host.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(USER)}`, ENGINE_EXTENSION)).toBeNull();
+    expect(await host.pool.read(offerEndpoint(USER), ENGINE_EXTENSION)).toBeNull();
   });
 });

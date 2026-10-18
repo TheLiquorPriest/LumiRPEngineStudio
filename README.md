@@ -63,6 +63,6 @@ bun run build                # dist/backend.js and dist/frontend.js
 bun run reference            # copy the pinned engine's REFERENCE.md to assets/ (`-- --check` to compare)
 ```
 
-- LumiRPEngine is a pinned Git dependency (`github:TheLiquorPriest/LumiRPEngine#<sha>`). `src/engine.ts` is the only file that imports it, and only the backend does. After moving the pin, run `bun run reference` and the suite.
-- The bridge's names and payloads (`src/shared/bridge.ts`) follow LumiRPEngine's STUDIO.md; the pinned commit predates the bridge exports in the studio API, so the Studio carries its own copy of that contract.
+- LumiRPEngine is a pinned Git dependency (`github:TheLiquorPriest/LumiRPEngine#<sha>`). Its authoring API (`lumi-rp-engine/studio`) comes in through `src/engine.ts`, in the backend only. After moving the pin, run `bun run reference` and the suite.
+- The bridge's names and payloads are the pinned engine's, as its STUDIO.md defines them: the backend imports them from `lumi-rp-engine/studio`, and the frontend from `lumi-rp-engine/studio-bridge`, which holds the contract alone, so the frontend doesn't bundle the engine.
 - `src/backend/host.ts` is the port to Lumiverse; `src/backend/spindle-host.ts` implements it over `spindle`, and `test/support/fake-host.ts` in memory, with `test/support/fake-engine.ts` playing LumiRPEngine's side of the bridge.

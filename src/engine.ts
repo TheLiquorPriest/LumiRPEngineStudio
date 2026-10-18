@@ -1,6 +1,8 @@
-// The one door to LumiRPEngine's studio API (`lumi-rp-engine/studio`, pinned in package.json and
-// bundled into dist/backend.js). Only the backend comes through it: the frontend never bundles the
-// engine.
+// The door to LumiRPEngine's authoring API (`lumi-rp-engine/studio`, pinned in package.json and
+// bundled into dist/backend.js): loading, linting and exporting worlds. Only the backend comes
+// through it. The bridge contract is imported where it's used: from `lumi-rp-engine/studio` in the
+// backend, and from `lumi-rp-engine/studio-bridge`, which holds the contract alone, in the frontend,
+// so the frontend never bundles the engine.
 
 import { load } from "lumi-rp-engine/studio";
 import type { LintIssue, WorldDoc } from "lumi-rp-engine/studio";

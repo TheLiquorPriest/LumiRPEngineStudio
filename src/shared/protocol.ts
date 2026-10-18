@@ -3,7 +3,7 @@
 // frontend picks and gets exactly one `result` or `error` with it; drafts and the assistant's
 // activity arrive unasked as pushes.
 
-import type { EngineChatSummary, EngineWorldEntry } from "./bridge";
+import type { StudioChatSummary, StudioWorldEntry } from "lumi-rp-engine/studio-bridge";
 import type { JsonValue } from "./json";
 
 export const PROTOCOL = 1;
@@ -158,7 +158,7 @@ export interface ChatInfo {
   characters: string[];
   books: BookRef[];
   /** Its LumiRPEngine state, when it plays a world. */
-  world: EngineChatSummary | null;
+  world: StudioChatSummary | null;
 }
 
 export interface ResultBodies {
@@ -184,7 +184,7 @@ export interface ResultBodies {
   installed: { draft: DraftView | null };
   "pick.characters": { items: { id: string; name: string }[] };
   "pick.books": { items: { id: string; name: string }[] };
-  "pick.worlds": { worlds: EngineWorldEntry[] };
+  "pick.worlds": { worlds: StudioWorldEntry[] };
   "pick.chat": { chat: ChatInfo };
   "settings.set": { settings: StudioSettings };
 }
