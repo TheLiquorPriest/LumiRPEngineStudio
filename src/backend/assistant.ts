@@ -20,8 +20,6 @@ import { runTool, TOOLS } from "./tools";
 /** Room for a thinking model's reasoning and a large patch in one answer. */
 const MAX_TOKENS = 8192;
 const CALL_TIMEOUT_MS = 240_000;
-/** A tool result as kept in the conversation. */
-const RESULT_KEEP = 12_000;
 /** The run's tool results sent back in full, newest first; older ones go back trimmed. */
 const RUN_BUDGET = 160_000;
 const TRIMMED = 600;
@@ -224,7 +222,8 @@ export class Assistant {
       const results: StoredResult[] = [];
       for (const call of calls) {
         const outcome = signal.aborted ? { content: "The user stopped the assistant before this ran.", error: true, summary: "Stopped", changed: false } : await runTool(call.name, call.args, ctx);
-        results.push({ id: call.id, name: call.name, content: clip(outcome.content, RESULT_KEEP), error: outcome.error, summary: outcome.summary });
+        // Kept whole: a tool's answer never passes OUTPUT_LIMIT (tools.ts), so the model reads what its header says.
+        results.push({ id: call.id, name: call.name, content: outcome.content, error: outcome.error, summary: outcome.summary });
         this.activity(userId, draftId, { kind: "tool", name: call.name, summary: outcome.summary, error: outcome.error, at: Date.now() });
       }
       await this.drafts.update(userId, draftId, (d) => {

@@ -1,8 +1,8 @@
 // The assistant's tools: reading the sources (the transcript, cards, lore, pasted text, the engine's
 // view of the chat), reading and patching the draft, checking it with the engine, and looking
 // things up in the conversion guide and LumiRPEngine's reference. Every patch goes to the proposal
-// the user reviews, never straight to the draft. A tool's answer is plain text for the model plus
-// one line for the drawer.
+// the user reviews, never straight to the draft. A tool's answer is plain text for the model, never
+// longer than OUTPUT_LIMIT, and one line for the drawer.
 
 import { readWorldDoc } from "../engine";
 import type { WorldDoc } from "../engine";
@@ -10,7 +10,7 @@ import { hasOwn, isRecord } from "../shared/json";
 import type { JsonObject, JsonValue } from "../shared/json";
 import type { EngineBridge } from "./bridge";
 import type { DraftStore } from "./drafts";
-import type { ModelTool } from "./host";
+import type { HostCharacter, ModelTool } from "./host";
 import { applyPatch, getAt, parsePointer, PatchError, readOp } from "./pointer";
 import type { SourceReader } from "./sources";
 import { lookupGuide, lookupReference } from "./texts";
@@ -32,17 +32,23 @@ export interface ToolOutcome {
   changed: boolean;
 }
 
+/**
+ * The most one answer holds, header and notes included. The assistant keeps every answer whole
+ * (assistant.ts), so the range a header names is what the model reads.
+ */
+export const OUTPUT_LIMIT = 24_000;
+/** What an answer's body may take, leaving room for its header and notes. */
+const BODY_LIMIT = OUTPUT_LIMIT - 1_000;
 const MESSAGE_CLIP = 4000;
-const READ_BUDGET = 30_000;
-const DRAFT_READ_LIMIT = 16_000;
 const ENTRY_CLIP = 8000;
+const DRAFT_READ_LIMIT = 16_000;
 
 const obj = (properties: JsonObject, required: string[] = []): JsonObject => ({ type: "object", properties, required, additionalProperties: false });
 
 export const TOOLS: readonly ModelTool[] = [
   {
     name: "transcript_read",
-    description: "Read a range of the source chat's messages, oldest first (0 is the first message). Each line is `#index [role] name: text`.",
+    description: "Read a range of the source chat's messages, oldest first (0 is the first message). Each line is `#index [role] name: text`. The answer stops before a message that wouldn't fit, and says where to read on.",
     parameters: obj({ from: { type: "integer", minimum: 0, description: "Index of the first message" }, count: { type: "integer", minimum: 1, maximum: 60, description: "How many messages (at most 60)" } }, ["from"]),
   },
   {
@@ -67,13 +73,13 @@ export const TOOLS: readonly ModelTool[] = [
   },
   {
     name: "lore_read",
-    description: "Read lore entries in full by their ids (at most 12 at once).",
+    description: "Read lore entries in full by their ids (at most 12 at once). The answer stops before an entry that wouldn't fit, and says which to read next.",
     parameters: obj({ ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 12 } }, ["ids"]),
   },
   {
     name: "pasted_read",
-    description: "Read text the user pasted into the draft's sources. Without an index, lists the pasted texts; with one, reads it from `offset` (characters).",
-    parameters: obj({ index: { type: "integer", minimum: 0 }, offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 200, maximum: 30000 } }),
+    description: "Read text the user pasted into the draft's sources. Without an index, lists the pasted texts; with one, reads it from `offset` (characters) and says where to read on.",
+    parameters: obj({ index: { type: "integer", minimum: 0 }, offset: { type: "integer", minimum: 0 }, length: { type: "integer", minimum: 200, maximum: BODY_LIMIT } }),
   },
   {
     name: "chat_state",
@@ -158,19 +164,45 @@ function refused(content: string, summary: string): ToolOutcome {
   return { content, error: true, summary, changed: false };
 }
 
-/** A value as the model reads it: itself when small, else an outline to read deeper from. */
+/** A card as the model reads it, each field clipped. */
+function cardText(c: HostCharacter): string {
+  return [
+    `# ${c.name} (${c.id})`,
+    c.description && `Description:\n${clip(c.description, 8000)}`,
+    c.personality && `Personality:\n${clip(c.personality, 3000)}`,
+    c.scenario && `Scenario:\n${clip(c.scenario, 3000)}`,
+    c.firstMessage && `Greeting:\n${clip(c.firstMessage, 4000)}`,
+    c.alternateGreetings.length > 0 && `Other greetings: ${c.alternateGreetings.length}`,
+    c.exampleMessages && `Example messages:\n${clip(c.exampleMessages, 3000)}`,
+    c.creatorNotes && `Creator notes:\n${clip(c.creatorNotes, 2000)}`,
+    c.tags.length > 0 && `Tags: ${c.tags.join(", ")}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** A value as the model reads it: itself when small, else an outline to read deeper from, within DRAFT_READ_LIMIT. */
 function readable(value: JsonValue, path: string): string {
   const json = JSON.stringify(value, null, 1);
   if (json.length <= DRAFT_READ_LIMIT && path !== "") return json;
   if (Array.isArray(value)) return `${path || "The draft"} is a list of ${value.length}; read its items by index (${path}/0).`;
   if (!isRecord(value)) return clip(json, DRAFT_READ_LIMIT);
   const lines = [`Outline of ${path || "the draft"} (read a deeper path for an item):`];
-  for (const [key, v] of Object.entries(value)) {
+  let used = lines[0]?.length ?? 0;
+  const entries = Object.entries(value);
+  for (const [i, [key, v]] of entries.entries()) {
+    let line: string;
     if (isRecord(v)) {
       const ids = Object.keys(v);
-      lines.push(`- ${key}: ${ids.length} item${ids.length === 1 ? "" : "s"}${ids.length > 0 ? ` (${ids.slice(0, 80).join(", ")}${ids.length > 80 ? ", …" : ""})` : ""}`);
-    } else if (Array.isArray(v)) lines.push(`- ${key}: a list of ${v.length}`);
-    else lines.push(`- ${key}: ${JSON.stringify(v)}`);
+      line = `- ${key}: ${ids.length} item${ids.length === 1 ? "" : "s"}${ids.length > 0 ? ` (${ids.slice(0, 80).join(", ")}${ids.length > 80 ? ", …" : ""})` : ""}`;
+    } else if (Array.isArray(v)) line = `- ${key}: a list of ${v.length}`;
+    else line = `- ${key}: ${clip(JSON.stringify(v), 300)}`;
+    if (used + line.length > DRAFT_READ_LIMIT) {
+      lines.push(`(${entries.length - i} more keys: read ${path}/<key>)`);
+      break;
+    }
+    lines.push(line);
+    used += line.length + 1;
   }
   return lines.join("\n");
 }
@@ -190,20 +222,21 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
       const messages = await reader.transcript();
       if (messages.length === 0) return refused("This draft has no chat to read.", "No chat in the sources");
       const from = int(args.from, 0, messages.length - 1, 0);
-      const count = int(args.count, 1, 60, 30);
+      const end = Math.min(messages.length, from + int(args.count, 1, 60, 30));
       const lines: string[] = [];
       let used = 0;
-      let last = from - 1;
-      for (let i = from; i < Math.min(messages.length, from + count); i++) {
+      for (let i = from; i < end; i++) {
         const m = messages[i];
         if (!m) break;
         const line = `#${i} [${m.role}] ${m.name}: ${clip(m.content, MESSAGE_CLIP)}`;
-        if (used + line.length > READ_BUDGET && lines.length > 0) break;
+        if (lines.length > 0 && used + line.length > BODY_LIMIT) break;
         lines.push(line);
-        used += line.length;
-        last = i;
+        used += line.length + 2;
       }
-      return done(`Messages ${from}–${last} of ${messages.length} (0 is the first):\n\n${lines.join("\n\n")}`, `Read messages ${from}–${last} of ${messages.length}`);
+      // The header names only what this answer holds.
+      const last = from + lines.length - 1;
+      const more = last + 1 < end ? `\n\n(Stopped after #${last} to keep this answer whole; read on with from=${last + 1}.)` : "";
+      return done(`Messages ${from}–${last} of ${messages.length} (0 is the first):\n\n${lines.join("\n\n")}${more}`, `Read messages ${from}–${last} of ${messages.length}`);
     }
     case "transcript_search": {
       const query = str(args.query);
@@ -223,24 +256,21 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
       const name = str(args.name).toLowerCase();
       const cards = (await reader.cards()).filter((c) => !name || c.name.toLowerCase().includes(name));
       if (cards.length === 0) return refused(name ? `No source card is named like "${args.name}".` : "This draft has no character cards.", "No cards");
-      const text = cards
-        .map((c) =>
-          [
-            `# ${c.name} (${c.id})`,
-            c.description && `Description:\n${clip(c.description, 8000)}`,
-            c.personality && `Personality:\n${clip(c.personality, 3000)}`,
-            c.scenario && `Scenario:\n${clip(c.scenario, 3000)}`,
-            c.firstMessage && `Greeting:\n${clip(c.firstMessage, 4000)}`,
-            c.alternateGreetings.length > 0 && `Other greetings: ${c.alternateGreetings.length}`,
-            c.exampleMessages && `Example messages:\n${clip(c.exampleMessages, 3000)}`,
-            c.creatorNotes && `Creator notes:\n${clip(c.creatorNotes, 2000)}`,
-            c.tags.length > 0 && `Tags: ${c.tags.join(", ")}`,
-          ]
-            .filter(Boolean)
-            .join("\n\n"),
-        )
-        .join("\n\n");
-      return done(text, `Read ${cards.map((c) => c.name).join(", ")}`);
+      const parts: string[] = [];
+      const shown: string[] = [];
+      let used = 0;
+      for (const [i, c] of cards.entries()) {
+        const text = cardText(c);
+        if (parts.length > 0 && used + text.length > BODY_LIMIT) {
+          const rest = cards.slice(i).map((x) => x.name);
+          parts.push(`(Not shown, to keep this answer whole: ${rest.join(", ")}. Read each by name.)`);
+          break;
+        }
+        parts.push(clip(text, BODY_LIMIT));
+        shown.push(c.name);
+        used += Math.min(text.length, BODY_LIMIT) + 2;
+      }
+      return done(parts.join("\n\n"), `Read ${shown.join(", ")}`);
     }
     case "lore_list": {
       const want = str(args.book).toLowerCase();
@@ -254,8 +284,16 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
       const book = books.find((b) => b.id.toLowerCase() === want) ?? books.find((b) => b.name.toLowerCase().includes(want));
       if (!book) return refused(`No source book matches "${args.book}".`, "No such book");
       const entries = await reader.entries(book.id);
-      const lines = entries.slice(0, 300).map((e) => `- [${e.id}] ${e.comment || "(untitled)"}${e.keys.length > 0 ? ` (keys: ${e.keys.slice(0, 8).join(", ")})` : ""}, ${e.content.length} chars${e.disabled ? ", switched off" : ""}${e.constant ? ", always on" : ""}`);
-      return done(`${book.name}: ${entries.length} entries\n${lines.join("\n")}${entries.length > 300 ? "\n…" : ""}`, `Listed ${book.name} (${entries.length} entries)`);
+      const lines: string[] = [];
+      let used = 0;
+      for (const e of entries) {
+        const line = `- [${e.id}] ${e.comment || "(untitled)"}${e.keys.length > 0 ? ` (keys: ${e.keys.slice(0, 8).join(", ")})` : ""}, ${e.content.length} chars${e.disabled ? ", switched off" : ""}${e.constant ? ", always on" : ""}`;
+        if (used + line.length > BODY_LIMIT) break;
+        lines.push(line);
+        used += line.length + 1;
+      }
+      const rest = entries.length - lines.length;
+      return done(`${book.name}: ${entries.length} entries${rest > 0 ? `; the first ${lines.length} are listed here (find the other ${rest} with lore_search)` : ""}\n${lines.join("\n")}`, `Listed ${book.name} (${entries.length} entries)`);
     }
     case "lore_search": {
       const query = str(args.query);
@@ -280,17 +318,19 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
       const all = await reader.allEntries();
       const parts: string[] = [];
       let used = 0;
-      for (const id of ids) {
+      let read = 0;
+      for (const [i, id] of ids.entries()) {
         const found = all.find((x) => x.entry.id === id);
         const text = found ? `# ${found.entry.comment || "(untitled)"} [${id}] · ${found.book.name}${found.entry.keys.length > 0 ? `\nKeys: ${found.entry.keys.join(", ")}` : ""}\n${clip(found.entry.content, ENTRY_CLIP)}` : `# [${id}]: not an entry of the source books`;
-        if (used + text.length > READ_BUDGET && parts.length > 0) {
-          parts.push(`(stopped before ${id}: read the rest in another call)`);
+        if (parts.length > 0 && used + text.length > BODY_LIMIT) {
+          parts.push(`(Not read, to keep this answer whole: ${ids.slice(i).join(", ")}. Read them in another call.)`);
           break;
         }
         parts.push(text);
-        used += text.length;
+        used += text.length + 2;
+        read++;
       }
-      return done(parts.join("\n\n"), `Read ${ids.length} lore entr${ids.length === 1 ? "y" : "ies"}`);
+      return done(parts.join("\n\n"), `Read ${read} lore entr${read === 1 ? "y" : "ies"}`);
     }
     case "pasted_read": {
       const pasted = reader.source.pasted;
@@ -299,9 +339,9 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
       const item = pasted[int(args.index, 0, pasted.length - 1, 0)];
       if (!item) return refused("No pasted text has that index.", "No such text");
       const offset = int(args.offset, 0, Math.max(0, item.text.length - 1), 0);
-      const length = int(args.length, 200, READ_BUDGET, 20_000);
-      const end = Math.min(item.text.length, offset + length);
-      return done(`${item.title}, characters ${offset}–${end} of ${item.text.length}:\n\n${item.text.slice(offset, end)}`, `Read ${item.title}`);
+      const end = Math.min(item.text.length, offset + int(args.length, 200, BODY_LIMIT, BODY_LIMIT));
+      const more = end < item.text.length ? `\n\n(Read on with offset=${end}.)` : "";
+      return done(`${item.title}, characters ${offset}–${end} of ${item.text.length}:\n\n${item.text.slice(offset, end)}${more}`, `Read ${item.title}`);
     }
     case "chat_state": {
       const chatId = reader.source.chatId;
@@ -370,10 +410,13 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
 /** Runs one tool call; whatever goes wrong comes back to the model as the tool's error. */
 export async function runTool(name: string, args: JsonObject, ctx: ToolContext): Promise<ToolOutcome> {
   if (!hasOwn(TOOL_NAMES, name)) return refused(`There is no tool called ${name}. The tools are: ${TOOLS.map((t) => t.name).join(", ")}.`, `Unknown tool ${name}`);
+  let outcome: ToolOutcome;
   try {
-    return await run(name, args, ctx);
+    outcome = await run(name, args, ctx);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return refused(error instanceof PatchError ? `Nothing was changed: ${message}` : message, `${name} failed: ${clip(message, 120)}`);
+    outcome = refused(error instanceof PatchError ? `Nothing was changed: ${message}` : message, `${name} failed: ${clip(message, 120)}`);
   }
+  // Every tool keeps within the limit; this holds the assistant's promise if one ever doesn't.
+  return outcome.content.length <= OUTPUT_LIMIT ? outcome : { ...outcome, content: `${outcome.content.slice(0, OUTPUT_LIMIT - 100)}\n…[cut here: the answer passed ${OUTPUT_LIMIT} characters; ask for less]` };
 }
