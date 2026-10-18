@@ -23,6 +23,11 @@ const CALL_TIMEOUT_MS = 240_000;
 /** The run's tool results sent back in full, newest first; older ones go back trimmed. */
 const RUN_BUDGET = 160_000;
 const TRIMMED = 600;
+/** Finish reasons that mean the answer hit its token limit: OpenAI-compatible `length`, Anthropic `max_tokens`, Gemini `MAX_TOKENS`. */
+const CUT_OFF = /^(length|max_tokens|max_output_tokens)$/i;
+/** Cut-off answers in a row after which the run stops instead of asking again. */
+const CUT_OFF_LIMIT = 3;
+const CUT_OFF_NOTE = "The model's last answer ran past its length limit and was lost, with any tool call it was writing. Carry on in smaller steps: at most about 30 operations per draft_patch, and short thoughts.";
 
 const INSTRUCTIONS = `You are the assistant of LumiRPEngine Studio. You build LumiRPEngine worlds (lre-world-v1 documents) in the user's draft: from scratch, or, above all, by converting a chat the user is already in, its character cards, its lore books and pasted text into a complete world whose start is the story's present. You also refine worlds that chats already play.
 
@@ -190,6 +195,7 @@ export class Assistant {
     const sources = await describeSources(reader);
     const chatState = first.source.chatId ? await this.bridge.chatState(userId, first.source.chatId) : null;
     const ctx = { userId, draftId, drafts: this.drafts, reader, bridge: this.bridge };
+    let cutOffs = 0;
     for (let round = 0; ; round++) {
       if (signal.aborted) {
         await this.note(userId, draftId, "You stopped the assistant.");
@@ -208,6 +214,10 @@ export class Assistant {
         await this.note(userId, draftId, signal.aborted ? "You stopped the assistant." : `The model call failed: ${error instanceof Error ? error.message : String(error)}`);
         break;
       }
+      // An answer cut off at the token limit is neither the last word nor complete: the host drops
+      // the tool call it was writing, so the model is asked to carry on in smaller steps.
+      const cutOff = CUT_OFF.test(reply.finishReason);
+      cutOffs = cutOff ? cutOffs + 1 : 0;
       const text = reply.content.trim();
       const calls = reply.toolCalls;
       const at = Date.now();
@@ -215,7 +225,15 @@ export class Assistant {
         d.chat.push({ kind: "assistant", text, at, run, calls: calls.map((c) => ({ id: c.id, name: c.name, args: c.args, ...(c.signature ? { signature: c.signature } : {}) })), ...(calls.length > 0 && reply.reasoning ? { reasoning: reply.reasoning } : {}) });
       });
       if (text) this.activity(userId, draftId, { kind: "assistant", text, at });
+      if (cutOff && cutOffs >= CUT_OFF_LIMIT) {
+        await this.note(userId, draftId, `The model ran past its length limit ${CUT_OFF_LIMIT} times in a row, so the assistant stopped. Ask for less at a time, or use a connection that allows longer answers.`);
+        break;
+      }
       if (calls.length === 0) {
+        if (cutOff) {
+          await this.note(userId, draftId, CUT_OFF_NOTE);
+          continue;
+        }
         if (!text) await this.note(userId, draftId, "The model answered with nothing. Try again, or pick another connection in the Studio's settings.");
         break;
       }
@@ -229,6 +247,8 @@ export class Assistant {
       await this.drafts.update(userId, draftId, (d) => {
         d.chat.push({ kind: "results", at: Date.now(), run, results });
       });
+      // The calls that came through ran; the one the cut-off answer was writing is lost.
+      if (cutOff) await this.note(userId, draftId, CUT_OFF_NOTE);
       await this.changed(userId, draftId);
     }
     // A proposal that came back to the accepted draft proposes nothing.
