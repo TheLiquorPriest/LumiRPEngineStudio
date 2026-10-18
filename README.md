@@ -43,6 +43,10 @@ The drawer tab and the link to LumiRPEngine (its shared RPC endpoints and window
 
 Drafts are kept per user in the Studio's own storage, with their conversations. A draft with errors, or with changes still waiting for review, can't be installed.
 
+## Known limits
+
+- **Reasoning on other providers.** A thinking model that calls tools needs its reasoning sent back with the next call. Lumiverse's quiet generation with tools carries only DeepSeek's kind (`reasoning_content`); it drops Anthropic's thinking blocks and OpenRouter's `reasoning_details`, so the Studio can't send those back. With Anthropic extended thinking on, or an OpenRouter reasoning model, the assistant's second model call fails. DeepSeek works; for the others, turn thinking off on the connection the Studio uses.
+
 ## How it fits LumiRPEngine
 
 The Studio uses LumiRPEngine's studio API (`lumi-rp-engine/studio`, bundled into `dist/backend.js`) to make, migrate, lint and export worlds, so a world checks the same in both. The two extensions meet through Lumiverse's shared RPC pool, as LumiRPEngine's [`docs/STUDIO.md`](https://github.com/TheLiquorPriest/LumiRPEngine/blob/main/docs/STUDIO.md) ("The Studio bridge") defines: LumiRPEngine publishes, per user, your worlds and its view of your world chats, readable only by the Studio; the Studio publishes your pending offer, readable only by LumiRPEngine. A read there carries no request, so neither side can make the other do anything: you confirm every install in LumiRPEngine.
