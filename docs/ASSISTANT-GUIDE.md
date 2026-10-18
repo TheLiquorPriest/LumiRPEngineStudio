@@ -4,7 +4,7 @@ This guide is what the Studio's assistant works from, and what you can read to k
 
 ## The goal
 
-A converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were, quests sit at the stage the story reached, and secrets the POV has learned are known. Nothing that already happened is replayed. The world only has to be true from now on.
+A converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.
 
 ## Working order
 
@@ -102,11 +102,19 @@ A track is a small state machine: `start` names its first stage, and each stage'
   "found": { "label": "The ledger is found", "next": [] } } }
 ```
 
-- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. If the POV already learned the secret in the chat, start the track at the revealed stage.
+- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet.
 
 ```json
 { "id": "silas_debt", "kind": "secret", "label": "What Silas owes", "visibility": "secret", "owner": "silas", "start": "rumor", "stages": {
   "rumor": { "label": "Something is off", "cue": "Silas flinches whenever the guild is mentioned.", "next": [{ "to": "known", "when": "at(pov, 'guild_office')" }] },
+  "known": { "label": "Silas owes the guild", "truth": "Silas borrowed the guild's harbor dues to pay a gambling debt.", "next": [] } } }
+```
+
+- **A secret the POV has already learned** must still be revealed in play. A track starts with nothing revealed, and the engine records a reveal only when a stage is entered, so a track that starts on its truth stage stays hidden: the Journal never shows it, and the narrator is kept from saying what the player already knows. Start it one stage earlier instead, and make that stage move on at once: `"next": [{ "to": "known", "when": "true" }]`. The first turn enters the truth stage and reveals it. Never start a secret track on a stage that has a `truth`.
+
+```json
+{ "id": "silas_debt", "kind": "secret", "label": "What Silas owes", "visibility": "secret", "owner": "silas", "start": "rumor", "stages": {
+  "rumor": { "label": "Something is off", "next": [{ "to": "known", "when": "true" }] },
   "known": { "label": "Silas owes the guild", "truth": "Silas borrowed the guild's harbor dues to pay a gambling debt.", "next": [] } } }
 ```
 
@@ -154,5 +162,6 @@ When the source chat already plays a world (`chat_state` says so), the draft sta
 - `draft_check` has no errors.
 - The POV exists, stands at the start place, and the start time is the story's present.
 - Every id an item names (a place, an owner, a relation target, a track in a formula) exists.
-- Openings are today's balances; quests start at the stage the story reached; learned secrets are revealed.
+- Openings are today's balances, and quests start at the stage the story reached.
+- No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: "true"`, so the first turn reveals it.
 - No public text gives a secret away.
