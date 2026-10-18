@@ -4,13 +4,11 @@
   "workspaces": {
     "": {
       "name": "lumi-rp-engine-studio",
-      "dependencies": {
-        "lumi-rp-engine": "github:TheLiquorPriest/LumiRPEngine#9b4fdfc39ca54ece8815c76e61df4b1dd367180f",
-        "preact": "^11.0.1",
-      },
       "devDependencies": {
         "bun-types": "^1.4.2",
+        "lumi-rp-engine": "github:TheLiquorPriest/LumiRPEngine#9b4fdfc39ca54ece8815c76e61df4b1dd367180f",
         "lumiverse-spindle-types": "0.6.49",
+        "preact": "^11.0.1",
         "typescript": "7.0.2",
       },
     },
