@@ -1175,6 +1175,39 @@ function objectiveLabel(o) {
   return typeof o === "string" ? o : o.label;
 }
 var DEFAULT_CURRENCY = { code: "USD", symbol: "$", minorUnit: "cent", decimals: 2, format: "{sign}{symbol}{amount}" };
+var DEFAULT_SPAWN_CAP = 24;
+var MAX_SPAWN_CAP = 500;
+function spawnCapOf(world) {
+  const cap = world.spawnCap;
+  return typeof cap === "number" && Number.isFinite(cap) ? Math.max(0, Math.min(MAX_SPAWN_CAP, Math.trunc(cap))) : DEFAULT_SPAWN_CAP;
+}
+var ALIVE = "alive";
+var BUILTIN_LIFE_STATES = {
+  alive: { label: "Alive", acts: true, reads: "is alive" },
+  dying: { label: "Dying", acts: false, reads: "is dying" },
+  dead: { label: "Dead", acts: false, reads: "lies dead" }
+};
+function ownLifeState(id, raw) {
+  const def = isRecord(raw) ? raw : {};
+  const label = typeof def.label === "string" && def.label.trim() !== "" ? def.label : id.replace(/_/g, " ");
+  return { label, acts: def.acts === true, reads: typeof def.reads === "string" && def.reads.trim() !== "" ? def.reads : `is ${label.toLowerCase()}` };
+}
+function lifeStatesOf(world) {
+  const own = isRecord(world.lifeStates) ? Object.keys(world.lifeStates).filter((id) => !hasOwn(BUILTIN_LIFE_STATES, id)).sort() : [];
+  return [...Object.entries(BUILTIN_LIFE_STATES), ...own.map((id) => [id, ownLifeState(id, world.lifeStates?.[id])])];
+}
+function isLifeState(world, id) {
+  return hasOwn(BUILTIN_LIFE_STATES, id) || isRecord(world.lifeStates) && hasOwn(world.lifeStates, id);
+}
+function lifeStateOf(world, id) {
+  const builtIn = hasOwn(BUILTIN_LIFE_STATES, id) ? BUILTIN_LIFE_STATES[id] : undefined;
+  if (builtIn)
+    return builtIn;
+  if (isRecord(world.lifeStates) && hasOwn(world.lifeStates, id))
+    return ownLifeState(id, world.lifeStates[id]);
+  const label = id.replace(/_/g, " ");
+  return { label, acts: false, reads: `is ${label}` };
+}
 function grouped(n) {
   return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -1189,6 +1222,33 @@ function formatMoney(minorUnits, currency) {
   const amount = decimals > 0 ? `${grouped(major)}.${minor.toString().padStart(decimals, "0")}` : grouped(major);
   const values = { sign: negative ? "-" : "", symbol: currency.symbol, code: currency.code, amount, major: grouped(major), minor: minor.toString() };
   return currency.format.replace(/\{(sign|symbol|code|amount|major|minor)\}/g, (_, key) => values[key] ?? "");
+}
+
+// node_modules/lumi-rp-engine/src/shared/studio-bridge.ts
+var ENGINE_EXTENSION = "lumi_rp_engine";
+var STUDIO_EXTENSION = "lumi_rp_engine_studio";
+var STUDIO_INBOUND = ["file", `rpc:${STUDIO_EXTENSION}.offer`];
+var encoder = new TextEncoder;
+function channelId(id) {
+  let out = "";
+  for (const byte of encoder.encode(id))
+    out += byte.toString(16).padStart(2, "0");
+  return out;
+}
+function worldsChannel(userId) {
+  return `studio-worlds.${channelId(userId)}`;
+}
+function chatsChannel(userId) {
+  return `studio-chats.${channelId(userId)}`;
+}
+function worldChannel(userId, worldId, revision) {
+  return `studio-world.${channelId(userId)}.${channelId(worldId)}${revision === undefined ? "" : `.${revision}`}`;
+}
+function offerEndpoint(userId) {
+  return `${STUDIO_EXTENSION}.offer.${channelId(userId)}`;
+}
+function engineEndpoint(channel) {
+  return `${ENGINE_EXTENSION}.${channel}`;
 }
 
 // node_modules/lumi-rp-engine/src/shared/macros.ts
@@ -1406,6 +1466,7 @@ var EXTRACTION_DEFAULTS = Object.freeze({
   regard: "confirm",
   transfer: "confirm",
   spawn: "confirm",
+  life: "confirm",
   knows: "confirm",
   give: "confirm",
   purchase: "confirm"
@@ -1457,16 +1518,6 @@ function facetTree(values) {
   for (const id of ids)
     visit(id, 0);
   return out;
-}
-
-// node_modules/lumi-rp-engine/src/shared/lore.ts
-var LORE_AUDIENCE = Object.keys(STEP_OUTPUTS);
-var PROSE_STEPS = ["brief", "outline", "choices", "extract"];
-function loreIsSecret(entry) {
-  return entry.secret !== undefined && entry.secret !== false;
-}
-function loreTerm(text) {
-  return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 // node_modules/lumi-rp-engine/src/engine/pack-kit.ts
@@ -3209,6 +3260,133 @@ function evalArgs(args, env, bindings) {
   return out;
 }
 
+// node_modules/lumi-rp-engine/src/engine/seen.ts
+var PACK = "space";
+var SLICE = "seen";
+var PARENT_DEPTH = 32;
+var PARTS = ["places", "people", "cells"];
+function entries(state, key) {
+  const seen = state.packs[PACK]?.[SLICE];
+  const list = isRecord(seen) ? seen[key] : undefined;
+  return isRecord(list) ? list : {};
+}
+function placeVisit(state, place) {
+  const v = own(entries(state, "places"), place);
+  return isRecord(v) && typeof v.first === "number" && typeof v.last === "number" ? { first: v.first, last: v.last } : null;
+}
+function lastSighting(state, id) {
+  const v = own(entries(state, "people"), id);
+  return isRecord(v) && typeof v.place === "string" && typeof v.at === "number" ? { place: v.place, at: v.at } : null;
+}
+function cellsSeen(state, scope, width) {
+  const v = own(entries(state, "cells"), scope);
+  return isRecord(v) && v.width === width && typeof v.bits === "string" ? v.bits : null;
+}
+function writable(state, key) {
+  const seen = sliceRecord(state, PACK, SLICE);
+  const v = seen[key];
+  if (isRecord(v))
+    return v;
+  const fresh = {};
+  seen[key] = fresh;
+  return fresh;
+}
+function observeCells(state, world) {
+  const settings = mapSettingsOf(world);
+  const pov = own(state.entities, world.pov);
+  if (!settings.grid.movement || !pov)
+    return;
+  const stand = standingGrid(world, placeOfEntity(state, world.pov));
+  const x = pov.fields.x;
+  const y = pov.fields.y;
+  if (!stand || typeof x !== "number" || typeof y !== "number" || cellIndex(stand.grid, { x, y }) === null)
+    return;
+  const before = cellsSeen(state, stand.scope, stand.grid.width);
+  const sight = sightCells(stand.grid, { x, y }, settings.grid.sightRadius);
+  if (before !== null && sight.every((cell) => hasCell(before, cell)))
+    return;
+  writable(state, "cells")[stand.scope] = { width: stand.grid.width, bits: addCells(before ?? "", sight) };
+}
+function visit(state, world, place, at) {
+  const places = writable(state, "places");
+  let cur = place;
+  for (let depth = 0;cur !== undefined && depth < PARENT_DEPTH && own(world.places, cur); depth++) {
+    places[cur] = { first: placeVisit(state, cur)?.first ?? at, last: at };
+    cur = own(world.places, cur)?.parent;
+  }
+}
+function company(state, ctx, sees) {
+  const pov = ctx.world.pov;
+  const here = placeOfEntity(state, pov);
+  if (here === null)
+    return { here, people: [] };
+  const people = [];
+  for (const [id, e] of Object.entries(state.entities)) {
+    if (id === pov || placeOfEntity(state, id) !== here || !kindIs(ctx.registry, ctx.world, e.kind, "person"))
+      continue;
+    if (sees(ctx.registry, ctx.world, state, pov, id))
+      people.push(id);
+  }
+  return { here, people };
+}
+function movesSomeone(e) {
+  if (e.type === "set")
+    return e.field === "place";
+  if (e.type === "link" || e.type === "unlink")
+    return e.rel === "in";
+  return e.type === "spawn";
+}
+function observing(def, sees) {
+  if (def.type !== "set" && def.type !== "link" && def.type !== "unlink" && def.type !== "spawn")
+    return def;
+  return {
+    ...def,
+    apply: (e, state, ctx) => {
+      if (!movesSomeone(e))
+        return def.apply(e, state, ctx);
+      const before = company(state, ctx, sees);
+      def.apply(e, state, ctx);
+      const after = company(state, ctx, sees);
+      const at = state.clock;
+      if (before.here !== after.here) {
+        if (before.here !== null)
+          visit(state, ctx.world, before.here, at);
+        if (after.here !== null)
+          visit(state, ctx.world, after.here, at);
+      }
+      const parted = before.here === null ? [] : before.people.filter((id) => !after.people.includes(id));
+      const met = after.here === null ? [] : after.people.filter((id) => before.here !== after.here || !before.people.includes(id));
+      if (parted.length === 0 && met.length === 0)
+        return;
+      const people = writable(state, "people");
+      for (const id of parted)
+        people[id] = { place: before.here, at };
+      for (const id of met)
+        people[id] = { place: after.here, at };
+    }
+  };
+}
+function seedObservations(world, state) {
+  const here = placeOfEntity(state, world.pov);
+  if (here !== null)
+    visit(state, world, here, state.clock);
+  observeCells(state, world);
+}
+function restoreObservations(state, data) {
+  for (const key of PARTS) {
+    const diff = data[key];
+    if (!isRecord(diff))
+      continue;
+    const list = writable(state, key);
+    for (const [id, v] of Object.entries(diff)) {
+      if (v === null)
+        delete list[id];
+      else if (isRecord(v))
+        list[id] = structuredClone(v);
+    }
+  }
+}
+
 // node_modules/lumi-rp-engine/src/engine/selector.ts
 var MEMBER_OF = "member_of";
 var GROUP_KIND = "group";
@@ -3378,131 +3556,23 @@ function classOf(value) {
   return out;
 }
 
-// node_modules/lumi-rp-engine/src/engine/seen.ts
-var PACK = "space";
-var SLICE = "seen";
-var PARENT_DEPTH = 32;
-var PARTS = ["places", "people", "cells"];
-function entries(state, key) {
-  const seen = state.packs[PACK]?.[SLICE];
-  const list = isRecord(seen) ? seen[key] : undefined;
-  return isRecord(list) ? list : {};
+// node_modules/lumi-rp-engine/src/shared/lore.ts
+var LORE_AUDIENCE = Object.keys(STEP_OUTPUTS);
+var PROSE_STEPS = ["brief", "outline", "choices", "extract"];
+function loreIsSecret(entry) {
+  return entry.secret !== undefined && entry.secret !== false;
 }
-function placeVisit(state, place) {
-  const v = own(entries(state, "places"), place);
-  return isRecord(v) && typeof v.first === "number" && typeof v.last === "number" ? { first: v.first, last: v.last } : null;
-}
-function lastSighting(state, id) {
-  const v = own(entries(state, "people"), id);
-  return isRecord(v) && typeof v.place === "string" && typeof v.at === "number" ? { place: v.place, at: v.at } : null;
-}
-function cellsSeen(state, scope, width) {
-  const v = own(entries(state, "cells"), scope);
-  return isRecord(v) && v.width === width && typeof v.bits === "string" ? v.bits : null;
-}
-function writable(state, key) {
-  const seen = sliceRecord(state, PACK, SLICE);
-  const v = seen[key];
-  if (isRecord(v))
-    return v;
-  const fresh = {};
-  seen[key] = fresh;
-  return fresh;
-}
-function observeCells(state, world) {
-  const settings = mapSettingsOf(world);
-  const pov = own(state.entities, world.pov);
-  if (!settings.grid.movement || !pov)
-    return;
-  const stand = standingGrid(world, placeOfEntity(state, world.pov));
-  const x = pov.fields.x;
-  const y = pov.fields.y;
-  if (!stand || typeof x !== "number" || typeof y !== "number" || cellIndex(stand.grid, { x, y }) === null)
-    return;
-  const before = cellsSeen(state, stand.scope, stand.grid.width);
-  const sight = sightCells(stand.grid, { x, y }, settings.grid.sightRadius);
-  if (before !== null && sight.every((cell) => hasCell(before, cell)))
-    return;
-  writable(state, "cells")[stand.scope] = { width: stand.grid.width, bits: addCells(before ?? "", sight) };
-}
-function visit(state, world, place, at) {
-  const places = writable(state, "places");
-  let cur = place;
-  for (let depth = 0;cur !== undefined && depth < PARENT_DEPTH && own(world.places, cur); depth++) {
-    places[cur] = { first: placeVisit(state, cur)?.first ?? at, last: at };
-    cur = own(world.places, cur)?.parent;
+function lorePhrases(content) {
+  const out = [];
+  for (const part of content.split(/[.!?\u2026;:\n]+|\s[\u2014\u2013-]\s|\u2014/)) {
+    const phrase = part.replace(/^[\s"'\u201C\u201D\u2018\u2019()[\]*_]+|[\s"'\u201C\u201D\u2018\u2019()[\]*_,]+$/g, "").replace(/\s+/g, " ");
+    if (phrase.length >= 16 && phrase.split(" ").length >= 4 && !out.includes(phrase))
+      out.push(phrase);
   }
+  return out;
 }
-function company(state, ctx, sees) {
-  const pov = ctx.world.pov;
-  const here = placeOfEntity(state, pov);
-  if (here === null)
-    return { here, people: [] };
-  const people = [];
-  for (const [id, e] of Object.entries(state.entities)) {
-    if (id === pov || placeOfEntity(state, id) !== here || !kindIs(ctx.registry, ctx.world, e.kind, "person"))
-      continue;
-    if (sees(ctx.registry, ctx.world, state, pov, id))
-      people.push(id);
-  }
-  return { here, people };
-}
-function movesSomeone(e) {
-  if (e.type === "set")
-    return e.field === "place";
-  if (e.type === "link" || e.type === "unlink")
-    return e.rel === "in";
-  return e.type === "spawn";
-}
-function observing(def, sees) {
-  if (def.type !== "set" && def.type !== "link" && def.type !== "unlink" && def.type !== "spawn")
-    return def;
-  return {
-    ...def,
-    apply: (e, state, ctx) => {
-      if (!movesSomeone(e))
-        return def.apply(e, state, ctx);
-      const before = company(state, ctx, sees);
-      def.apply(e, state, ctx);
-      const after = company(state, ctx, sees);
-      const at = state.clock;
-      if (before.here !== after.here) {
-        if (before.here !== null)
-          visit(state, ctx.world, before.here, at);
-        if (after.here !== null)
-          visit(state, ctx.world, after.here, at);
-      }
-      const parted = before.here === null ? [] : before.people.filter((id) => !after.people.includes(id));
-      const met = after.here === null ? [] : after.people.filter((id) => before.here !== after.here || !before.people.includes(id));
-      if (parted.length === 0 && met.length === 0)
-        return;
-      const people = writable(state, "people");
-      for (const id of parted)
-        people[id] = { place: before.here, at };
-      for (const id of met)
-        people[id] = { place: after.here, at };
-    }
-  };
-}
-function seedObservations(world, state) {
-  const here = placeOfEntity(state, world.pov);
-  if (here !== null)
-    visit(state, world, here, state.clock);
-  observeCells(state, world);
-}
-function restoreObservations(state, data) {
-  for (const key of PARTS) {
-    const diff = data[key];
-    if (!isRecord(diff))
-      continue;
-    const list = writable(state, key);
-    for (const [id, v] of Object.entries(diff)) {
-      if (v === null)
-        delete list[id];
-      else if (isRecord(v))
-        list[id] = structuredClone(v);
-    }
-  }
+function loreTerm(text) {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 // node_modules/lumi-rp-engine/src/engine/visibility.ts
@@ -3647,9 +3717,310 @@ function playerTrack(reg, world, state, pov, id) {
     status: terminal ? failed ? "failed" : "done" : "active"
   };
 }
+function unrevealedTruths(world, state) {
+  const out = [];
+  const slice = readEngineSlice(state);
+  for (const [id, t] of Object.entries(world.tracks)) {
+    const revealed = own(slice.revealed, id) ?? [];
+    for (const [sid, s] of Object.entries(t.stages))
+      if (s.truth && !revealed.includes(sid))
+        out.push(s.truth);
+  }
+  return out;
+}
+function loreGateReader(reg, world, state) {
+  let env = null;
+  return (entry) => {
+    if (typeof entry.gate !== "string" || entry.gate.trim() === "")
+      return false;
+    try {
+      env ??= scopeEnv({ reg, ctx: reg.context(world, state), bindings: {} });
+      return truthy2(evalExpr(entry.gate, env, false));
+    } catch {
+      return false;
+    }
+  };
+}
+function secretLorePhrases(reg, world, state) {
+  const open = loreGateReader(reg, world, state);
+  const out = [];
+  for (const l of Object.values(world.lore))
+    if (loreIsSecret(l) && typeof l.content === "string" && !open(l))
+      out.push(...lorePhrases(l.content));
+  return out;
+}
+function secretLoreTitles(reg, world, state) {
+  const open = loreGateReader(reg, world, state);
+  return Object.values(world.lore).flatMap((l) => loreIsSecret(l) && typeof l.title === "string" && l.title.trim() !== "" && !open(l) ? [l.title] : []);
+}
+function unrevealedSecrets(reg, world, state) {
+  return [...unrevealedTruths(world, state), ...secretLorePhrases(reg, world, state)];
+}
+function unseenPlaceNames(reg, world, state, pov) {
+  return Object.entries(world.places).flatMap(([id, p]) => typeof p.name === "string" && p.name.trim() !== "" && !canSeePlace(reg, world, state, pov, id) ? [p.name] : []);
+}
+function findLeaks(value, secrets) {
+  const needles = secrets.map((s) => s.toLowerCase()).filter((s) => s.length > 0);
+  const out = [];
+  const visit = (v) => {
+    if (typeof v === "string") {
+      const lower = v.toLowerCase();
+      for (const n of needles)
+        if (lower.includes(n))
+          out.push(v);
+    } else if (Array.isArray(v))
+      v.forEach(visit);
+    else if (isRecord(v))
+      Object.values(v).forEach((x) => visit(x));
+  };
+  visit(value);
+  return out;
+}
+var ACCENTS = /[\u0300-\u036f]/g;
+var PLAIN_LETTERS = { \u{f8}: "o", \u{e6}: "ae", \u{153}: "oe", \u{df}: "ss", \u{111}: "d", \u{142}: "l", \u{131}: "i", \u{f0}: "d", \u{fe}: "th" };
+function unaccented(text) {
+  return text.normalize("NFD").replace(ACCENTS, "").normalize("NFC");
+}
+function spellings(text) {
+  return (text.normalize("NFC").toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu) ?? []).map((written) => ({ written, plain: unaccented(written).replace(/[\u00F8\u00E6\u0153\u00DF\u0111\u0142\u0131\u00F0\u00FE]/g, (c) => PLAIN_LETTERS[c] ?? c) }));
+}
+var FUNCTION_WORDS = { a: true, an: true, the: true, of: true, and: true, in: true, on: true, at: true, to: true, by: true, for: true, or: true, with: true, from: true };
+var WORD_CHAR = "[\\p{L}\\p{M}\\p{N}]";
+function saysInOrder(said, words) {
+  const parts = words.map((w) => {
+    if (!/^[a-z0-9]+$/.test(w))
+      return w;
+    const plural = /[^aeiou]y$/.test(w) ? `(?:${w}(?:e?s)?|${w.slice(0, -1)}ies)` : `${w}(?:e?s)?`;
+    return `(?<!${WORD_CHAR})${plural}(?!${WORD_CHAR})`;
+  });
+  return new RegExp(parts.join(`${WORD_CHAR}*(?: ${WORD_CHAR}*)?`), "u").test(said);
+}
+function sayings(text) {
+  const words = spellings(text);
+  const joined = (key, all) => words.filter((w) => all || !hasOwn(FUNCTION_WORDS, w.plain)).map((w) => w[key]).join(" ");
+  const texts = { written: joined("written", false), plain: joined("plain", false), writtenAll: joined("written", true), plainAll: joined("plain", true) };
+  const cased = unaccented(text);
+  return {
+    says: (parts, all) => saysInOrder(all ? texts.plainAll : texts.plain, parts.map((p) => p.plain)) || saysInOrder(all ? texts.writtenAll : texts.written, parts.map((p) => p.written)),
+    capital: (letter) => new RegExp(`(?<!${WORD_CHAR})${letter}(?!${WORD_CHAR})`, "u").test(cased)
+  };
+}
+function namesAny(text, people, labels = [], heard = "") {
+  const said = sayings(text);
+  const known = sayings(heard);
+  for (const name of people) {
+    const words = spellings(name).filter((w) => !hasOwn(FUNCTION_WORDS, w.plain));
+    const counted = words.filter((w) => !/^[a-z0-9]$/.test(w.plain));
+    for (const w of counted)
+      if (said.says([w], false) && !known.says([w], false))
+        return true;
+    if (counted.length > 0)
+      continue;
+    for (const w of words) {
+      const letter = w.plain.toUpperCase();
+      if (/^[B-HJ-Z]$/.test(letter) && said.capital(letter) && !known.capital(letter))
+        return true;
+    }
+  }
+  for (const label of labels) {
+    const all = spellings(label);
+    const named = all.filter((w) => !hasOwn(FUNCTION_WORDS, w.plain));
+    const whole = named.length === 0;
+    const parts = whole ? all : named;
+    if (parts.length > 0 && said.says(parts, whole) && !known.says(parts, whole))
+      return true;
+  }
+  return false;
+}
+
+// node_modules/lumi-rp-engine/src/engine/life.ts
+var PACK2 = "engine";
+var SLICE2 = "life";
+function lifeOf(state, id) {
+  return own(state.entities, id)?.life ?? ALIVE;
+}
+function acts(world, state, id) {
+  return lifeStateOf(world, lifeOf(state, id)).acts;
+}
+function entryOf(state, subject) {
+  const all = state.packs[PACK2]?.[SLICE2];
+  const entry = isRecord(all) ? own(all, subject) : undefined;
+  return isRecord(entry) && typeof entry.base === "string" && isRecord(entry.by) ? { base: entry.base, by: entry.by } : null;
+}
+function lifeKnownTo(state, subject, knower) {
+  const entry = knower === subject ? null : entryOf(state, subject);
+  if (!entry)
+    return lifeOf(state, subject);
+  const learned = own(entry.by, knower);
+  return typeof learned === "string" ? learned : entry.base;
+}
+function povLife(world, state, subject) {
+  const id = lifeKnownTo(state, subject, world.pov);
+  return id === ALIVE ? null : { id, ...lifeStateOf(world, id) };
+}
+function isPerson(reg, world, state, id) {
+  const e = own(state.entities, id);
+  return !!e && kindIs(reg, world, e.kind, "person") && !isGone(state, id);
+}
+function learners(state, subject, base) {
+  const slice = state.packs[PACK2] ?? {};
+  state.packs[PACK2] = slice;
+  const all = isRecord(slice[SLICE2]) ? slice[SLICE2] : {};
+  slice[SLICE2] = all;
+  const found = own(all, subject);
+  if (isRecord(found) && typeof found.base === "string" && isRecord(found.by))
+    return found.by;
+  const by = {};
+  all[subject] = { base, by };
+  return by;
+}
+function peopleAt(reg, world, state, place) {
+  return Object.keys(state.entities).sort().filter((id) => placeOfEntity(state, id) === place && isPerson(reg, world, state, id));
+}
+function witnessesOf(reg, world, state, subject) {
+  const place = placeOfEntity(state, subject);
+  return place === null ? [] : peopleAt(reg, world, state, place).filter((id) => id !== subject);
+}
+function applyLife(state, ctx, subject, to, witnesses) {
+  const e = own(state.entities, subject);
+  if (!e)
+    return;
+  const by = learners(state, subject, lifeOf(state, subject));
+  const seen = witnesses ?? witnessesOf(ctx.registry, ctx.world, state, subject);
+  if (to === ALIVE)
+    delete e.life;
+  else
+    e.life = to;
+  for (const id of seen)
+    if (id !== subject && own(state.entities, id))
+      by[id] = to;
+}
+function seedLife(world, state) {
+  for (const [id, def] of Object.entries(world.entities)) {
+    const start = lifeOf(state, id);
+    if (!def.lifeKnownBy?.length || start === ALIVE)
+      continue;
+    const by = learners(state, id, ALIVE);
+    for (const knower of def.lifeKnownBy)
+      if (knower !== id && own(state.entities, knower))
+        by[knower] = start;
+  }
+}
+function tellLife(state, subject, who) {
+  const entry = entryOf(state, subject);
+  if (!entry)
+    return;
+  const truth = lifeOf(state, subject);
+  const by = learners(state, subject, entry.base);
+  for (const id of who)
+    if (id !== subject && own(state.entities, id))
+      by[id] = truth;
+}
+function learnIn(reg, world, state, place) {
+  const all = state.packs[PACK2]?.[SLICE2];
+  if (!isRecord(all))
+    return;
+  const subjects = Object.keys(all).filter((s) => placeOfEntity(state, s) === place);
+  if (subjects.length === 0)
+    return;
+  const people = peopleAt(reg, world, state, place);
+  for (const s of subjects) {
+    const truth = lifeOf(state, s);
+    const stale = people.filter((id) => id !== s && lifeKnownTo(state, s, id) !== truth);
+    if (stale.length === 0)
+      continue;
+    const by = learners(state, s, truth);
+    for (const id of stale)
+      by[id] = truth;
+  }
+}
+function movedBy(e) {
+  if (e.type === "set")
+    return e.entity;
+  if (e.type === "link" || e.type === "unlink")
+    return e.from;
+  return e.type === "spawn" ? e.entity.id : null;
+}
+function knowing(def) {
+  if (def.type !== "set" && def.type !== "link" && def.type !== "unlink" && def.type !== "spawn")
+    return def;
+  return {
+    ...def,
+    apply: (e, state, ctx) => {
+      def.apply(e, state, ctx);
+      const moved = movesSomeone(e) ? movedBy(e) : null;
+      const place = moved === null ? null : placeOfEntity(state, moved);
+      if (place !== null)
+        learnIn(ctx.registry, ctx.world, state, place);
+    }
+  };
+}
+function listeners(ctx, raw) {
+  if (raw === undefined || raw === null || raw === "")
+    return [];
+  if (isRecord(raw)) {
+    const selector = knownBySelector(raw);
+    return selector ? selectEntities(ctx.registry, ctx.world, ctx.state, selector) : { code: "bad_args", reason: "tell names people by id or a selector" };
+  }
+  const ids = (Array.isArray(raw) ? raw : [raw]).map((v) => typeof v === "string" ? v : "");
+  const missing = ids.find((id) => !own(ctx.state.entities, id));
+  return missing === undefined ? ids : { code: "missing_entity", reason: `there's no ${labelOf(ctx, missing)} to tell` };
+}
+function lifeEffect(args, ctx) {
+  const subject = typeof args.entity === "string" ? args.entity : "";
+  if (!own(ctx.state.entities, subject))
+    return { code: "missing_entity", reason: `there's no ${labelOf(ctx, subject)}` };
+  if (isGone(ctx.state, subject))
+    return { code: "gone", reason: `${labelOf(ctx, subject)} has been removed` };
+  const given = args.to;
+  if (given !== undefined && given !== null && typeof given !== "string")
+    return { code: "bad_args", reason: "a life state is named by its id" };
+  const to = typeof given === "string" && given !== "" ? given : null;
+  if (to !== null && !isLifeState(ctx.world, to))
+    return { code: "bad_life", reason: `there's no life state ${to}` };
+  const who = listeners(ctx, args.tell);
+  if (!Array.isArray(who))
+    return who;
+  if (to === null && who.length === 0)
+    return { code: "bad_args", reason: "a life change needs a state to set or someone to tell" };
+  const now = lifeOf(ctx.state, subject);
+  const out = to !== null && to !== now ? [{ type: ENGINE_EVENTS.life, data: { entity: subject, to, witnesses: witnessesOf(ctx.registry, ctx.world, ctx.state, subject) } }] : [];
+  const after = to ?? now;
+  const told = who.filter((id) => id !== subject && (out.length > 0 || lifeKnownTo(ctx.state, subject, id) !== after));
+  const pov = told.filter((id) => id === ctx.world.pov);
+  const others = told.filter((id) => id !== ctx.world.pov);
+  for (const group of [pov, others])
+    if (group.length > 0)
+      out.push({ type: ENGINE_EVENTS.told, data: { entity: subject, who: group } });
+  return out;
+}
+function stateNamed(world, said) {
+  const s = typeof said === "string" ? said.trim().toLowerCase() : "";
+  return lifeStatesOf(world).find(([id, def]) => id === s || def.label.toLowerCase() === s)?.[0] ?? null;
+}
+var lifeChannel = {
+  type: "life",
+  boundField: "life",
+  validate(p, ctx) {
+    const subject = typeof p.entity === "string" ? p.entity : "";
+    const e = own(ctx.state.entities, subject);
+    if (!e || isGone(ctx.state, subject))
+      return { code: "missing_entity", reason: "there's no one by that name" };
+    if (!kindIs(ctx.registry, ctx.world, e.kind, "person"))
+      return { code: "not_a_character", reason: "only people live and die" };
+    const to = stateNamed(ctx.world, p.state);
+    if (to === null)
+      return { code: "bad_life", reason: `there's no life state ${typeof p.state === "string" ? p.state : ""}`.trim() };
+    if (lifeKnownTo(ctx.state, subject, ctx.world.pov) === to)
+      return { code: "already", reason: `${e.name} already ${lifeStateOf(ctx.world, to).reads}` };
+    return null;
+  },
+  toEffects(p, ctx) {
+    return [{ type: "life", args: { entity: typeof p.entity === "string" ? p.entity : "", to: stateNamed(ctx.world, p.state) ?? ALIVE, tell: [ctx.world.pov] } }];
+  }
+};
 
 // node_modules/lumi-rp-engine/src/engine/narration-channels.ts
-var SPAWN_CAP = 24;
 var SPAWNED_BY_NARRATION = "narration";
 var NAME_MAX = 60;
 var ROLE_MAX = 80;
@@ -3753,8 +4124,9 @@ var spawnChannel = {
     const lower = name.toLowerCase();
     if (hasOwn3(ctx.state.entities, spawnId(name)) || Object.values(ctx.state.entities).some((e) => e.name.trim().toLowerCase() === lower))
       return reject("duplicate", `${name} already exists`);
-    if (spawnedCount(ctx) >= SPAWN_CAP)
-      return reject("spawn_cap", `replies have introduced ${SPAWN_CAP} characters already`);
+    const cap = spawnCapOf(ctx.world);
+    if (spawnedCount(ctx) >= cap)
+      return reject("spawn_cap", cap === 0 ? "this world lets no reply introduce characters" : `replies have introduced ${cap} characters already`);
     return null;
   },
   toEffects(p, ctx) {
@@ -3786,7 +4158,9 @@ var ENGINE_EVENTS = {
   entity: "engine.entity",
   classes: "engine.class",
   observed: "engine.observed",
-  adjudged: "engine.adjudged"
+  adjudged: "engine.adjudged",
+  life: "engine.life",
+  told: "engine.told"
 };
 function readEngineSlice(state) {
   const s = state.packs[ENGINE_PACK] ?? {};
@@ -4077,8 +4451,56 @@ var events = [
       sub(state, "tries")[key] = { at: state.clock, place: typeof place === "string" ? place : null, outcome: str2(e, "outcome"), failed: e.data.failed === true, odds: str2(e, "odds"), ...typeof round === "string" ? { round } : {} };
     },
     describe: (e) => `${str2(e, "actor")}: ${str2(e, "action").replace(/_/g, " ")}, ${str2(e, "outcome").replace(/_/g, " ")}${e.data.rolled === true ? "" : ` (no roll: ${str2(e, "why")})`}`
+  },
+  {
+    type: ENGINE_EVENTS.life,
+    validate: (e, ctx) => {
+      const ent = own(ctx.state.entities, str2(e, "entity"));
+      if (!ent)
+        return { code: "missing_entity", reason: `no entity ${str2(e, "entity")}` };
+      if (!isLifeState(ctx.world, str2(e, "to")))
+        return { code: "bad_life", reason: `there's no life state ${str2(e, "to")}` };
+      const seen = e.data.witnesses;
+      if (seen !== undefined && !(Array.isArray(seen) && seen.every((id) => typeof id === "string")))
+        return { code: "bad_event", reason: "a life change's witnesses are entity ids" };
+      return lifeOf(ctx.state, str2(e, "entity")) === str2(e, "to") ? { code: "no_change", reason: `${ent.name} is already ${lifeStateOf(ctx.world, str2(e, "to")).label.toLowerCase()}` } : null;
+    },
+    apply: (e, state, ctx) => applyLife(state, ctx, str2(e, "entity"), str2(e, "to"), witnessesOf2(e)),
+    touches: (e) => [{ entity: str2(e, "entity"), aspect: "life" }],
+    describe: (e, ctx, viewer) => {
+      const id = str2(e, "entity");
+      const def = lifeStateOf(ctx.world, str2(e, "to"));
+      const name = own(ctx.state.entities, id)?.name ?? id;
+      if (viewer === undefined)
+        return `${name}: ${def.label}`;
+      if (id === viewer)
+        return `You: ${def.label}`;
+      return witnessesOf2(e)?.includes(viewer) === true ? `${name} ${def.reads}` : "";
+    }
+  },
+  {
+    type: ENGINE_EVENTS.told,
+    validate: (e, ctx) => {
+      if (!own(ctx.state.entities, str2(e, "entity")))
+        return { code: "missing_entity", reason: `no entity ${str2(e, "entity")}` };
+      const who = e.data.who;
+      return Array.isArray(who) && who.length > 0 && who.every((id) => typeof id === "string" && own(ctx.state.entities, id)) ? null : { code: "bad_event", reason: "told needs the people told" };
+    },
+    apply: (e, state) => tellLife(state, str2(e, "entity"), Array.isArray(e.data.who) ? e.data.who.filter((id) => typeof id === "string") : []),
+    describe: (e, ctx, viewer) => {
+      const id = str2(e, "entity");
+      const name = own(ctx.state.entities, id)?.name ?? id;
+      const who = Array.isArray(e.data.who) ? e.data.who.filter((x) => typeof x === "string") : [];
+      if (viewer === undefined)
+        return `${who.map((w) => own(ctx.state.entities, w)?.name ?? w).join(", ")} learn: ${name} ${lifeStateOf(ctx.world, lifeOf(ctx.state, id)).reads}`;
+      return who.includes(viewer) ? `${name} ${lifeStateOf(ctx.world, lifeKnownTo(ctx.state, id, viewer)).reads}` : "";
+    }
   }
 ];
+function witnessesOf2(e) {
+  const seen = e.data.witnesses;
+  return Array.isArray(seen) ? seen.filter((id) => typeof id === "string") : null;
+}
 function entityArg(ctx, v) {
   const id = typeof v === "string" ? v : "";
   const e = own(ctx.state.entities, id);
@@ -4095,6 +4517,21 @@ var enginePack = {
       r.event(def);
     r.proposal(knowsChannel);
     r.proposal(spawnChannel);
+    r.proposal(lifeChannel);
+    r.effect({
+      type: "life",
+      args: ["entity", "to?", "tell?"],
+      resolve: (a, ctx) => {
+        const out = lifeEffect(a, ctx);
+        const subject = typeof a.entity === "string" ? a.entity : "";
+        const wakes = Array.isArray(out) && typeof a.to === "string" && out.some((e) => e.type === ENGINE_EVENTS.life) && own(ctx.state.entities, subject)?.agent === true && !acts(ctx.world, ctx.state, subject) && lifeStateOf(ctx.world, a.to).acts;
+        return wakes && Array.isArray(out) ? [...out, { type: ENGINE_EVENTS.caught, data: { agent: subject, slot: slotIndexAt(calendarOf(ctx.world), ctx.state.clock) } }] : out;
+      }
+    });
+    r.formula("life_of", (ctx, entity) => {
+      const hit = entityArg(ctx, entity);
+      return hit ? lifeOf(ctx.state, hit[0]) : "";
+    });
     r.formula("kind_is", (ctx, entity, kind) => {
       const hit = entityArg(ctx, entity);
       return hit !== null && kindIs(ctx.registry, ctx.world, hit[1].kind, String(kind ?? ""));
@@ -4120,13 +4557,13 @@ var enginePack = {
 };
 
 // node_modules/lumi-rp-engine/src/engine/touched.ts
-var PACK2 = "engine";
-var SLICE2 = "touched";
+var PACK3 = "engine";
+var SLICE3 = "touched";
 function record(state) {
-  const v = state.packs[PACK2]?.[SLICE2];
+  const v = state.packs[PACK3]?.[SLICE3];
   return isRecord(v) ? v : undefined;
 }
-function entryOf(state, id) {
+function entryOf2(state, id) {
   const all = record(state);
   const v = all ? own(all, id) : undefined;
   return isRecord(v) ? v : undefined;
@@ -4140,9 +4577,9 @@ function objectAt(parent, key) {
   return fresh;
 }
 function writable2(state, id) {
-  const slice = state.packs[PACK2] ?? {};
-  state.packs[PACK2] = slice;
-  return objectAt(objectAt(slice, SLICE2), id);
+  const slice = state.packs[PACK3] ?? {};
+  state.packs[PACK3] = slice;
+  return objectAt(objectAt(slice, SLICE3), id);
 }
 function touch(state, t) {
   if (!own(state.entities, t.entity))
@@ -4156,11 +4593,11 @@ function touch(state, t) {
     e[t.aspect] = true;
 }
 function touchedAspect(state, id, aspect) {
-  return entryOf(state, id)?.[aspect] === true;
+  return entryOf2(state, id)?.[aspect] === true;
 }
 function forget(state, id, what) {
   const all = record(state);
-  const e = entryOf(state, id);
+  const e = entryOf2(state, id);
   if (!all || !e)
     return;
   if (what === "all")
@@ -4293,6 +4730,48 @@ function playerKnows(reg, world, state, pov, id) {
   if (!canSeeEntity(reg, world, state, pov, id))
     return false;
   return metBy(state, pov, id) || povRegions(world, state, pov).includes(id);
+}
+function trackShown(reg, world, state, pov, id) {
+  const t = own(world.tracks, id);
+  if (!t)
+    return false;
+  const visibility = visibilityOf(t.visibility);
+  if (visibility === "public")
+    return true;
+  if ((own(readEngineSlice(state).revealed, id) ?? []).length > 0)
+    return true;
+  return visibility === "known_by" && trackKnown(reg, world, state, pov, t);
+}
+function trackKeepsSecret(reg, world, state, pov, id) {
+  const t = own(world.tracks, id);
+  if (!t)
+    return false;
+  const revealed = own(readEngineSlice(state).revealed, id) ?? [];
+  return Object.entries(t.stages).some(([stage, s]) => !!s.truth && !revealed.includes(stage)) || !trackShown(reg, world, state, pov, id);
+}
+function hiddenTrackLabels(reg, world, state, pov) {
+  const out = [];
+  for (const [id, t] of Object.entries(world.tracks)) {
+    if (trackShown(reg, world, state, pov, id))
+      continue;
+    out.push(t.label);
+    for (const s of Object.values(t.stages))
+      if (s.label.length >= 6)
+        out.push(s.label);
+  }
+  return out;
+}
+function hiddenEntityNames(reg, world, state, pov) {
+  const out = { people: [], things: [] };
+  for (const [id, e] of Object.entries(state.entities))
+    if (!canSeeEntity(reg, world, state, pov, id))
+      (kindIs(reg, world, e.kind, "person") ? out.people : out.things).push(e.name);
+  return out;
+}
+function hiddenNameCheck(reg, world, state, pov) {
+  const hidden = hiddenEntityNames(reg, world, state, pov);
+  const labels = [...hidden.things, ...unseenPlaceNames(reg, world, state, pov), ...hiddenTrackLabels(reg, world, state, pov), ...secretLoreTitles(reg, world, state)];
+  return (text) => namesAny(text, hidden.people, labels);
 }
 
 // node_modules/lumi-rp-engine/src/engine/relations.ts
@@ -4561,7 +5040,8 @@ function initialState(world, revision, types) {
       fields: structuredClone(e.fields),
       relations: structuredClone(e.relations),
       levels: clampLevels(e.levels ?? {}),
-      agent: agentOf(world, { id, tier: e.tier, agent: e.agent })
+      agent: agentOf(world, { id, tier: e.tier, agent: e.agent }),
+      ...typeof e.life === "string" && e.life !== ALIVE ? { life: e.life } : {}
     };
   }
   completeRelations(types, world, entities);
@@ -4611,6 +5091,7 @@ function initialState(world, revision, types) {
     packs: {}
   };
   seedObservations(world, state);
+  seedLife(world, state);
   return state;
 }
 
@@ -5254,7 +5735,7 @@ function createRegistry(packs) {
     }
   };
   for (const def of coreEventTypes(() => registry))
-    once(events, def.type, observing(def, canSeeEntity), "event type");
+    once(events, def.type, knowing(observing(def, canSeeEntity)), "event type");
   const seen = new Set;
   for (const pack of packs) {
     if (seen.has(pack.id))
@@ -6278,19 +6759,20 @@ function ownerRank(reg, world, state, schedule) {
 }
 function scheduleOwners(reg, world, state, schedule) {
   const owner = schedule.owner;
+  const acting = (ids) => ids.filter((id) => acts(world, state, id));
   if (isRecord(owner))
-    return selectEntities(reg, world, state, owner);
+    return acting(selectEntities(reg, world, state, owner));
   if (typeof owner !== "string" || owner === "")
     return [];
   const e = own(state.entities, owner);
   if (e) {
     if (isGone(state, owner))
       return [];
-    return kindIs(reg, world, e.kind, GROUP_KIND) ? membersOf(reg, world, state, owner) : [owner];
+    return acting(kindIs(reg, world, e.kind, GROUP_KIND) ? membersOf(reg, world, state, owner) : [owner]);
   }
   return Object.keys(state.entities).sort().filter((id) => {
     const x = own(state.entities, id);
-    return !!x && kindIs(reg, world, x.kind, owner) && !isGone(state, id);
+    return !!x && kindIs(reg, world, x.kind, owner) && !isGone(state, id) && acts(world, state, id);
   });
 }
 function scheduleDomain(reg, schedule) {
@@ -6590,6 +7072,9 @@ function lintStructure(world, reg) {
   }
   if (world.spawnTier !== undefined && !tierOf(world, world.spawnTier))
     err("spawnTier", "unknown_tier", `New people would join tier "${world.spawnTier}", which isn't one of the world's tiers.`);
+  const cap = world.spawnCap;
+  if (cap !== undefined && !(typeof cap === "number" && Number.isInteger(cap) && cap >= 0 && cap <= MAX_SPAWN_CAP))
+    err("spawnCap", "spawn_cap", `The number of people replies may introduce must be a whole number from 0 to ${MAX_SPAWN_CAP}.`);
   for (const { path, effects } of effectLists(world)) {
     effects.forEach((spec, i) => {
       if (spec.type !== "spawn")
@@ -6605,6 +7090,34 @@ function lintStructure(world, reg) {
       const problems = classes ? classProblems(world, classes, who) : [{ code: "unknown_facet", message: `${who} gives a class that isn't a facet \u2192 values map.` }];
       for (const p of problems)
         warn(`${path}.${i}`, p.code, `${p.message} The spawn is refused.`);
+    });
+  }
+  for (const [id, def] of Object.entries(isRecord(world.lifeStates) ? world.lifeStates : {})) {
+    const raw = def;
+    if (hasOwn(BUILTIN_LIFE_STATES, id))
+      err(`lifeStates.${id}`, "life_builtin", `"${id}" is a built-in life state; give yours another id.`);
+    else if (!isRecord(raw) || typeof raw.label !== "string" || raw.label.trim() === "")
+      warn(`lifeStates.${id}.label`, "life_label", `Life state ${id} has no label, so players see its id.`);
+    else if (typeof raw.reads !== "string" || raw.reads.trim() === "")
+      warn(`lifeStates.${id}.reads`, "life_reads", `Life state ${id} doesn't say how the narrator reads it, so it reads "is ${raw.label.toLowerCase()}".`);
+  }
+  for (const [id, e] of Object.entries(world.entities)) {
+    if (e.life !== undefined && !isLifeState(world, e.life))
+      err(`entities.${id}.life`, "unknown_life", `${e.name} starts in life state "${e.life}", which isn't one of the world's.`);
+    for (const knower of e.lifeKnownBy ?? [])
+      if (!own(world.entities, knower))
+        err(`entities.${id}.lifeKnownBy`, "refs", `${e.name}'s starting life state is known to an unknown "${knower}".`);
+    if ((e.lifeKnownBy ?? []).length > 0 && (e.life ?? ALIVE) === ALIVE)
+      warn(`entities.${id}.lifeKnownBy`, "life_known_by", `${e.name} starts alive, so who knows how they start changes nothing.`);
+  }
+  const downLife = world.ruleset?.combat?.down?.life;
+  if (downLife !== undefined && (typeof downLife !== "string" || !isLifeState(world, downLife)))
+    err("ruleset.combat.down.life", "unknown_life", `Combat's down rule names life state "${String(downLife)}", which isn't one of the world's.`);
+  for (const { path, effects } of effectLists(world)) {
+    effects.forEach((spec, i) => {
+      const to = spec.args.to;
+      if (spec.type === "life" && typeof to === "string" && !to.startsWith("=") && !isLifeState(world, to))
+        warn(`${path}.${i}`, "unknown_life", `A life change in ${path} names life state "${to}", which isn't one of the world's; it is refused.`);
     });
   }
   for (const [id, t] of Object.entries(world.tracks)) {
@@ -7699,6 +8212,12 @@ function runRulesOnEvents(reg, w, events, opts) {
 }
 
 // node_modules/lumi-rp-engine/src/engine/tracks.ts
+function currentStage(world, state, track) {
+  const def = own(world.tracks, track);
+  if (!def)
+    return null;
+  return own(state.tracks, track)?.stage ?? def.start;
+}
 function normalizeAnswer(text) {
   return text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().replace(/^(the|a|an) /, "");
 }
@@ -8983,10 +9502,19 @@ var spacePack = {
           return { code: "missing_entity", reason: `no entity ${labelOf(ctx, entity)}` };
         if (!own(ctx.world.places, place))
           return { code: "missing_place", reason: `no place ${labelOf(ctx, place)}` };
+        const name = labelOf(ctx, entity);
+        const truth = lifeOf(ctx.state, entity);
+        const stopped = !acts(ctx.world, ctx.state, entity);
+        const known = povLife(ctx.world, ctx.state, entity);
+        if (known && !known.acts && canSeeEntity(ctx.registry, ctx.world, ctx.state, ctx.world.pov, entity)) {
+          return { code: "not_moved", reason: `${name} ${known.reads}; that move didn't happen`, gm: stopped ? `${name} is ${truth} and doesn't act` : `${name} is ${truth}, which the POV hasn't learned; it takes them as ${known.id}` };
+        }
+        if (stopped)
+          return { code: "not_moved", reason: "that move didn't happen", gm: `${name} is ${truth} and doesn't act`, unseen: true };
         const from = placeOfEntity(ctx.state, entity);
         const named = (id) => canSeePlace(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id) ? own(ctx.world.places, id)?.name ?? id : "somewhere";
         if (from && !reachable(ctx, from, place))
-          return { code: "declined", reason: `There's no way from ${named(from)} to ${named(place)}.` };
+          return { code: "no_route", reason: `There's no way from ${named(from)} to ${named(place)}` };
         return null;
       },
       toEffects: (p, ctx) => [{ type: "move", args: { entity: typeof p.entity === "string" ? p.entity : ctx.world.pov, to: typeof p.place === "string" ? p.place : "" } }]
@@ -13278,6 +13806,21 @@ function voiceLine(ctx, who) {
   const detail = axesOf(ctx).map((a) => `${a.label.toLowerCase()} ${Math.round(axes[a.id] ?? 0)}`).join(", ");
   return `${name} is ${band} toward you (${detail}).`;
 }
+function regardWords(ctx, from, to) {
+  const level = ctx.levelOf(from, "relationships");
+  if (level === 0 || !relationOf(ctx.state, from, to))
+    return null;
+  const band = regardBand(ctx, from, to);
+  if (level <= 2)
+    return band;
+  const axes = regardAxes(ctx, from, to);
+  const bands = bandsOf(ctx);
+  const apart = axesOf(ctx).flatMap((a) => {
+    const word = bandOf(bands, axes[a.id] ?? 0)?.label ?? "neutral";
+    return word === band ? [] : [`${a.label.toLowerCase()}: ${word}`];
+  });
+  return apart.length > 0 ? `${band} (${apart.join(", ")})` : band;
+}
 var relationshipsPack = {
   id: "relationships",
   label: "Relationships",
@@ -13299,6 +13842,7 @@ var relationshipsPack = {
     r.query("regard_band", regardBand);
     r.query("relationships.faction_regard", groupRegard);
     r.query("relationships.view", regardView);
+    r.query("relationships.words", regardWords);
     r.formula("regard", (ctx, from, to, axis) => regardValue(ctx, String(from ?? ""), String(to ?? ""), typeof axis === "string" && axis !== "" ? axis : undefined));
     r.formula("regard_band", (ctx, from, to) => regardBand(ctx, String(from ?? ""), String(to ?? "")));
     r.formula("faction_regard", (ctx, group, to) => groupRegard(ctx, String(group ?? ""), String(to ?? "")));
@@ -13329,6 +13873,9 @@ var relationshipsPack = {
           if (id === ctx.world.pov || placeOfEntity(ctx.state, id) !== here)
             continue;
           if (!kindIs(ctx.registry, ctx.world, own(ctx.state.entities, id)?.kind ?? "", "person") || !canSeeEntity(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id))
+            continue;
+          const life = povLife(ctx.world, ctx.state, id);
+          if (life && !life.acts)
             continue;
           const line = voiceLine(ctx, id);
           if (line)
@@ -13458,6 +14005,161 @@ function planDay(input) {
     t = end;
   }
   return { agent: input.agent, start: input.start, end: input.end, blocks, ties, tieZone };
+}
+
+// node_modules/lumi-rp-engine/src/packs/castlife/core/cues.ts
+var SECRET_KINDS = ["lore", "track", "flag"];
+function readCue(raw) {
+  if (!isRecord(raw) || typeof raw.text !== "string" || raw.text.trim() === "")
+    return null;
+  const keyed = SECRET_KINDS.filter((kind) => raw[kind] !== undefined);
+  const kind = keyed[0];
+  const id = kind === undefined ? undefined : raw[kind];
+  return keyed.length === 1 && kind !== undefined && typeof id === "string" && id !== "" ? { text: raw.text.trim(), secret: { kind, id } } : null;
+}
+function cuesFor(ctx, who, safe) {
+  const { registry: reg, world, state } = ctx;
+  const pov = world.pov;
+  const out = [];
+  const add = (text) => {
+    if (safe(text) && !out.includes(text))
+      out.push(text);
+  };
+  const gateHolds = loreGateReader(reg, world, state);
+  const flag = optionalQuery(ctx, "story.flag");
+  const cues = own(world.entities, who)?.cues;
+  for (const raw of Array.isArray(cues) ? cues : []) {
+    const cue = readCue(raw);
+    if (!cue)
+      continue;
+    const { kind, id } = cue.secret;
+    let kept = false;
+    if (kind === "lore") {
+      const entry = own(world.lore, id);
+      kept = entry !== undefined && loreIsSecret(entry) && !gateHolds(entry);
+    } else if (kind === "track")
+      kept = trackKeepsSecret(reg, world, state, pov, id);
+    else if (flag) {
+      const value = flag(ctx, id);
+      kept = value === null || value === false || value === 0 || value === "";
+    }
+    if (kept)
+      add(cue.text);
+  }
+  for (const id of Object.keys(world.tracks).sort()) {
+    const t = own(world.tracks, id);
+    if (t?.owner !== who || t.kind === "agenda" && visibilityOf(t.visibility) === "public")
+      continue;
+    const stage = currentStage(world, state, id);
+    const cue = stage === null ? undefined : own(t.stages, stage)?.cue;
+    if (typeof cue === "string" && cue.trim() !== "" && trackKeepsSecret(reg, world, state, pov, id))
+      add(cue.trim());
+  }
+  return out;
+}
+function personKind(world, kind) {
+  let id = kind;
+  for (let guard = 0;id !== undefined && guard < 32; guard++) {
+    if (id === "person")
+      return true;
+    id = own(world.kinds, id)?.extends;
+  }
+  return false;
+}
+function hiddenNames(world) {
+  const out = [];
+  const label = (name, secret, entity) => void out.push({ name, secret, ...entity !== undefined ? { entity } : {}, said: (text) => namesAny(text, [], [name]) });
+  for (const e of Object.values(world.entities)) {
+    const v = visibilityOf(e.visibility);
+    if (v === "public")
+      continue;
+    if (personKind(world, e.kind))
+      out.push({ name: e.name, secret: e.visibility === "secret", entity: e.id, said: (text) => namesAny(text, [e.name]) });
+    else
+      label(e.name, e.visibility === "secret", e.id);
+  }
+  for (const p of Object.values(world.places))
+    if (visibilityOf(p.visibility) !== "public")
+      label(p.name, p.visibility === "secret");
+  for (const t of Object.values(world.tracks)) {
+    if (visibilityOf(t.visibility) === "public")
+      continue;
+    label(t.label, false);
+    for (const s of Object.values(t.stages))
+      if (s.label.length >= 6)
+        label(s.label, false);
+  }
+  for (const l of Object.values(world.lore))
+    if (loreIsSecret(l))
+      label(l.title, false);
+  return out.filter((h) => h.name.trim() !== "");
+}
+function cueIssues(world) {
+  const issues = [];
+  const issue = (severity, path, message) => void issues.push({ severity, path, code: "castlife.cues", message });
+  const secrets = [...Object.values(world.tracks).flatMap((t) => Object.values(t.stages).flatMap((s) => s.truth ? [s.truth] : [])), ...Object.values(world.lore).flatMap((l) => loreIsSecret(l) && typeof l.content === "string" ? lorePhrases(l.content) : [])];
+  const hidden = hiddenNames(world);
+  for (const e of Object.values(world.entities)) {
+    if (e.cues === undefined)
+      continue;
+    const at = `entities.${e.id}.cues`;
+    if (!Array.isArray(e.cues)) {
+      issue("error", at, `${e.name}'s cues should be a list.`);
+      continue;
+    }
+    if (e.cues.length > 0 && !personKind(world, e.kind))
+      issue("warning", at, `${e.name} isn't a person, so its cues never show: the Stance section tells people.`);
+    e.cues.forEach((raw, i) => {
+      const path = `${at}.${i}`;
+      const text = isRecord(raw) && typeof raw.text === "string" ? raw.text.trim() : "";
+      if (text === "")
+        return issue("error", `${path}.text`, `A cue of ${e.name}'s has no text: say what the narrator sees them do.`);
+      const cue = readCue(raw);
+      if (!cue)
+        return issue("error", path, `${e.name}'s cue "${text}" needs exactly one secret it stands for: a lore entry, a track or a story flag.`);
+      const { kind, id } = cue.secret;
+      if (kind === "lore") {
+        const entry = own(world.lore, id);
+        if (!entry)
+          issue("error", `${path}.lore`, `${e.name}'s cue "${text}" is for lore "${id}", which this world doesn't have.`);
+        else if (!loreIsSecret(entry))
+          issue("warning", `${path}.lore`, `${e.name}'s cue "${text}" is for "${entry.title}", which isn't secret lore, so it never shows.`);
+      } else if (kind === "track") {
+        const track = own(world.tracks, id);
+        if (!track)
+          issue("error", `${path}.track`, `${e.name}'s cue "${text}" is for track "${id}", which this world doesn't have.`);
+        else if (visibilityOf(track.visibility) === "public" && !Object.values(track.stages).some((s) => s.truth))
+          issue("warning", `${path}.track`, `${e.name}'s cue "${text}" is for "${track.label}", a public track with no truth to reveal, so it never shows.`);
+      }
+      const lower = text.toLowerCase();
+      const secret = secrets.find((s) => s.trim() !== "" && lower.includes(s.toLowerCase()));
+      const named = secret === undefined ? hidden.find((h) => h.entity !== e.id && h.said(text)) : undefined;
+      if (secret !== undefined)
+        issue("error", `${path}.text`, `${e.name}'s cue "${text}" gives away a secret ("${secret}"): a cue says how they act, never what they hide.`);
+      else if (named)
+        issue("warning", `${path}.text`, `${e.name}'s cue "${text}" names "${named.name}", which the player may not know; it is left out while they don't.`);
+    });
+  }
+  for (const t of Object.values(world.tracks)) {
+    const owner = t.owner === undefined ? undefined : own(world.entities, t.owner);
+    if (!owner || !personKind(world, owner.kind))
+      continue;
+    for (const [stage, s] of Object.entries(t.stages)) {
+      if (typeof s.cue !== "string")
+        continue;
+      const cue = s.cue;
+      const lower = cue.toLowerCase();
+      const named = hidden.find((h) => h.entity !== owner.id && h.said(cue) && !(h.secret && h.name.length > 3 && lower.includes(h.name.toLowerCase()) && lower !== h.name.toLowerCase()));
+      if (!named)
+        continue;
+      const path = `tracks.${t.id}.stages.${stage}.cue`;
+      if (named.secret)
+        issue("error", path, `The cue of "${t.label}" at "${s.label}" gives away a secret ("${named.name}"): a cue says how someone acts, never who or what is hidden.`);
+      else
+        issue("warning", path, `The cue of "${t.label}" at "${s.label}" names "${named.name}", which the player may not know; ${owner.name}'s Stance leaves it out while they don't.`);
+    }
+  }
+  return issues;
 }
 
 // node_modules/lumi-rp-engine/src/packs/castlife/core/index.ts
@@ -13655,7 +14357,7 @@ function acquainted(state, a, b) {
 function stepAgent(slot, ctx, rngFor, who) {
   const out = [];
   const e = own(ctx.state.entities, who);
-  if (!e)
+  if (!e || !acts2(ctx, who))
     return out;
   const level = ctx.levelOf(who, "castlife");
   const cal = calendarOf(ctx.world);
@@ -13698,7 +14400,7 @@ function stepAgent(slot, ctx, rngFor, who) {
   const appraise = optionalService(ctx, "relationship.appraise");
   const g = rng.fork("encounters");
   if (appraise && block.place && g.next() < ENCOUNTER_CHANCE) {
-    const here = Object.keys(ctx.state.entities).sort().filter((other) => other !== who && other !== pov && kindIs(ctx.registry, ctx.world, own(ctx.state.entities, other)?.kind ?? "", "person") && placeOfEntity(ctx.state, other) === block.place && !isGone(ctx.state, other));
+    const here = Object.keys(ctx.state.entities).sort().filter((other) => other !== who && other !== pov && kindIs(ctx.registry, ctx.world, own(ctx.state.entities, other)?.kind ?? "", "person") && placeOfEntity(ctx.state, other) === block.place && acts2(ctx, other));
     const other = here[Math.floor(g.next() * here.length)];
     if (other) {
       const known = acquainted(ctx.state, who, other);
@@ -13709,7 +14411,7 @@ function stepAgent(slot, ctx, rngFor, who) {
   }
   const regard = optionalQuery(ctx, "regard");
   const hour = dateAt(cal, slot.start).minuteOfDay / 60;
-  if (regard && !block.fixed && hour >= 12 && hour < 20 && regard(ctx, who, pov) >= 20) {
+  if (regard && acts2(ctx, pov) && !block.fixed && hour >= 12 && hour < 20 && regard(ctx, who, pov) >= 20) {
     const key = `${who}:invite:${slot.index}`;
     const invite = 1 + needValue(ctx, who, "social", slot.start) / 50 + regard(ctx, who, pov) / 50;
     const stay = 2;
@@ -13732,23 +14434,34 @@ function invitationText(ctx, agent, place, at, viewer) {
 }
 function stepTrips(slot, ctx) {
   const out = [];
+  const engaged = optionalQuery(ctx, "combat.engaged");
   for (const who of Object.keys(ctx.state.entities).sort()) {
     const e = own(ctx.state.entities, who);
     const trips = e?.fields.trips;
-    if (!e || !Array.isArray(trips) || ctx.levelOf(who, "castlife") < 1 || isGone(ctx.state, who))
+    if (!e || !Array.isArray(trips) || ctx.levelOf(who, "castlife") < 1 || !acts2(ctx, who) || engaged?.(ctx, who) === true)
       continue;
+    let holds = objOf(e.fields.holds);
     for (const raw of trips) {
       const t = objOf(raw);
       const from = numOf(t.from, NaN);
       const until = numOf(t.until, NaN);
       const place = strOf(t.place);
-      const away = objOf(e.fields.holds).place === until && e.fields.place === place;
+      const holding = objOf(e.fields.holds).place === until;
+      const away = holding && e.fields.place === place;
       if (from <= slot.end && slot.end < until && !away && own(ctx.world.places, place)) {
-        out.push({ type: "set", entity: who, field: "holds", value: { ...objOf(e.fields.holds), place: until, activity: until } }, { type: "set", entity: who, field: "place", value: place }, { type: "set", entity: who, field: "activity", value: "trip" });
+        holds = { ...holds, place: until, activity: until };
+        out.push({ type: "set", entity: who, field: "holds", value: holds }, { type: "set", entity: who, field: "place", value: place }, { type: "set", entity: who, field: "activity", value: "trip" });
       }
+      if (!(until <= slot.end && (until > slot.start || holding)))
+        continue;
       const home = homeOf(ctx, who);
-      if (until > slot.start && until <= slot.end && home)
+      if ((until > slot.start || away) && home)
         out.push({ type: "set", entity: who, field: "place", value: home }, { type: "set", entity: who, field: "activity", value: "idle" });
+      const kept = Object.fromEntries(Object.entries(holds).filter(([target, at]) => !((target === "place" || target === "activity") && at === until)));
+      if (Object.keys(kept).length < Object.keys(holds).length) {
+        holds = kept;
+        out.push({ type: "set", entity: who, field: "holds", value: holds });
+      }
     }
   }
   return out;
@@ -13839,8 +14552,12 @@ function buildCastView(ctx) {
       classes,
       groups: membershipsOf(id).map((m) => ({ id: m.id, ...m.role !== undefined ? { role: m.role } : {} }))
     };
+    const life = povLife(ctx.world, ctx.state, id);
+    if (life)
+      p.life = life.label;
+    const still = life !== null && !life.acts;
     if (present) {
-      if (typeof e.fields.activity === "string" && sees("activity"))
+      if (typeof e.fields.activity === "string" && sees("activity") && !still)
         p.activity = shownActivity(ctx, id, e.fields.activity).replace(/_/g, " ");
       if (sees("place"))
         p.place = canSeePlace(ctx.registry, ctx.world, ctx.state, pov, place) ? own(ctx.world.places, place)?.name ?? place : HIDDEN_PLACE_NAME;
@@ -13852,7 +14569,7 @@ function buildCastView(ctx) {
     const regard = view ? view(ctx, id, pov) : [];
     if (regard.length > 0)
       p.regard = regard;
-    const plan = present && e.agent ? dayPlan(ctx, id) : null;
+    const plan = present && e.agent && !still ? dayPlan(ctx, id) : null;
     const blocks = plan?.blocks.map((b) => b.option.startsWith(AGENDA_OPTION) && !publicTrack(ctx.world, b.option.slice(AGENDA_OPTION.length)) ? { ...b, label: "Busy", reasons: ["their own business"] } : b);
     if (blocks && level >= 3)
       p.timeline = blocks.map((b) => ({ start: formatHHMM(dateAt(cal, b.start).minuteOfDay), end: formatHHMM(dateAt(cal, b.end).minuteOfDay), label: b.label, kind: kindOfBlock(b.activity), reasons: b.reasons }));
@@ -13883,6 +14600,78 @@ function buildCastView(ctx) {
     mine: membershipsOf(pov).map((m) => ({ ...group(m.id), ...m.role !== undefined ? { role: m.role } : {}, ...m.rank !== undefined ? { rank: m.rank } : {}, ...m.since !== undefined ? { since: m.since } : {} })).sort(byName)
   };
 }
+function acts2(ctx, who) {
+  return !isGone(ctx.state, who) && acts(ctx.world, ctx.state, who);
+}
+function listed(label, clauses) {
+  const body = clauses.map((c) => c.replace(/\s+/g, " ").trim().replace(/[.;]$/, "")).join("; ");
+  return `${label}: ${body}${/[.!?\u2026]$/.test(body) ? "" : "."}`;
+}
+function decidedBlock(ctx, who) {
+  const cal = calendarOf(ctx.world);
+  const plan = dayPlan(ctx, who);
+  const dayStart = clockAt(cal, plan.day, 0);
+  const chosen = new Set(plan.ties.filter((t) => t.via === "recorded").map((t) => t.key));
+  const block = plan.blocks.find((b) => b.end > ctx.state.clock && chosen.has(tieKey(who, dayStart, b.start)));
+  if (!block)
+    return null;
+  const label = block.option.startsWith(AGENDA_OPTION) && !publicTrack(ctx.world, block.option.slice(AGENDA_OPTION.length)) ? "Busy" : block.label;
+  return block.start <= ctx.state.clock ? label : `${label} at ${formatHHMM(dateAt(cal, block.start).minuteOfDay)}`;
+}
+function stanceCast(ctx) {
+  const { registry: reg, world, state } = ctx;
+  const pov = world.pov;
+  const here = placeOfEntity(state, pov);
+  const people = here === null ? [] : Object.keys(state.entities).sort().filter((id) => id !== pov && placeOfEntity(state, id) === here && kindIs(reg, world, own(state.entities, id)?.kind ?? "", "person") && canSeeEntity(reg, world, state, pov, id) && !isGone(state, id) && povLife(world, state, id)?.acts !== false);
+  let check = null;
+  const safe = (text) => {
+    if (!check) {
+      const secrets = unrevealedSecrets(reg, world, state);
+      const namesHidden = hiddenNameCheck(reg, world, state, pov);
+      check = (t) => findLeaks(t, secrets).length === 0 && !namesHidden(t);
+    }
+    return check(text);
+  };
+  return { people, safe };
+}
+function stanceLines(ctx) {
+  const { registry: reg, world, state } = ctx;
+  const pov = world.pov;
+  const { people, safe } = stanceCast(ctx);
+  const regard = optionalQuery(ctx, "relationships.words");
+  const lines = [];
+  for (const id of people) {
+    const e = own(state.entities, id);
+    if (!e)
+      continue;
+    const known = knows(state, id, pov) || e.relations.some((r) => r.type === "regard" && r.to === pov);
+    const words = regard?.(ctx, id, pov) ?? null;
+    const parts = [`${e.name} ${known ? "knows" : "doesn't know"} you${words ? `; regard: ${words}` : ""}.`];
+    const activity = canSeeField(reg, world, state, pov, id, "activity") ? e.fields.activity : undefined;
+    const doing = typeof activity === "string" && activity !== "idle" ? shownActivity(ctx, id, activity).replace(/_/g, " ") : "";
+    if (doing !== "" && safe(doing))
+      parts.push(listed("Doing", [doing]));
+    const agenda = agendaFor(world, state, id).filter((a) => publicTrack(world, a.track)).map((a) => {
+      const track = own(world.tracks, a.track);
+      const cue = track ? own(track.stages, a.stage)?.cue?.trim() : undefined;
+      return cue ? cue : a.stageLabel;
+    }).filter(safe);
+    if (agenda.length > 0)
+      parts.push(listed("Agenda", agenda));
+    const decided = e.agent && ctx.levelOf(id, "castlife") >= 3 ? decidedBlock(ctx, id) : null;
+    if (decided !== null && safe(decided))
+      parts.push(listed("Decided", [decided]));
+    lines.push(parts.join(" "));
+  }
+  return lines;
+}
+function stanceCues(ctx) {
+  const { people, safe } = stanceCast(ctx);
+  return people.flatMap((id) => {
+    const cues = cuesFor(ctx, id, safe);
+    return cues.length > 0 ? [listed(`${own(ctx.state.entities, id)?.name ?? id}'s cues`, cues)] : [];
+  });
+}
 var castlifePack = {
   id: "castlife",
   label: "Cast life",
@@ -13899,7 +14688,7 @@ var castlifePack = {
       const out = [];
       const decided = decisions(ctx.state);
       for (const id of Object.keys(ctx.state.entities).sort()) {
-        const plan = own(ctx.state.entities, id)?.agent && !isGone(ctx.state, id) ? dayPlan(ctx, id) : null;
+        const plan = own(ctx.state.entities, id)?.agent && acts2(ctx, id) ? dayPlan(ctx, id) : null;
         for (const t of plan?.ties ?? [])
           if (t.via === "seed" && !own(decided, t.key))
             out.push({ key: t.key, agent: id, options: t.options });
@@ -13907,6 +14696,8 @@ var castlifePack = {
       return out;
     });
     r.formula("invited", (ctx, host) => {
+      if (povLife(ctx.world, ctx.state, String(host ?? ""))?.acts === false)
+        return false;
       const list = sliceOf(ctx.state, "castlife").invitations;
       const now = ctx.state.clock;
       return Array.isArray(list) && list.some((raw) => {
@@ -13965,8 +14756,9 @@ var castlifePack = {
             continue;
           if (!canSeeEntity(ctx.registry, ctx.world, ctx.state, pov, id))
             continue;
+          const life = povLife(ctx.world, ctx.state, id);
           const act = canSeeField(ctx.registry, ctx.world, ctx.state, pov, id, "activity") ? e.fields.activity : undefined;
-          lines.push(`${e.name}${typeof act === "string" && act !== "idle" ? ` (${shownActivity(ctx, id, act).replace(/_/g, " ")})` : ""} is here.`);
+          lines.push(life ? `${e.name} ${life.reads}.` : `${e.name}${typeof act === "string" && act !== "idle" ? ` (${shownActivity(ctx, id, act).replace(/_/g, " ")})` : ""} is here.`);
         }
         if (ctx.levelOf(pov, "castlife") >= 4) {
           const urgent = Object.entries(NEEDS).filter(([n]) => needValue(ctx, pov, n) >= 60).map(([, d]) => d.label);
@@ -13977,6 +14769,9 @@ var castlifePack = {
       }
     });
     r.view({ panel: "castlife.cast", build: (ctx) => buildCastView(ctx) });
+    r.renderer({ slot: "stance", render: stanceLines });
+    r.renderer({ slot: "stance", hint: true, render: stanceCues });
+    r.lint({ code: "castlife.cues", check: cueIssues });
     r.lint({
       code: "castlife.double_booking",
       check(world) {
@@ -14417,7 +15212,7 @@ var storyPack = {
 var core_default10 = storyPack;
 
 // node_modules/lumi-rp-engine/src/packs/combat/core/model.ts
-var PACK3 = "combat";
+var PACK4 = "combat";
 var STALEMATE_ROUNDS = 3;
 var LOG_CAP = 24;
 var DEFAULT_WOUNDS = [
@@ -14440,7 +15235,7 @@ function numbers(v) {
   return out;
 }
 function encounterOf(state) {
-  const raw = sliceOf(state, PACK3).encounter;
+  const raw = sliceOf(state, PACK4).encounter;
   if (!isRecord(raw) || typeof raw.id !== "string" || !Array.isArray(raw.order))
     return null;
   const order = [];
@@ -14459,7 +15254,7 @@ function encounterOf(state) {
   return { id: raw.id, place: typeof raw.place === "string" ? raw.place : null, round: Math.max(1, numOf(raw.round, 1)), turn: Math.max(0, numOf(raw.turn)), order, log, calm: { hp: numbers(calm.hp), rounds: Math.max(0, numOf(calm.rounds)), struck: calm.struck === true } };
 }
 function writeEncounter(state, enc) {
-  const slice = mutableSlice(state, PACK3);
+  const slice = mutableSlice(state, PACK4);
   if (enc)
     slice.encounter = enc;
   else {
@@ -14467,11 +15262,11 @@ function writeEncounter(state, enc) {
     delete slice.decisions;
   }
   if (Object.keys(slice).length === 0)
-    delete state.packs[PACK3];
+    delete state.packs[PACK4];
 }
 function decisionsOf(state) {
   const out = {};
-  for (const [k, v] of Object.entries(objOf(sliceOf(state, PACK3).decisions)))
+  for (const [k, v] of Object.entries(objOf(sliceOf(state, PACK4).decisions)))
     if (typeof v === "string")
       out[k] = v;
   return out;
@@ -14479,8 +15274,8 @@ function decisionsOf(state) {
 function fighterOf(enc, id) {
   return enc.order.find((f) => f.id === id);
 }
-function standing(state, enc, f) {
-  return !f.down && !isGone(state, f.id) && own(state.entities, f.id) !== undefined && placeOfEntity(state, f.id) === enc.place;
+function standing(at, enc, f) {
+  return !f.down && !isGone(at.state, f.id) && own(at.state.entities, f.id) !== undefined && acts(at.world, at.state, f.id) && placeOfEntity(at.state, f.id) === enc.place;
 }
 function engaged(state, world, id) {
   const enc = encounterOf(state);
@@ -14512,7 +15307,7 @@ function hpMaxOf(ctx, rules, id) {
 }
 function canFight(ctx, rules, id) {
   const e = own(ctx.state.entities, id);
-  return !!e && !isGone(ctx.state, id) && fieldDef(ctx.registry, ctx.world, e.kind, rules.hp) !== undefined;
+  return !!e && !isGone(ctx.state, id) && acts(ctx.world, ctx.state, id) && fieldDef(ctx.registry, ctx.world, e.kind, rules.hp) !== undefined;
 }
 function downHolds(ctx, rules, id) {
   if (rules.down?.when !== undefined)
@@ -14544,13 +15339,13 @@ function offTurnCost(rules, cost) {
   const budgets = Object.keys(cost);
   return budgets.length > 0 && budgets.every((b) => own(rules.economy, b)?.offTurn === true);
 }
-function standingOn(state, enc, side) {
-  return enc.order.filter((f) => f.side === side && standing(state, enc, f));
+function standingOn(at, enc, side) {
+  return enc.order.filter((f) => f.side === side && standing(at, enc, f));
 }
 function endHolds(ctx, rules, enc) {
   if (rules.end !== undefined)
     return truthy2(readFor(ctx, rules.end, {}, false));
-  return standingOn(ctx.state, enc, "party").length === 0 || standingOn(ctx.state, enc, "foes").length === 0;
+  return standingOn(ctx, enc, "party").length === 0 || standingOn(ctx, enc, "foes").length === 0;
 }
 function stalemateRounds(rules) {
   const n = rules.stalemate;
@@ -14567,9 +15362,9 @@ function stalledHolds(ctx, rules, enc) {
   const rounds = stalemateRounds(rules);
   return rounds > 0 && enc.calm.rounds >= rounds && !enc.calm.struck && sameHp(hpByFighter(ctx, rules, enc.order), enc.calm.hp);
 }
-function winnerOf(state, enc) {
-  const party = standingOn(state, enc, "party").length;
-  const foes = standingOn(state, enc, "foes").length;
+function winnerOf(at, enc) {
+  const party = standingOn(at, enc, "party").length;
+  const foes = standingOn(at, enc, "foes").length;
   return party > 0 && foes === 0 ? "party" : foes > 0 && party === 0 ? "foes" : null;
 }
 
@@ -14609,7 +15404,7 @@ function spendFor(ctx, actor, action) {
   const f = fighterOf(enc, actor);
   if (!f)
     return { code: "not_fighting", reason: you ? "you aren't in this fight" : `${labelOf(ctx, actor)} isn't in this fight` };
-  if (!standing(ctx.state, enc, f))
+  if (!standing(ctx, enc, f))
     return { code: "down", reason: you ? "you are out of the fight" : `${labelOf(ctx, actor)} is out of the fight` };
   const cost = costOf(action);
   if (enc.order[enc.turn]?.id !== actor && !offTurnCost(rules, cost))
@@ -14631,7 +15426,7 @@ function nextTurn(ctx, rules, enc) {
   for (let k = 1;k <= n; k++) {
     const index = (enc.turn + k) % n;
     const f = enc.order[index];
-    if (!f || !standing(ctx.state, enc, f))
+    if (!f || !standing(ctx, enc, f))
       continue;
     const round = enc.round + Math.floor((enc.turn + k) / n);
     const reset = {};
@@ -14765,6 +15560,7 @@ function settle(w, rules, rng, lines) {
   if (!enc || leave(w, rng.fork("left"), lines))
     return true;
   const condition = typeof rules.down?.condition === "string" && rules.down.condition.trim() !== "" ? rules.down.condition : DOWN_CONDITION;
+  const life = typeof rules.down?.life === "string" && isLifeState(w.world, rules.down.life) && rules.down.life !== ALIVE ? rules.down.life : null;
   for (const f of enc.order) {
     if (!own(w.state.entities, f.id))
       continue;
@@ -14773,7 +15569,10 @@ function settle(w, rules, rng, lines) {
     if (down === f.down || record2(w, [{ type: "combat.down", data: { encounter: enc.id, entity: f.id, down } }], rng.seed).length === 0)
       continue;
     const fall = rng.fork(`down:${f.id}`);
-    applyEffects(w.reg, w, [{ type: "sheets.condition", args: { who: f.id, condition, ...down ? { mod: 0 } : { clear: true } } }], { bindings: { self: f.id }, rng: fall });
+    const effects = [{ type: "sheets.condition", args: { who: f.id, condition, ...down ? { mod: 0 } : { clear: true } } }];
+    if (life !== null && (down || lifeOf(w.state, f.id) === life))
+      effects.push({ type: "life", args: { entity: f.id, to: down ? life : ALIVE } });
+    applyEffects(w.reg, w, effects, { bindings: { self: f.id }, rng: fall });
     asUnit2(w, from, fall.seed);
     const who = nameFor(w.ctx, f.id);
     if (who !== "someone")
@@ -14784,7 +15583,7 @@ function settle(w, rules, rng, lines) {
     return true;
   if (!endHolds(w.ctx, rules, now))
     return stalled(w, rules, rng.fork("calm"), lines);
-  const winner = winnerOf(w.state, now);
+  const winner = winnerOf(w, now);
   record2(w, [{ type: "combat.end", data: { encounter: now.id, reason: "over", winner, rounds: now.round } }], rng.seed);
   lines.push(`The fight is over${winner === "party" ? ": your side won" : winner === "foes" ? ": your side lost" : ""}.`);
   return encounterOf(w.state) === null;
@@ -14821,7 +15620,7 @@ function fightOptions(reg, world, state, actor) {
     const param = targetParam(action);
     if (action.combat?.start === true || param === undefined)
       continue;
-    const targets = param === null ? [null] : enc.order.filter((f) => f.id !== actor && standing(state, enc, f)).map((f) => f.id);
+    const targets = param === null ? [null] : enc.order.filter((f) => f.id !== actor && standing({ world, state }, enc, f)).map((f) => f.id);
     for (const target of targets) {
       const params = param !== null && target !== null ? { [param]: target } : {};
       const odds = actionOdds(reg, world, state, { action, actor, params });
@@ -14895,7 +15694,7 @@ function othersTurn(w, rules, rng, lines) {
   for (let n = 0;n < ACTS_PER_TURN; n++) {
     const enc = encounterOf(w.state);
     const f = enc ? fighterOf(enc, me.id) : undefined;
-    if (!enc || !f || enc.order[enc.turn]?.id !== me.id || enc.round !== start.round || !standing(w.state, enc, f))
+    if (!enc || !f || enc.order[enc.turn]?.id !== me.id || enc.round !== start.round || !standing(w, enc, f))
       return;
     const options = fightOptions(w.reg, w.world, w.state, me.id);
     const chosen = (n === 0 && decided !== undefined ? options.find((o) => optionKey(o) === decided) : undefined) ?? tacticFor(w.ctx, rules, enc, f, options);
@@ -14914,7 +15713,7 @@ function othersUntilPov(w, rules, rng, lines, steps) {
     const current = enc?.order[enc.turn];
     if (!enc || !current)
       return;
-    const live = standing(w.state, enc, current);
+    const live = standing(w, enc, current);
     if (current.id === w.world.pov && live)
       return;
     steps.left ??= enc.order.length;
@@ -14941,7 +15740,7 @@ function startLine(ctx, e) {
 function closing(ctx, rules, lines) {
   const enc = encounterOf(ctx.state);
   const me = enc ? fighterOf(enc, ctx.world.pov) : undefined;
-  if (enc && me && !standing(ctx.state, enc, me))
+  if (enc && me && !standing(ctx, enc, me))
     lines.push(`You are out of the fight; it goes on (round ${enc.round}).`, false);
   else if (enc && me && enc.order[enc.turn]?.id === me.id) {
     const left = Object.entries(rules.economy).flatMap(([budget, def]) => isRecord(def) ? [`${me.left[budget] ?? 0} ${typeof def.label === "string" && def.label !== "" ? def.label : budget}`] : []);
@@ -15009,7 +15808,7 @@ function fightChoices(ctx) {
     if (!f || f.id === ctx.world.pov)
       break;
     const key = turnKey(enc, enc.round + Math.floor((enc.turn + k) / n), f.id);
-    if (!standing(ctx.state, enc, f) || own(decided, key) !== undefined)
+    if (!standing(ctx, enc, f) || own(decided, key) !== undefined)
       continue;
     const state = structuredClone(ctx.state);
     writeEncounter(state, { ...enc, turn: index, order: enc.order.map((p) => p.id === f.id ? { ...p, left: { ...p.left, ...turnRefill(ctx, rules, p.id) } } : p) });
@@ -15055,7 +15854,7 @@ function combatEntries(ctx) {
     const param = targetParam(action);
     if (!fightOffers(ctx.world, ctx.state, action) || param === undefined)
       continue;
-    const targets = param === null ? [null] : enc ? enc.order.filter((f) => f.id !== ctx.world.pov && standing(ctx.state, enc, f) && canSeeEntity(ctx.registry, ctx.world, ctx.state, ctx.world.pov, f.id)).map((f) => f.id) : paramCandidates(ctx.registry, ctx.world, ctx.state, action, param).slice(0, 24);
+    const targets = param === null ? [null] : enc ? enc.order.filter((f) => f.id !== ctx.world.pov && standing(ctx, enc, f) && canSeeEntity(ctx.registry, ctx.world, ctx.state, ctx.world.pov, f.id)).map((f) => f.id) : paramCandidates(ctx.registry, ctx.world, ctx.state, action, param).slice(0, 24);
     const options = targets.map((t) => optionOf(ctx, action, param !== null && t !== null ? { [param]: t } : {}, t !== null ? labelOf(ctx, t) : action.label));
     if (options.length > 0)
       entries.push({ action: action.id, label: action.label, group: "combat", options });
@@ -15102,7 +15901,7 @@ function buildEncounterView(ctx, opts = {}) {
       you: f.id === ctx.world.pov,
       current: i === enc.turn,
       down: f.down,
-      out: !f.down && !standing(ctx.state, enc, f),
+      out: !f.down && !standing(ctx, enc, f),
       init: name === null ? null : f.init,
       hp: seen && "current" in seen ? seen : null,
       wound: seen && "wound" in seen && seen.wound !== "" ? seen.wound : null,
@@ -15237,7 +16036,7 @@ var events2 = [
       return null;
     },
     apply(e, state, ctx) {
-      delete mutableSlice(state, PACK3).decisions;
+      delete mutableSlice(state, PACK4).decisions;
       const order = orderOf(e.data.order) ?? [];
       const rules = rulesOf(ctx.world);
       writeEncounter(state, { id: strOf(e.data.encounter), place: typeof e.data.place === "string" ? e.data.place : null, round: 1, turn: 0, order, log: [], calm: { hp: rules ? hpByFighter(ctx, rules, order) : {}, rounds: 0, struck: false } });
@@ -15296,7 +16095,7 @@ var events2 = [
       const cost = counts(e.data.cost);
       if (!rules || !f || !cost || Object.values(cost).some((n) => n <= 0))
         return reject12("bad_event", "a spend needs a participant and what it spends");
-      if (!standing(ctx.state, enc, f))
+      if (!standing(ctx, enc, f))
         return reject12("down", `${labelOf(ctx, who)} is out of the fight`);
       if (enc.order[enc.turn]?.id !== who && !offTurnCost(rules, cost))
         return reject12("not_your_turn", `it isn't ${labelOf(ctx, who)}'s turn`);
@@ -15370,7 +16169,7 @@ var events2 = [
     type: "combat.decision",
     validate: (e) => strOf(e.data.key) !== "" && strOf(e.data.choice) !== "" ? null : reject12("bad_event", "a decision needs a key and a choice"),
     apply: (e, state) => {
-      sliceRecord(state, PACK3, "decisions")[strOf(e.data.key)] = strOf(e.data.choice);
+      sliceRecord(state, PACK4, "decisions")[strOf(e.data.key)] = strOf(e.data.choice);
     },
     describe: (e) => `decided ${strOf(e.data.choice)}`
   }
@@ -15381,7 +16180,7 @@ function fighterArg(ctx, v) {
   return enc && f ? { enc, f } : null;
 }
 var combatPack = {
-  id: PACK3,
+  id: PACK4,
   label: "Combat",
   version: 1,
   domain: null,
@@ -15397,7 +16196,7 @@ var combatPack = {
         const enc = encounterOf(ctx.state);
         if (!enc)
           return reject12("no_fight", "no fight is under way");
-        const winner = a.winner === "party" || a.winner === "foes" ? a.winner : winnerOf(ctx.state, enc);
+        const winner = a.winner === "party" || a.winner === "foes" ? a.winner : winnerOf(ctx, enc);
         return [{ type: "combat.end", data: { encounter: enc.id, reason: "effect", winner, rounds: enc.round } }];
       }
     });
@@ -15428,7 +16227,7 @@ var combatPack = {
       const enc = encounterOf(ctx.state);
       return enc ? `${enc.id}:${enc.round}` : null;
     });
-    r.relation({ id: "hostile", label: "Hostile to", from: "*", to: "*", cardinality: "many_many", symmetric: true, fields: {}, pack: PACK3 });
+    r.relation({ id: "hostile", label: "Hostile to", from: "*", to: "*", cardinality: "many_many", symmetric: true, fields: {}, pack: PACK4 });
     r.formula("can_fight", (ctx, e) => {
       const rules = rulesOf(ctx.world);
       return rules !== null && typeof e === "string" && canFight(ctx, rules, e);
@@ -15451,14 +16250,14 @@ var combatPack = {
     });
     r.formula("standing", (ctx, side) => {
       const enc = encounterOf(ctx.state);
-      return enc && (side === "party" || side === "foes") ? standingOn(ctx.state, enc, side).length : 0;
+      return enc && (side === "party" || side === "foes") ? standingOn(ctx, enc, side).length : 0;
     });
     r.formula("encounter_round", (ctx) => encounterOf(ctx.state)?.round ?? 0);
     r.formula("budget_left", (ctx, e, budget) => own(fighterArg(ctx, e)?.f.left ?? {}, String(budget ?? "")) ?? 0);
     r.action({
       id: "fight",
       label: "Fight",
-      pack: PACK3,
+      pack: PACK4,
       params: { target: { type: "ref", label: "Opponent" } },
       requires: ["can_fight(target)"],
       combat: { cost: {}, start: true },
@@ -15470,7 +16269,7 @@ var combatPack = {
     r.action({
       id: "end_turn",
       label: "End turn",
-      pack: PACK3,
+      pack: PACK4,
       params: {},
       requires: [],
       combat: { cost: {} },
@@ -24389,7 +25188,8 @@ var mystery_manor_default = {
           args: { who: "julian_ashcombe", place: "library", activity: "a late brandy with the host", minutes: 35 }
         },
         { type: "story.flag", args: { name: "alaric_alive", value: false } },
-        { type: "set", args: { entity: "sir_alaric", field: "place", value: "library" } }
+        { type: "set", args: { entity: "sir_alaric", field: "place", value: "library" } },
+        { type: "life", args: { entity: "sir_alaric", to: "dead" } }
       ],
       once: true
     },
@@ -24412,7 +25212,23 @@ var mystery_manor_default = {
       do: [
         { type: "castlife.override", args: { who: "nell_sparrow", place: "library", minutes: 180 } },
         { type: "story.flag", args: { name: "body_found", value: true } },
-        { type: "set", args: { entity: "sir_alaric", field: "activity", value: "dead" } },
+        {
+          type: "life",
+          args: {
+            entity: "sir_alaric",
+            tell: [
+              "pov",
+              "lady_honoria",
+              "rupert_thorne",
+              "verity_lorne",
+              "julian_ashcombe",
+              "dr_lionel_farrant",
+              "gideon_pell",
+              "mrs_marsh",
+              "nell_sparrow"
+            ]
+          }
+        },
         { type: "note", args: { text: "Nell screams; Pell is first on the scene, then Lady Honoria and the household." } }
       ],
       when: "not flag('alaric_alive')",
@@ -39832,6 +40648,10 @@ function validate(doc) {
     err("lenientPricing", "lenientPricing must be true or false");
   if (doc.spawnTier !== undefined && typeof doc.spawnTier !== "string")
     err("spawnTier", "spawnTier must be a tier id");
+  if (doc.spawnCap !== undefined && typeof doc.spawnCap !== "number")
+    err("spawnCap", "spawnCap must be a number");
+  if (doc.lifeStates !== undefined)
+    collection("lifeStates");
   return issues;
 }
 function load(input) {
@@ -40148,7 +40968,7 @@ class SourceReader {
 var ASSISTANT_GUIDE_default = "# Converting chats and lore into a LumiRPEngine world\n\nThis guide is what the Studio's assistant works from, and what you can read to know what it does. A LumiRPEngine world is one JSON document (`lre-world-v1`). Collections are objects keyed by id, and each item's `id` repeats its key. Money is in integer minor units of the world's currency (cents for dollars), and times are ISO local date-times (`2026-09-14T18:30`). Kinds, fields, relation types, effects and formula functions are all in the reference (`reference_lookup`); this guide says how to use them for a conversion.\n\n## The goal\n\nA converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were (the dead where they lie), everyone who has met the POV knows them, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.\n\n## Working order\n\n1. Read the sources first: skim the transcript from the start (`transcript_read` in ranges of 30 to 60), search it for names, places, money and dates (`transcript_search`), read the cards (`cards_read`) and list and read the lore (`lore_list`, `lore_search`, `lore_read`). Read the end of the chat closely: it is the present.\n2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people and their accounts, then relations, then tracks, lore, schedules, and last the start and calendar.\n3. Run `draft_check` after each batch and fix every error. Keep ids stable: other items refer to them.\n4. Finish with a short answer: what the world holds, what you assumed, what the user should look at.\n\n## The POV\n\n`pov` names the entity the player plays: the chat's user persona, the one the transcript calls \"you\" or the user's character. A new draft has a POV `you` at a place `home`; rename it by writing your own entity and setting `/pov` to its id (then remove `you`), or keep `you` and give it the real name. The POV is a `person` (or a kind that extends `person`) on a lead tier, and never capped by realism.\n\n```json\n{ \"id\": \"rhea\", \"kind\": \"person\", \"name\": \"Rhea Valen\", \"tier\": \"principal\", \"fields\": { \"place\": \"salt_quay\", \"wealth\": \"modest\" }, \"relations\": [] }\n```\n\n## People, tiers and classifications\n\n- **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.\n- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `\"agent\": true` on someone who pursues their own goals off-screen (a rival, a schemer).\n- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: \"tending bar\"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, `employer`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. Description and personality belong in lore entries linked to the person, or in fields your own kind defines.\n- **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:\n\n```json\n{ \"id\": \"character\", \"label\": \"Character\", \"extends\": \"person\", \"fields\": { \"description\": { \"type\": \"text\", \"label\": \"Description\" }, \"role\": { \"type\": \"text\", \"label\": \"Role\" } } }\n```\n\n- **Classifications** sort people for rules and for the GM: a facet with values, optionally nested. Keep a facet hidden (no `\"shown\": true`) when its values would spoil the story (\"villain\").\n\n```json\n{ \"id\": \"role\", \"label\": \"Story role\", \"multiple\": false, \"values\": { \"ally\": { \"label\": \"Ally\" }, \"antagonist\": { \"label\": \"Antagonist\" }, \"villain\": { \"label\": \"Villain\", \"parent\": \"antagonist\" } } }\n```\n\nAn entity holds values in `class` (`\"class\": { \"role\": [\"ally\"] }`) and free tags in `tags`.\n\n- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ \"type\": \"member_of\", \"to\": \"harbor_guild\", \"fields\": { \"role\": \"Quartermaster\" } }`.\n- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `\"dying\"`, someone who died is `\"dead\"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ \"unconscious\": { \"label\": \"Unconscious\", \"acts\": false, \"reads\": \"lies unconscious\" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`. When the POV hasn't learned of a death or a dying, set `lifeKnownBy` to the ids of the people who know, including everyone who starts in the same place as the body; everyone else, the POV too, takes the person for alive until they see it or are told. Leaving `lifeKnownBy` out (or empty) means everyone knows, which tells the player; when nobody else knows yet, list the person themself. Old Bram here died in the net loft, and only Silas knows:\n\n```json\n{ \"id\": \"old_bram\", \"kind\": \"person\", \"name\": \"Old Bram\", \"tier\": \"supporting\", \"life\": \"dead\", \"lifeKnownBy\": [\"silas\"], \"fields\": { \"place\": \"net_loft\" }, \"relations\": [] }\n```\n\n- **Cues** are what the narrator sees someone do while a secret of theirs stays hidden. Each cue stands for exactly one secret: a secret `track` (while it hides something), a secret `lore` entry (until its gate holds) or a story `flag` (until it is set). Write behaviour, never the secret, and name no one the POV doesn't know.\n\n```json\n\"cues\": [{ \"text\": \"Changes the subject whenever the guild comes up.\", \"track\": \"silas_debt\" }]\n```\n\n## Places, routes and maps\n\n- **Places** form a tree with `parent`: a region holds a town, a town its streets and buildings, a building its rooms. Give each a `name`, and a `fields.description` when the story describes it. A place the POV hasn't heard of yet gets `\"visibility\": \"discoverable\"`; a hidden one `\"secret\"`.\n\n```json\n{ \"id\": \"salt_quay\", \"name\": \"Salt Quay\", \"parent\": \"port_veil\", \"fields\": { \"description\": \"Tar-black pilings and fish crates.\" } }\n```\n\n- **Routes** join places the story travels between, with minutes per mode (`walk`, `road`, `offroad`, `water`). Estimate from the story: a few minutes across a town, an hour on foot between villages.\n\n```json\n{ \"id\": \"quay_to_market\", \"from\": \"salt_quay\", \"to\": \"market_row\", \"modes\": { \"walk\": { \"minutes\": 6 } }, \"bidirectional\": true }\n```\n\n- **Maps** draw a place's inside. A grid map's `layout` rows use `#` for walls, `.` for floor, `+` for doors and legend letters for rooms; a node map lists `places` and `links`. Draw one only when the story's space matters (a house, a ship, a dungeon). A map owns the places, grid and routes it compiles: edit the map, never what it made. `guide_lookup map` and `reference_lookup lre-map` for the details.\n\n## Money\n\n- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ \"code\": \"GP\", \"symbol\": \"gp\", \"minorUnit\": \"copper\", \"decimals\": 2, \"format\": \"{sign}{amount} gp\" }`. Amounts are always integer minor units.\n- **At Money 1** a person's `wealth` band is all there is. Set it from how the story treats them.\n- **Accounts** hold real balances (Money 2 and up): one entity per purse, wallet, bank account or card, owned by its holder. Its `opening` is the balance **now**, at the story's present, not when the story began. Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.\n\n```json\n{ \"id\": \"rhea_purse\", \"kind\": \"account\", \"name\": \"Rhea's purse\", \"tier\": \"background\", \"fields\": { \"owner\": \"rhea\", \"type\": \"cash\", \"opening\": 4250 }, \"relations\": [] }\n```\n\n`type` is `cash`, `checking`, `savings`, `card`, `loan` or `brokerage`. A debt is a `loan` (or a `card`) whose opening is what is owed, as a negative amount.\n\n## Calendar and the start\n\n- `/start` is where and when play begins: `{ \"place\": \"salt_quay\", \"at\": \"2026-09-14T18:30\" }`, the POV's place and the story's present. Put the POV's `fields.place` at the same place.\n- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier (with an invented calendar, exactly the start day). Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).\n- Read the present from the transcript: the last date, weekday, time of day or season it states, or what the events imply (\"the next morning\" after a night scene). If the story never says, pick a plausible date and say so.\n- An invented calendar uses `\"system\": \"custom\"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`). Set its `epoch` to midnight of the start's own day (`0412-08-25T00:00`): LumiRPEngine counts the start's clock from the epoch as an ordinary calendar would, so any day between them would shift the date the player sees in the invented months.\n- `dayParts` name the parts of the day (`{ \"id\": \"morning\", \"label\": \"Morning\", \"start\": \"06:00\" }`).\n\n## Relations and regard\n\n- **Regard** is how one person feels about another, one directed relation with three axes from \u2212100 to 100: `warmth`, `trust` and `respect`. Write both directions when both matter; they differ more often than not. Calibrate from the story: 0 is a stranger, \xB120 an acquaintance's lean, \xB150 strong feeling, \xB180 and beyond for the defining bonds and feuds.\n\n```json\n{ \"type\": \"regard\", \"to\": \"rhea\", \"fields\": { \"warmth\": 35, \"trust\": 10, \"respect\": 40 } }\n```\n\n- **Knowledge.** `{ \"type\": \"knows\", \"to\": \"harbor_guild\" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.\n- **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ \"type\": \"knows\", \"to\": \"rhea\" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger (\"Silas doesn't know you.\"), so a person the POV spent the chat with would greet them as one.\n- **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.\n- **Things** are where they are: `fields.place` for something lying somewhere, `{ \"type\": \"in\", \"to\": \"rhea\" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns.\n\n## Quests and secrets as tracks\n\nA track is a small state machine: `start` names its first stage, and each stage's `next` lists `{ \"to\": stage, \"when\": formula }`. Formulas read the world: `at(pov, 'archive')`, `stage(track)`, `knows(pov, 'silas')`, `flag('vault_opened')`, `balance('rhea_purse') >= 5000`, `hour >= 18`. `reference_lookup formula` lists them all.\n\n- **Quests** are what the POV is pursuing. Start the track at the stage the story has **reached**, not at its beginning; earlier stages can stay for completeness, but `start` is today's stage. Give that stage a `cue` (what the player knows now) and `objectives` (`{ \"label\": \"Find the ledger\", \"when\": \"flag('ledger_found')\" }`). A quest whose stage has no `next` is finished.\n\n```json\n{ \"id\": \"lost_ledger\", \"kind\": \"quest\", \"label\": \"The lost ledger\", \"visibility\": \"public\", \"start\": \"searching\", \"stages\": {\n  \"searching\": { \"label\": \"Searching the archive\", \"cue\": \"Silas swears the ledger left the archive in May.\", \"next\": [{ \"to\": \"found\", \"when\": \"flag('ledger_found')\" }] },\n  \"found\": { \"label\": \"The ledger is found\", \"next\": [] } } }\n```\n\n- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above).\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"cue\": \"Silas flinches whenever the guild is mentioned.\", \"next\": [{ \"to\": \"known\", \"when\": \"at(pov, 'guild_office')\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **A secret the POV has already learned** must still be revealed in play. A track starts with nothing revealed, and the engine records a reveal only when a stage is entered, so a track that starts on its truth stage stays hidden: the Journal never shows it, and the narrator is kept from saying what the player already knows. Start it one stage earlier instead, and make that stage move on at once: `\"next\": [{ \"to\": \"known\", \"when\": \"true\" }]`. The first turn enters the truth stage and reveals it. Never start a secret track on a stage that has a `truth`.\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"next\": [{ \"to\": \"known\", \"when\": \"true\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`).\n\n## Lore entries with audiences\n\nLore is what the world knows, for the engine's helpers: places' histories, people's backgrounds, customs, factions. Convert each useful lore-book entry and each fact the chat established into an entry with a title, the text, `keys`, `aliases` (other names), `topics`, and `links` (the ids of the people and places it is about).\n\n```json\n{ \"id\": \"lore_port_veil\", \"title\": \"Port Veil\", \"content\": \"A salt-trading port of nine thousand\u2026\", \"keys\": [\"Port Veil\", \"the port\"], \"aliases\": [\"the Veil\"], \"topics\": [\"places\"], \"links\": [\"port_veil\"] }\n```\n\n- `\"visibility\": \"known_by\"` keeps an entry to what the POV knows (they must know every linked person and place).\n- A **secret** entry holds a secret itself: `\"secret\": true` with a `gate` formula (`\"stage('silas_debt') == 'known'\"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator.\n- A public entry must never repeat a track's truth (lint error `secret_truth`).\n- Keep macros (`{{user}}`, `{{char}}`) out of lore unless the source used them on purpose: the engine lists them for review on install.\n\n## Schedules\n\nSchedules give people routines: where they are (`target: \"place\"`) or what they do (`target: \"activity\"`) by time of day and weekday. The owner is an entity, a group, a kind or a selector. Base them on what the story shows (\"the baker opens at dawn\"); invent plausible ones for the rest of the cast only when it helps.\n\n```json\n{ \"id\": \"mara_days\", \"owner\": \"mara\", \"target\": \"place\", \"recurrence\": { \"every\": \"week\", \"weekdays\": [1, 2, 3, 4, 5] },\n  \"slots\": [{ \"start\": \"06:00\", \"end\": \"14:00\", \"value\": \"bakery\" }, { \"start\": \"14:00\", \"end\": \"22:00\", \"value\": \"mara_house\" }] }\n```\n\n## Realism and the rest\n\n- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money to 2 when the story tracks cash, Relationships when feelings drive it. A chat can change levels later.\n- Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).\n\n## Refining a world in play\n\nWhen the source chat already plays a world (`chat_state` says so), the draft starts from that world's head and becomes its **next revision**; the chat keeps running on its revision until the player chooses Upgrade in LumiRPEngine (**Settings \u2192 Pins and upgrade**), which shows every change and lets them take or keep each one. So:\n\n- Keep every id the chat uses. Renaming an id makes a new thing and strands the old one.\n- Add what the story introduced since the world was made: new people, places, quests, lore.\n- Fix definitions (a name, a description, a tier) freely; for state the chat has moved on (where someone is, a balance, a quest's stage), the Upgrade keeps the chat's value by default, which is usually right.\n- Don't remove what the chat still uses: the Upgrade keeps removed people unless the player picks Remove.\n- Install it as **a new revision** of the same world.\n\n## Before finishing\n\n- `draft_check` has no errors.\n- The POV exists, stands at the start place, and the start time is the story's present.\n- Every id an item names (a place, an owner, a relation target, a track in a formula) exists.\n- Everyone who has met the POV holds a `knows` or a `regard` toward them.\n- Each person's `life` is their state at the present, and the dead and dying are at the place they lie.\n- A death or dying the POV hasn't learned of sets `lifeKnownBy` to who knows, with everyone who starts where the body lies; left out, it tells the player.\n- Everything someone owns names them in `fields.owner`.\n- Openings are today's balances, and quests start at the stage the story reached.\n- No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: \"true\"`, so the first turn reveals it.\n- No public text gives a secret away, and no cue states the secret it stands for.\n";
 
 // assets/REFERENCE.md
-var REFERENCE_default = "# LumiRPEngine reference\n\n<!-- Generated by `bun run reference` (scripts/reference/build.ts). Edit the packs, then run it again. -->\n\nWhat the engine and its packs register, as the registry has it: kinds and their fields, effects and the arguments they read, formula functions, actions, events, proposal channels, panels, slots, data tables and lint codes. Arguments and parameters marked `?` may be left out. The formula language is in [EXPRESSIONS.md](EXPRESSIONS.md), worked examples are in [RECIPES.md](RECIPES.md), and the [user guide](USER-GUIDE.md#authoring) shows the editors.\n\nEngine `0.1.0` \xB7 world format `lre-world-v1` \xB7 packs `engine` 1, `calendar` 1, `space` 1, `economy` 1, `gear` 1, `vehicles` 1, `weather` 1, `relationships` 1, `castlife` 1, `sheets` 1, `story` 1, `combat` 1.\n\n## Contents\n\n- [Engine built-ins](#engine-built-ins)\n- [Calendar & time pack](#calendar--time-pack-calendar)\n- [Cast life pack](#cast-life-pack-castlife)\n- [Combat pack](#combat-pack-combat)\n- [Economy pack](#economy-pack-economy)\n- [Gear & containers pack](#gear--containers-pack-gear)\n- [Relationships pack](#relationships-pack-relationships)\n- [Character sheets pack](#character-sheets-pack-sheets)\n- [Space & travel pack](#space--travel-pack-space)\n- [Story pack](#story-pack-story)\n- [Vehicles pack](#vehicles-pack-vehicles)\n- [Weather pack](#weather-pack-weather)\n\n## Engine built-ins\n\n### Core effects\n\n| Effect | Arguments |\n|---|---|\n| `add` | `entity`, `field`, `delta` |\n| `award` | `entity`, `progression`, `amount` |\n| `beat` | `hint` |\n| `check` | `check`, `actor?`, `target?`, `outcomes` |\n| `link` | `rel`, `from`, `to`, `until?`, `fields?` |\n| `move` | `entity`, `to` |\n| `note` | `text`, `visibility?` |\n| `post` | `lines`, `memo?` |\n| `recover` | `entity`, `field`, `amount?`, `full?` |\n| `set` | `entity`, `field`, `value` |\n| `signal` | `class`, `text`, `entity?`, `visibility?` |\n| `spawn` | `kind`, `name`, `id?`, `tier?`, `fields?`, `relations?`, `agent?`, `place?`, `class?`, `tags?` |\n| `stage` | `track`, `to` |\n| `unlink` | `rel`, `from`, `to` |\n\n### Formula functions\n\nMath: `abs`, `ceil`, `clamp`, `floor`, `max`, `min`, `round`. `min` and `max` take any number of arguments.\n\nThe engine's own:\n\n- `at(entity, place)`\n- `attempts(track)`\n- `band(entity, field)`\n- `count_at(place, kind?)`\n- `days(n)`\n- `field(entity, field)`\n- `fired(rule)`\n- `has_rel(entity, type, to?)`\n- `holiday()`\n- `hours(n)`\n- `knows(entity, subject)`\n- `level(entity, domain)`\n- `next_time(time)`\n- `place(entity)`\n- `rel(entity, type, to?)`\n- `rel_count(entity, type)`\n- `rel_field(from, type, to, field)`\n- `revealed(track, stage?)`\n- `roll(notation)`: effect arguments only\n- `since(track)`\n- `stage(track)`\n- `table(table, key, column)`\n- `table_step(table, value, column)`\n- `today_at(time)`\n\nTaxonomy:\n\n- `band_of(entity)`\n- `has_tag(entity, tag)`\n- `in_class(entity, facet, value)`\n- `kind_is(entity, kind)`\n- `member_of(entity, group)`\n- `tier_of(entity)`\n\n### Events\n\nCore: `add`, `clock`, `link`, `materialize`, `post`, `set`, `spawn`, `stage`, `timelapse`, `unlink`.\n\nEngine bookkeeping: `engine.adjudged`, `engine.attempt`, `engine.beat`, `engine.caught`, `engine.check`, `engine.choice`, `engine.class`, `engine.cursor`, `engine.entity`, `engine.fired`, `engine.note`, `engine.observed`, `engine.pause`, `engine.revealed`, `engine.signal`.\n\n### Relation types\n\nBuilt in: `in`, `owns`, `uses`, `worn_by`, `equipped`, `knows`, `member_of`, `regard`, `route`. Packs add the typed ones below.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `knows` | `knows` |\n| `spawn` | `spawn` |\n\n### Step purposes\n\n| Purpose | Outputs a world template may declare |\n|---|---|\n| `brief` | `text` |\n| `choices` | `text`, `effects` |\n| `contradiction` | `decision`, `text`, `effects` |\n| `extract` | `text`, `effects` |\n| `interpret` | `decision`, `text` |\n| `judge` | `decision`, `text` |\n| `npc.choose` | `decision`, `text` |\n| `outline` | `text` |\n| `puzzle.answer` | `decision`, `text` |\n\nSignals: `agents_present`, `always`, `beat`, `classifier`, `conflict`, `day_start`, `invitation`, `never`, `offscreen`, `present`, `reply`, `scene_change`, `slot_crossed`, `tie_zone`, `timelapse`, `typed_input`, and `every_n:<k>`.\n\nTemplate placeholders: `beats`, `brief`, `clock`, `facts`, `outcome`, `place`, `pov`, `present`, `recent`, `reply`, `scene`, `user`, `world`.\n\n### Sections\n\nThe slots a world gets when it defines none, kept in rank order on the section budget.\n\n| Slot | Label | Rank |\n|---|---|---|\n| `outcome` | Outcome | 0 |\n| `montage` | Montage | 1 |\n| `scene` | Scene | 2 |\n| `people` | People | 3 |\n| `money` | Money | 4 |\n| `gear` | Gear | 5 |\n| `vehicles` | Vehicles | 6 |\n| `quest` | Quest | 7 |\n| `outline` | Outline | 8 |\n\n### Realism\n\nDomains: `money`, `gear`, `vehicles`, `castlife`, `relationships`, `space`, `calendar`, `weather`, `sheets`; each at a level from 0 to 4.\n\nDetail bands: `principal` (Leads), `supporting` (Supporting), `background` (Background).\n\nInterrupt classes: `invitation`, `bill`, `decline`, `incident`, `quest`, `rule`, `arrival`, `overdue`, `needs`, `weather`.\n\n### Adjudication presets\n\n| Value | `narrative` | `balanced` | `crunchy` |\n|---|---|---|---|\n| `checks` | `\"risky\"` | `\"every\"` | `\"every\"` |\n| `riskyAt` | `0.75` | `0.75` | `0.75` |\n| `trivialAt` | `null` | `0.95` | `null` |\n| `impossibleAt` | `null` | `0.05` | `null` |\n| `description` | `{\"weight\":\"none\",\"max\":3,\"advantageAt\":2}` | `{\"weight\":\"bonus\",\"max\":2,\"advantageAt\":2}` | `{\"weight\":\"none\",\"max\":2,\"advantageAt\":2}` |\n| `authority` | `\"narrative\"` | `\"hybrid\"` | `\"mechanics\"` |\n| `closeBy` | `2` | `2` | `2` |\n| `retry` | `\"changed\"` | `\"changed\"` | `\"free\"` |\n| `retryAfter` | `60` | `60` | `60` |\n\n## Calendar & time pack (`calendar`)\n\nVersion 1 \xB7 realism domain `calendar` \xB7 requires none.\n\n### Formula functions\n\n- `days_until(date)`\n- `is_day_off()`\n- `is_weekend()`\n- `minutes_until(at)`\n- `weekday_name()`\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `time_advance` | `duration` |\n\n### Panels and slots\n\nPanels: `calendar.calendar`. Slots it writes: `scene`.\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `calendar.dst` | Daylight saving time, time zones and daylight hours | `lre-table/calendar.dst/v1` | start (json), end (json), duration_weeks_approx (int), exceptions (list), standard_offsets_h (json), note (text), daylight_hours (json) | 1 |\n| `calendar.holidays` | Federal holidays | `lre-table/calendar.holidays/v1` | name (text), rule_type (enum), month (int), day (int, optional), weekday (enum, optional), n (int, optional), federal_paid_day_off (bool), private_sector_paid_day_off (enum), observed_if_weekend (text, optional) | 11 |\n| `calendar.observances` | Common observances | `lre-table/calendar.observances/v1` | name (text), rule_type (enum), month (int, optional), day (int, optional), weekday (enum, optional), n (int, optional), base (ref, optional), offset_days (int, optional), algorithm (text, optional), window (text, optional), start (text, optional), end (text, optional), rule_text (text, optional), rule_note (text, optional) | 30 |\n| `calendar.school` | School year | `lre-table/calendar.school/v1` | title (text), values (json) | 2 |\n| `calendar.shifts` | Work shift patterns | `lre-table/calendar.shifts/v1` | name (text), description (text), days_per_week (number), typical_start (text), typical_shift_h (number), typical_hours_per_week (int), weekend_work (enum), notes (text) | 24 |\n| `calendar.work` | Work norms | `lre-table/calendar.work/v1` | full_time_hours_per_week (number), standard_work_year_h (int), overtime (text), vacation_days_after_1_year (int), vacation_days_after_5_years (int), vacation_days_after_10_years (int), sick_days_per_year (int), paid_time_off_note (text), paid_holidays_per_year (int), meal_break (text) | 1 |\n\n### Lint codes\n\n`calendar.epoch`, `calendar.schedule_times`, `calendar.unit_cap`.\n\n## Cast life pack (`castlife`)\n\nVersion 1 \xB7 realism domain `castlife` \xB7 requires `gear`, `relationships`, `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `castlife.decide` | `key`, `choice` |\n| `castlife.override` | `who`, `minutes?`, `place?`, `activity?` |\n| `castlife.satisfy` | `need`, `entity?` |\n\n### Formula functions\n\n- `busy(who)`\n- `invited(host)`\n- `need(who, need)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `accept_invitation` | Accept invitation | `host: ref \u2192 person` |  | `default` | `1` | accept, sure, let's, count me in |\n| `eat` | Eat |  |  | `default` | `30` | eat, have lunch, have dinner, grab a bite |\n| `rest` | Rest |  |  | `default` | `30` | rest, relax, take a break |\n| `sleep` | Go to bed |  |  | `default` | `5` | go to bed, sleep, turn in, hit the sack |\n\n### Events\n\nIts own: `castlife.decision`, `castlife.invitation`, `castlife.need`.\n\n### Panels and slots\n\nPanels: `castlife.cast`. Slots it writes: `people`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `castlife.agents` | `castlife` | 3 | each agent |\n| `castlife.trips` | `castlife` | 1 | the world |\n\n### Lint codes\n\n`castlife.double_booking`.\n\n## Combat pack (`combat`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `hostile` | Hostile to | `*` | `*` | many_many | yes |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `combat.end` | `winner?` |\n| `combat.end_turn` | `who?` |\n| `combat.spend` | `who?`, `cost` |\n| `combat.start` | `foes?` |\n\n### Formula functions\n\n- `budget_left(e, budget)`\n- `can_fight(e)`\n- `encounter_round()`\n- `has_turn(e)`\n- `in_encounter(e)`\n- `is_ally(a, b)`\n- `is_down(e)`\n- `is_foe(a, b)`\n- `standing(side)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `end_turn` | End turn |  |  | `default` | `0` | end my turn, end turn |\n| `fight` | Fight | `target: ref` |  | `default` | `0` | start a fight, pick a fight, draw my weapon |\n\n### Events\n\nIts own: `combat.act`, `combat.decision`, `combat.down`, `combat.end`, `combat.spend`, `combat.start`, `combat.turn`.\n\n### Panels and slots\n\nPanels: `combat.encounter`. Slots it writes: none.\n\n## Economy pack (`economy`)\n\nVersion 1 \xB7 realism domain `money` \xB7 requires `space`.\n\n### Kinds\n\n#### `account`: Account\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `apr_pct` | APR % | number | \u2265 0 |  |  |  | live from money 4 |\n| `apy_pct` | APY % | number | \u2265 0 |  |  |  | live from money 4 |\n| `autopay` | Autopay | text |  | `\"none\"` |  |  | live from money 3 |\n| `due_day` | Due day of month | number | 1 \u2026 31 |  |  |  | live from money 4 |\n| `institution` | Institution | text |  |  |  |  | live from money 3 |\n| `limit` | Credit limit | money | \u2265 0 |  |  |  | live from money 3 |\n| `min_floor` | Minimum payment floor | money |  | `3500` |  |  | live from money 4 |\n| `min_pct` | Minimum payment % of balance | number |  | `1` |  |  | live from money 4 |\n| `opening` | Opening balance | money |  |  |  |  | locked |\n| `owner` | Owner | ref |  |  |  |  | live from money 2 |\n| `payment` | Loan payment | money |  |  |  |  | live from money 4 |\n| `remaining_months` | Months left (loans) | number | \u2265 0 |  |  |  | live from money 4 |\n| `statement_day` | Statement day | number | 1 \u2026 28 | `1` |  |  | live from money 4 |\n| `symbol` | Holding | text |  | `\"broad_us_equity_index\"` |  |  | live from money 4 |\n| `type` | Type | enum: cash, checking, savings, card, loan, brokerage |  |  |  |  | live from money 2 |\n| `units` | Units held | number | \u2265 0 |  |  |  | live from money 4; locked |\n\n#### `business`: Business\n\nExtends `thing`.\n\nNo fields of its own.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `economy.buy` | `item?`, `category?`, `qty?`, `price?`, `exact?`, `stated?`, `name?`, `payer?`, `method?`, `from?`, `payee?`, `keep?` |\n| `economy.invest` | `cents`, `owner?`, `sell?` |\n| `economy.lose` | `item`, `thief?` |\n| `economy.move` | `from`, `to`, `cents`, `memo?` |\n| `economy.pay_card` | `card`, `from?`, `cents?` |\n| `economy.price_modifier` | `percent`, `scope?`, `place?`, `minutes?`, `id?`, `clear?` |\n| `economy.transfer` | `to`, `cents`, `from?`, `memo?`, `method?` |\n\n### Formula functions\n\n- `balance(account)`\n- `can_afford(who, cents)`\n- `net_worth(who)`\n- `price(item)`\n- `wealth(who)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `buy` | Buy | `item: text`, `qty?: number`, `price?: money`, `method?: text` |  | `default` | `5` | buy, purchase, order, pick up a |\n| `invest` | Invest | `amount: money` |  | `default` | `2` | invest, buy stocks, buy shares |\n| `move_money` | Transfer between accounts | `from: ref \u2192 account`, `to: ref \u2192 account`, `amount: money` |  | `default` | `2` | transfer, move money, put into savings |\n| `pay` | Pay | `to: ref \u2192 person`, `amount: money` |  | `default` | `1` | pay, give money, send money, venmo |\n| `pay_card` | Pay card | `card: ref \u2192 account`, `amount?: money` |  | `default` | `2` | pay off the card, pay the card, pay my credit card |\n| `sell_investments` | Sell investments | `amount: money` |  | `default` | `2` | sell stocks, sell shares, cash out |\n\n### Events\n\nIts own: `economy.anchor`, `economy.card_paid`, `economy.decline`, `economy.modifier`, `economy.note`, `economy.price`, `economy.statement`, `economy.txn`.\n\nChecks it adds to: `post`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `purchase` | `money` |\n| `transfer` | `money` |\n\n### Panels and slots\n\nPanels: `economy.money`. Slots it writes: `money`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `economy.accounts` | `money` | 3 | the world |\n| `economy.banking` | `money` | 4 | the world |\n| `economy.bills` | `money` | 3 | the world |\n| `economy.cards` | `money` | 3 | the world |\n| `economy.living` | `money` | 3 | the world |\n| `economy.markets` | `money` | 4 | the world |\n| `economy.payroll` | `money` | 3 | the world |\n\nDetail on demand: `money` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `economy.catalog` | Price catalog | `lre-table/economy.catalog/v1` | name (text), category (ref), unit (text), price_cents (band), notes (text, optional) | 340 |\n| `economy.categories` | Price categories | `lre-table/economy.categories/v1` | name (text), basis (text), notes (text, optional), price_unit_note (text, optional), item_count (int), price_cents (band) | 19 |\n| `economy.finance` | Finance parameters | `lre-table/economy.finance/v1` | title (text), values (json) | 7 |\n| `economy.occupations` | Occupations and pay | `lre-table/economy.occupations/v1` | title (text), category (enum), median_cents_per_h (int), median_cents_per_year (int), typical_earnings_cents_per_year (int), schedule_pattern (ref), typical_hours_per_week (number), weeks_per_year (number), weekend_work (enum), shifts (list), pay_frequency (enum), benefits (enum), benefits_note (text), withholding_rate_pct (number), description (text), wage_basis (text), tipped (bool, optional), tipped_cash_wage_cents_per_h (int, optional), self_employed (bool, optional), fica_exempt (bool, optional), estimated_tax_set_aside_pct (number, optional), withholding_note (text, optional) | 56 |\n| `economy.regions` | Regions (US states, DC and the national baseline) | `lre-table/economy.regions/v1` | name (text), abbr (text), scope (enum), census_region (enum, optional), census_division (enum, optional), time_zones (list, optional), observes_dst (bool, optional), state_income_tax_effective_pct (number, optional), local_income_tax_pct_typical (number, optional), sales_tax_combined_avg_pct (number), cost_of_living_multiplier (number), median_rent_1br_cents_per_month (int), median_rent_2br_cents_per_month (int), residential_electricity_cents_per_kwh (number), minimum_wage_cents_per_h (int), notes (text, optional) | 52 |\n\n### Lint codes\n\n`economy.accounts`, `economy.unpriced_cap`.\n\n## Gear & containers pack (`gear`)\n\nVersion 1 \xB7 realism domain `gear` \xB7 requires `space`.\n\n### Kinds\n\n#### `container`: Container\n\nExtends `item`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `capacity_l` | Capacity (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `max_load_kg` | Max load (kg) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `stock` | Contents category (sampled when first opened) | text |  |  |  |  |  |\n\n#### `item`: Item\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `catalog` | Catalog item | text (row of economy.catalog) |  |  |  |  |  |\n| `category` | Category | text |  |  |  |  |  |\n| `condition` | Condition | number | 0 \u2026 100 | `100` |  |  | live from gear 3; bound auto, \xB125 a turn; bands: broken, worn, good, like new |\n| `consumable` | Consumable | bool |  |  |  |  | live from gear 4 |\n| `from_kit` | From kit | ref |  |  |  |  | locked |\n| `notable` | Notable | bool |  |  |  |  | live from gear 1 |\n| `overdue` | Overdue | bool |  |  |  |  | locked |\n| `piece` | Kit piece | text |  |  |  |  | locked |\n| `qty` | Quantity | number | \u2265 0 | `1` |  |  | live from gear 2; bound confirm, \xB110 a turn |\n| `slot` | Equip slot | text |  |  |  |  | live from gear 3 |\n| `uses` | Uses left | number | \u2265 0 |  |  |  | live from gear 4 |\n| `volume_l` | Volume (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `weight_g` | Weight (g) | number | \u2265 0 |  |  |  | live from gear 2 |\n\n#### `kit`: Kit\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `kit` | Kit template | text |  |  |  |  | live from gear 3 |\n| `piece_count` | Piece count | number |  |  |  |  | live from gear 3 |\n| `pieces` | Pieces | list |  |  |  |  | live from gear 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `equipped` | Equipped by | `item` | `*` | many_one |  |  | `slot` |\n| `uses` | Uses (granted until) | `*` | `*` | many_many |  |  | none |\n| `worn_by` | Worn by | `item` | `*` | many_one |  |  | `slot` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `gear.drop` | `item`, `place?` |\n| `gear.give` | `item`, `from`, `to` |\n| `gear.lend` | `item`, `to`, `until?`, `said?` |\n| `gear.lose` | `item`, `thief?` |\n| `gear.receive` | `name`, `to`, `from?` |\n| `gear.remove` | `item` |\n| `gear.retrieve` | `item` |\n| `gear.take_piece` | `kit`, `piece`, `to` |\n| `gear.transfer` | `item`, `to` |\n| `gear.use` | `item`, `user?` |\n| `gear.wear` | `item`, `wearer`, `slot?` |\n\n### Formula functions\n\n- `carried_kg(holder)`\n- `carries(holder, item)`\n- `has_item(holder, what)`\n- `kit_complete(kit)`\n- `kit_present(kit)`\n- `lent_out(thing)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drop` | Drop | `item: ref \u2192 item` |  | `default` | `1` | drop, put down, leave |\n| `give` | Give | `item: ref \u2192 item`, `to: ref \u2192 person` |  | `default` | `1` | give, hand, pass |\n| `lend` | Lend | `item: ref \u2192 item`, `to: ref \u2192 person`, `days?: number`, `until?: text` |  | `default` | `2` | lend, loan, let borrow |\n| `lose` | Lose something | `item: ref \u2192 item` |  | `default` | `1` | lost my, lose, can't find my, is gone, is missing |\n| `reclaim` | Take back | `item: ref \u2192 item` |  | `default` | `5` | take back, get back, reclaim |\n| `remove` | Take off | `item: ref \u2192 item` |  | `default` | `2` | take off, remove, unequip |\n| `take` | Take | `item: ref \u2192 item` |  | `default` | `1` | take, pick up, grab |\n| `take_piece` | Take from a kit | `kit: ref \u2192 kit`, `piece: text` |  | `default` | `1` | take the, grab a, get a |\n| `use` | Use | `item: ref \u2192 item` |  | `default` | `5` | use, apply |\n| `wear` | Wear or equip | `item: ref \u2192 item` |  | `default` | `2` | wear, put on, equip |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `give` | `ref` |\n| `quantity` | `number` |\n\n### Panels and slots\n\nPanels: `gear.gear`. Slots it writes: `gear`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `gear.grants` | `gear` | 1 | the world |\n\nDetail on demand: `gear` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `gear.containers` | Containers | `lre-table/gear.containers/v1` | name (text), capacity_l (number), max_load_kg (number), empty_weight_g (int), location (enum), equip_slot (ref), price_cents (band), notes (text, optional) | 34 |\n| `gear.items` | Gear items | `lre-table/gear.items/v1` | name (text), category (enum), equip_slot (ref), weight_g (int), volume_l (number), price_cents (band), notes (text, optional) | 90 |\n| `gear.kits` | Kits | `lre-table/gear.kits/v1` | name (text), recommended_container (ref), description (text), piece_count (int), pieces_total_weight_g (number), packed_volume_l (number), price_cents (band), pieces (list), notes (text, optional) | 5 |\n| `gear.slots` | Equip slots | `lre-table/gear.slots/v1` | description (text) | 20 |\n\n### Lint codes\n\n`gear.kits`.\n\n## Relationships pack (`relationships`)\n\nVersion 1 \xB7 realism domain `relationships` \xB7 requires `space`.\n\n### Kinds\n\n#### `company`: Company\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `faction`: Faction\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `family`: Family\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `group`: Group\n\nExtends `thing`.\n\nNo fields of its own.\n\n#### `household`: Household\n\nExtends `group`.\n\nNo fields of its own.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `child_of` | Child of | `person` | `person` | many_many |  | `parent_of` | none |\n| `knows` | Knows | `*` | `*` | many_many |  |  | none |\n| `member_of` | Member of | `*` | `group` | many_many |  |  | `rank`, `role`, `since` |\n| `parent_of` | Parent of | `person` | `person` | many_many |  | `child_of` | none |\n| `partner_of` | Partner of | `person` | `person` | many_many | yes |  | `since` |\n| `regard` | Regard | `*` | `*` | many_many |  |  | `respect`, `trust`, `warmth` |\n| `sibling_of` | Sibling of | `person` | `person` | many_many | yes |  | none |\n| `spouse_of` | Spouse of | `person` | `person` | many_many | yes |  | `since` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `relationships.adjust` | `from`, `to`, `delta`, `axis?`, `why?` |\n| `relationships.appraise` | `from`, `to`, `appraisal`, `why?`, `mutual?` |\n\n### Formula functions\n\n- `faction_regard(group, to)`\n- `regard(from, to, axis)`\n- `regard_band(from, to)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `chat_with` | Chat with | `target: ref \u2192 person` |  | `default` | `15` | chat with, talk to, catch up with |\n| `give_gift` | Give a gift | `target: ref \u2192 person` |  | `default` | `5` | give a gift, surprise |\n\n### Events\n\nIts own: `relationships.regard`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `regard` | `number` |\n\n### Panels and slots\n\nPanels: none. Slots it writes: `people`.\n\n### Lint codes\n\n`relationships.axes`.\n\n## Character sheets pack (`sheets`)\n\nVersion 1 \xB7 realism domain `sheets` \xB7 requires `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `sheets.condition` | `condition`, `who?`, `label?`, `mod?`, `minutes?`, `clear?` |\n\n### Formula functions\n\n- `condition_mod(who)`\n- `derived(who, id)`\n- `difficulty_of(v)`\n- `has_condition(who, id)`\n- `stat(who, stat)`\n- `stat_mod(who, stat)`\n- `stat_word(who, stat)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `attempt` | Attempt | `stat: text`, `difficulty?: text` | `1d20` | `failure`, `great`, `success` | `5` | try to, attempt, check |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `condition` | `list` |\n\n### Panels and slots\n\nPanels: `sheets.you`. Slots it writes: `outcome`.\n\n### Lint codes\n\n`sheets.stat_range`.\n\n## Space & travel pack (`space`)\n\nVersion 1 \xB7 realism domain `space` \xB7 requires `calendar`.\n\n### Kinds\n\n#### `person`: Person\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `activity` | Activity | text |  | `\"idle\"` |  |  | live from castlife 1 |\n| `activity_until` | Activity ends | number |  |  |  |  | live from castlife 1; locked |\n| `agility` | Agility | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `appointments` | Appointments | list |  |  |  |  | live from castlife 2 |\n| `charm` | Charm | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `chores` | Chores | list |  |  |  |  | live from castlife 3 |\n| `conditions` | Conditions | list |  |  |  |  | live from sheets 4 |\n| `employer` | Employer | ref |  |  |  |  | live from money 3 |\n| `grit` | Grit | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `home` | Home | ref |  |  |  |  | live from space 1 |\n| `might` | Might | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `needs` | Needs | list |  |  |  |  | live from castlife 4; locked |\n| `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |\n| `region` | Region | text (row of economy.regions) |  |  |  |  | live from money 3 |\n| `scene` | Scene type | text |  |  |  |  |  |\n| `trips` | Trips | list |  |  |  |  | live from castlife 1 |\n| `wealth` | Wealth | text |  |  |  |  | live from money 1 |\n| `wits` | Wits | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n\n#### `thing`: Thing\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `owner` | Owner | ref |  |  |  |  |  |\n| `place` | Place | ref |  |  |  |  | live from space 1 |\n| `x` | Grid x | number |  |  |  |  | live from space 3 |\n| `y` | Grid y | number |  |  |  |  | live from space 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `in` | In | `*` | `*` | many_one |  |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `space.set_route` | `route`, `open?` |\n| `space.step` | `x`, `y`, `entity?` |\n\n### Formula functions\n\n- `distance_km(from, to, mode)`\n- `grid_minutes(place, x, y)`\n- `grid_reachable(place, x, y)`\n- `on_grid(thing)`\n- `reach(a, b)`\n- `route_exists(from, to, mode)`\n- `route_open(route)`\n- `travel_minutes(from, to, mode)`\n- `within(place, ancestor)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `go` | Go to | `to: ref \u2192 place` |  | `default` | `level.space < 2 ? (level.space < 1 ? 0 : 15) : travel_minutes(here, to, 'walk')` | go to, walk to, head to, head over to, leave for |\n| `step` | Move on the map | `x: number`, `y: number` |  | `default` | `grid_minutes(here, x, y)` | walk over to, cross to, move to |\n\n### Events\n\nIts own: `space.pos`, `space.route`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `location` | `ref` |\n\n### Panels and slots\n\nPanels: `space.map`. Slots it writes: `scene`.\n\n### Lint codes\n\n`space.grid`, `space.maps`, `space.references`.\n\n## Story pack (`story`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `story.answer` | `track`, `answer`, `decision?` |\n| `story.flag` | `name`, `value?` |\n\n### Formula functions\n\n- `flag(name)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `answer` | Answer | `puzzle?: text`, `answer: text`, `decision?: number` |  | `default` | `1` | the answer is, i think it's, solve, answer, the code is, the combination is, try the combination, dial, enter the code |\n\n### Events\n\nIts own: `story.flag`.\n\n### Panels and slots\n\nPanels: `story.quests`. Slots it writes: `quest`.\n\n### Lint codes\n\n`story.leaky_label`.\n\n## Vehicles pack (`vehicles`)\n\nVersion 1 \xB7 realism domain `vehicles` \xB7 requires `economy`, `gear`, `space`.\n\n### Kinds\n\n#### `vehicle`: Vehicle\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `class` | Vehicle class | text |  |  |  |  |  |\n| `engine_hours` | Engine hours | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `fuel_pct` | Fuel % | number | 0 \u2026 100 |  |  |  | live from vehicles 2; bound auto, \xB130 a turn |\n| `home` | Home base | ref |  |  |  |  | live from vehicles 3 |\n| `last_service` | Last service (mi or h) | number | \u2265 0 |  |  |  | live from vehicles 4 |\n| `odometer_mi` | Odometer (mi) | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `status` | Status | enum: ok, needs_service, broken |  | `\"ok\"` |  |  | live from vehicles 1; bound confirm |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `vehicles.drive` | `vehicle`, `to`, `driver?`, `riders?` |\n| `vehicles.refuel` | `vehicle`, `payer?`, `pct?` |\n| `vehicles.service` | `vehicle`, `payer?`, `repair?` |\n\n### Formula functions\n\n- `drive_minutes(vehicle, to)`\n- `fuel_ok(vehicle, to)`\n- `fuel_pct(vehicle)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drive` | Drive | `vehicle: ref \u2192 vehicle`, `to: ref \u2192 place` |  | `default` | `drive_minutes(vehicle, to)` | drive to, drive over to, take the truck, take the car, sail to, ride to |\n| `refuel` | Refuel | `vehicle: ref \u2192 vehicle` |  | `default` | `10` | refuel, fill up, gas up, charge the car |\n| `repair_vehicle` | Repair | `vehicle: ref \u2192 vehicle` |  | `default` | `180` | repair, fix the truck, fix the car, get it towed |\n| `service_vehicle` | Service | `vehicle: ref \u2192 vehicle` |  | `default` | `60` | service, oil change, tune up |\n\n### Panels and slots\n\nPanels: `vehicles.garage`. Slots it writes: `vehicles`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `vehicles.upkeep` | `vehicles` | 4 | the world |\n\nDetail on demand: `vehicles` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `vehicles.classes` | Vehicle classes | `lre-table/vehicles.classes/v1` | name (text), domain (enum), fuel_type (enum), factor_guide (ref), tank_capacity_gal (number, optional), tank_capacity_l (number, optional), usable_battery_kwh (number, optional), consumption_unit (enum), consumption (json), range_mi (int, optional), range_h (number, optional), price_new_cents (band), price_used_cents (band), insurance_liability_cents_per_month (int), insurance_full_cents_per_month (int), registration_cents_per_year (band), annual_maintenance_cents_per_year (int), maintenance (json), passengers (int), cargo_l (number), payload_kg (number), towing_kg (number, optional), charging (json, optional), notes (text) | 19 |\n| `vehicles.factors` | Consumption factor guides | `lre-table/vehicles.factors/v1` | basis (text), factors (json), note (text, optional) | 3 |\n\n### Lint codes\n\n`vehicles.classes`.\n\n## Weather pack (`weather`)\n\nVersion 1 \xB7 realism domain `weather` \xB7 requires `space`.\n\n### Kinds\n\n#### `region`: Weather region\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `climate` | Climate | text |  | `\"temperate\"` |  |  |  |\n| `temp_c` | Temperature (\xB0C) | number |  |  |  |  | live from weather 3; bound never |\n| `weather` | Weather | text |  | `\"clear\"` |  |  | live from weather 2; bound never |\n| `weather_hold` | Weather held until | number |  |  |  |  | live from weather 2; locked |\n| `weather_hold_until` | Weather held until (condition) | text |  |  |  |  | live from weather 2; locked |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `weather.clear` | `region`, `state?` |\n| `weather.set` | `region`, `state`, `minutes?`, `until?` |\n\n### Formula functions\n\n- `season()`\n- `weather(place)`\n\n### Panels and slots\n\nPanels: `weather.now`. Slots it writes: `scene`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `weather.climate` | `weather` | 2 | the world |\n\n### Lint codes\n\n`weather.climates`.\n";
+var REFERENCE_default = "# LumiRPEngine reference\n\n<!-- Generated by `bun run reference` (scripts/reference/build.ts). Edit the packs, then run it again. -->\n\nWhat the engine and its packs register, as the registry has it: kinds and their fields, effects and the arguments they read, formula functions, actions, events, proposal channels, panels, slots, data tables and lint codes. Arguments and parameters marked `?` may be left out. The formula language is in [EXPRESSIONS.md](EXPRESSIONS.md), worked examples are in [RECIPES.md](RECIPES.md), and the [user guide](USER-GUIDE.md#authoring) shows the editors.\n\nEngine `0.1.0` \xB7 world format `lre-world-v1` \xB7 packs `engine` 1, `calendar` 1, `space` 1, `economy` 1, `gear` 1, `vehicles` 1, `weather` 1, `relationships` 1, `castlife` 1, `sheets` 1, `story` 1, `combat` 1.\n\n## Contents\n\n- [Engine built-ins](#engine-built-ins)\n- [Calendar & time pack](#calendar--time-pack-calendar)\n- [Cast life pack](#cast-life-pack-castlife)\n- [Combat pack](#combat-pack-combat)\n- [Economy pack](#economy-pack-economy)\n- [Gear & containers pack](#gear--containers-pack-gear)\n- [Relationships pack](#relationships-pack-relationships)\n- [Character sheets pack](#character-sheets-pack-sheets)\n- [Space & travel pack](#space--travel-pack-space)\n- [Story pack](#story-pack-story)\n- [Vehicles pack](#vehicles-pack-vehicles)\n- [Weather pack](#weather-pack-weather)\n\n## Engine built-ins\n\n### Core effects\n\n| Effect | Arguments |\n|---|---|\n| `add` | `entity`, `field`, `delta` |\n| `award` | `entity`, `progression`, `amount` |\n| `beat` | `hint` |\n| `check` | `check`, `actor?`, `target?`, `outcomes` |\n| `life` | `entity`, `to?`, `tell?` |\n| `link` | `rel`, `from`, `to`, `until?`, `fields?` |\n| `move` | `entity`, `to` |\n| `note` | `text`, `visibility?` |\n| `post` | `lines`, `memo?` |\n| `recover` | `entity`, `field`, `amount?`, `full?` |\n| `set` | `entity`, `field`, `value` |\n| `signal` | `class`, `text`, `entity?`, `visibility?` |\n| `spawn` | `kind`, `name`, `id?`, `tier?`, `fields?`, `relations?`, `agent?`, `place?`, `class?`, `tags?` |\n| `stage` | `track`, `to` |\n| `unlink` | `rel`, `from`, `to` |\n\n### Formula functions\n\nMath: `abs`, `ceil`, `clamp`, `floor`, `max`, `min`, `round`. `min` and `max` take any number of arguments.\n\nThe engine's own:\n\n- `at(entity, place)`\n- `attempts(track)`\n- `band(entity, field)`\n- `count_at(place, kind?)`\n- `days(n)`\n- `field(entity, field)`\n- `fired(rule)`\n- `has_rel(entity, type, to?)`\n- `holiday()`\n- `hours(n)`\n- `knows(entity, subject)`\n- `level(entity, domain)`\n- `next_time(time)`\n- `place(entity)`\n- `rel(entity, type, to?)`\n- `rel_count(entity, type)`\n- `rel_field(from, type, to, field)`\n- `revealed(track, stage?)`\n- `roll(notation)`: effect arguments only\n- `since(track)`\n- `stage(track)`\n- `table(table, key, column)`\n- `table_step(table, value, column)`\n- `today_at(time)`\n\nTaxonomy and life states:\n\n- `band_of(entity)`\n- `has_tag(entity, tag)`\n- `in_class(entity, facet, value)`\n- `kind_is(entity, kind)`\n- `life_of(entity)`\n- `member_of(entity, group)`\n- `tier_of(entity)`\n\n### Events\n\nCore: `add`, `clock`, `link`, `materialize`, `post`, `set`, `spawn`, `stage`, `timelapse`, `unlink`.\n\nEngine bookkeeping: `engine.adjudged`, `engine.attempt`, `engine.beat`, `engine.caught`, `engine.check`, `engine.choice`, `engine.class`, `engine.cursor`, `engine.entity`, `engine.fired`, `engine.life`, `engine.note`, `engine.observed`, `engine.pause`, `engine.revealed`, `engine.signal`, `engine.told`.\n\n### Relation types\n\nBuilt in: `in`, `owns`, `uses`, `worn_by`, `equipped`, `knows`, `member_of`, `regard`, `route`. Packs add the typed ones below.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `knows` | `knows` |\n| `life` | `life` |\n| `spawn` | `spawn` |\n\n### Step purposes\n\n| Purpose | Outputs a world template may declare |\n|---|---|\n| `brief` | `text` |\n| `choices` | `text`, `effects` |\n| `contradiction` | `decision`, `text`, `effects` |\n| `extract` | `text`, `effects` |\n| `interpret` | `decision`, `text` |\n| `judge` | `decision`, `text` |\n| `npc.choose` | `decision`, `text` |\n| `outline` | `text` |\n| `puzzle.answer` | `decision`, `text` |\n\nSignals: `agents_present`, `always`, `beat`, `classifier`, `conflict`, `day_start`, `invitation`, `never`, `offscreen`, `present`, `reply`, `scene_change`, `slot_crossed`, `tie_zone`, `timelapse`, `typed_input`, and `every_n:<k>`.\n\nTemplate placeholders: `beats`, `brief`, `clock`, `facts`, `outcome`, `place`, `pov`, `present`, `recent`, `reply`, `scene`, `user`, `world`.\n\n### Sections\n\nThe slots a world gets when it defines none, kept in rank order on the section budget.\n\n| Slot | Label | Rank |\n|---|---|---|\n| `outcome` | Outcome | 0 |\n| `montage` | Montage | 1 |\n| `scene` | Scene | 2 |\n| `people` | People | 3 |\n| `money` | Money | 4 |\n| `gear` | Gear | 5 |\n| `vehicles` | Vehicles | 6 |\n| `quest` | Quest | 7 |\n| `outline` | Outline | 8 |\n| `stance` | Stance | 9 |\n\n### Realism\n\nDomains: `money`, `gear`, `vehicles`, `castlife`, `relationships`, `space`, `calendar`, `weather`, `sheets`; each at a level from 0 to 4.\n\nDetail bands: `principal` (Leads), `supporting` (Supporting), `background` (Background).\n\nInterrupt classes: `invitation`, `bill`, `decline`, `incident`, `quest`, `rule`, `arrival`, `overdue`, `needs`, `weather`.\n\n### Adjudication presets\n\n| Value | `narrative` | `balanced` | `crunchy` |\n|---|---|---|---|\n| `checks` | `\"risky\"` | `\"every\"` | `\"every\"` |\n| `riskyAt` | `0.75` | `0.75` | `0.75` |\n| `trivialAt` | `null` | `0.95` | `null` |\n| `impossibleAt` | `null` | `0.05` | `null` |\n| `description` | `{\"weight\":\"none\",\"max\":3,\"advantageAt\":2}` | `{\"weight\":\"bonus\",\"max\":2,\"advantageAt\":2}` | `{\"weight\":\"none\",\"max\":2,\"advantageAt\":2}` |\n| `authority` | `\"narrative\"` | `\"hybrid\"` | `\"mechanics\"` |\n| `closeBy` | `2` | `2` | `2` |\n| `retry` | `\"changed\"` | `\"changed\"` | `\"free\"` |\n| `retryAfter` | `60` | `60` | `60` |\n\n## Calendar & time pack (`calendar`)\n\nVersion 1 \xB7 realism domain `calendar` \xB7 requires none.\n\n### Formula functions\n\n- `days_until(date)`\n- `is_day_off()`\n- `is_weekend()`\n- `minutes_until(at)`\n- `weekday_name()`\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `time_advance` | `duration` |\n\n### Panels and slots\n\nPanels: `calendar.calendar`. Slots it writes: `scene`.\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `calendar.dst` | Daylight saving time, time zones and daylight hours | `lre-table/calendar.dst/v1` | start (json), end (json), duration_weeks_approx (int), exceptions (list), standard_offsets_h (json), note (text), daylight_hours (json) | 1 |\n| `calendar.holidays` | Federal holidays | `lre-table/calendar.holidays/v1` | name (text), rule_type (enum), month (int), day (int, optional), weekday (enum, optional), n (int, optional), federal_paid_day_off (bool), private_sector_paid_day_off (enum), observed_if_weekend (text, optional) | 11 |\n| `calendar.observances` | Common observances | `lre-table/calendar.observances/v1` | name (text), rule_type (enum), month (int, optional), day (int, optional), weekday (enum, optional), n (int, optional), base (ref, optional), offset_days (int, optional), algorithm (text, optional), window (text, optional), start (text, optional), end (text, optional), rule_text (text, optional), rule_note (text, optional) | 30 |\n| `calendar.school` | School year | `lre-table/calendar.school/v1` | title (text), values (json) | 2 |\n| `calendar.shifts` | Work shift patterns | `lre-table/calendar.shifts/v1` | name (text), description (text), days_per_week (number), typical_start (text), typical_shift_h (number), typical_hours_per_week (int), weekend_work (enum), notes (text) | 24 |\n| `calendar.work` | Work norms | `lre-table/calendar.work/v1` | full_time_hours_per_week (number), standard_work_year_h (int), overtime (text), vacation_days_after_1_year (int), vacation_days_after_5_years (int), vacation_days_after_10_years (int), sick_days_per_year (int), paid_time_off_note (text), paid_holidays_per_year (int), meal_break (text) | 1 |\n\n### Lint codes\n\n`calendar.epoch`, `calendar.schedule_times`, `calendar.unit_cap`.\n\n## Cast life pack (`castlife`)\n\nVersion 1 \xB7 realism domain `castlife` \xB7 requires `gear`, `relationships`, `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `castlife.decide` | `key`, `choice` |\n| `castlife.override` | `who`, `minutes?`, `place?`, `activity?` |\n| `castlife.satisfy` | `need`, `entity?` |\n\n### Formula functions\n\n- `busy(who)`\n- `invited(host)`\n- `need(who, need)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `accept_invitation` | Accept invitation | `host: ref \u2192 person` |  | `default` | `1` | accept, sure, let's, count me in |\n| `eat` | Eat |  |  | `default` | `30` | eat, have lunch, have dinner, grab a bite |\n| `rest` | Rest |  |  | `default` | `30` | rest, relax, take a break |\n| `sleep` | Go to bed |  |  | `default` | `5` | go to bed, sleep, turn in, hit the sack |\n\n### Events\n\nIts own: `castlife.decision`, `castlife.invitation`, `castlife.need`.\n\n### Panels and slots\n\nPanels: `castlife.cast`. Slots it writes: `people`, `stance`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `castlife.agents` | `castlife` | 3 | each agent |\n| `castlife.trips` | `castlife` | 1 | the world |\n\n### Lint codes\n\n`castlife.cues`, `castlife.double_booking`.\n\n## Combat pack (`combat`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `hostile` | Hostile to | `*` | `*` | many_many | yes |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `combat.end` | `winner?` |\n| `combat.end_turn` | `who?` |\n| `combat.spend` | `who?`, `cost` |\n| `combat.start` | `foes?` |\n\n### Formula functions\n\n- `budget_left(e, budget)`\n- `can_fight(e)`\n- `encounter_round()`\n- `has_turn(e)`\n- `in_encounter(e)`\n- `is_ally(a, b)`\n- `is_down(e)`\n- `is_foe(a, b)`\n- `standing(side)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `end_turn` | End turn |  |  | `default` | `0` | end my turn, end turn |\n| `fight` | Fight | `target: ref` |  | `default` | `0` | start a fight, pick a fight, draw my weapon |\n\n### Events\n\nIts own: `combat.act`, `combat.decision`, `combat.down`, `combat.end`, `combat.spend`, `combat.start`, `combat.turn`.\n\n### Panels and slots\n\nPanels: `combat.encounter`. Slots it writes: none.\n\n## Economy pack (`economy`)\n\nVersion 1 \xB7 realism domain `money` \xB7 requires `space`.\n\n### Kinds\n\n#### `account`: Account\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `apr_pct` | APR % | number | \u2265 0 |  |  |  | live from money 4 |\n| `apy_pct` | APY % | number | \u2265 0 |  |  |  | live from money 4 |\n| `autopay` | Autopay | text |  | `\"none\"` |  |  | live from money 3 |\n| `due_day` | Due day of month | number | 1 \u2026 31 |  |  |  | live from money 4 |\n| `institution` | Institution | text |  |  |  |  | live from money 3 |\n| `limit` | Credit limit | money | \u2265 0 |  |  |  | live from money 3 |\n| `min_floor` | Minimum payment floor | money |  | `3500` |  |  | live from money 4 |\n| `min_pct` | Minimum payment % of balance | number |  | `1` |  |  | live from money 4 |\n| `opening` | Opening balance | money |  |  |  |  | locked |\n| `owner` | Owner | ref |  |  |  |  | live from money 2 |\n| `payment` | Loan payment | money |  |  |  |  | live from money 4 |\n| `remaining_months` | Months left (loans) | number | \u2265 0 |  |  |  | live from money 4 |\n| `statement_day` | Statement day | number | 1 \u2026 28 | `1` |  |  | live from money 4 |\n| `symbol` | Holding | text |  | `\"broad_us_equity_index\"` |  |  | live from money 4 |\n| `type` | Type | enum: cash, checking, savings, card, loan, brokerage |  |  |  |  | live from money 2 |\n| `units` | Units held | number | \u2265 0 |  |  |  | live from money 4; locked |\n\n#### `business`: Business\n\nExtends `thing`.\n\nNo fields of its own.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `economy.buy` | `item?`, `category?`, `qty?`, `price?`, `exact?`, `stated?`, `name?`, `payer?`, `method?`, `from?`, `payee?`, `keep?` |\n| `economy.invest` | `cents`, `owner?`, `sell?` |\n| `economy.lose` | `item`, `thief?` |\n| `economy.move` | `from`, `to`, `cents`, `memo?` |\n| `economy.pay_card` | `card`, `from?`, `cents?` |\n| `economy.price_modifier` | `percent`, `scope?`, `place?`, `minutes?`, `id?`, `clear?` |\n| `economy.transfer` | `to`, `cents`, `from?`, `memo?`, `method?` |\n\n### Formula functions\n\n- `balance(account)`\n- `can_afford(who, cents)`\n- `net_worth(who)`\n- `price(item)`\n- `wealth(who)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `buy` | Buy | `item: text`, `qty?: number`, `price?: money`, `method?: text` |  | `default` | `5` | buy, purchase, order, pick up a |\n| `invest` | Invest | `amount: money` |  | `default` | `2` | invest, buy stocks, buy shares |\n| `move_money` | Transfer between accounts | `from: ref \u2192 account`, `to: ref \u2192 account`, `amount: money` |  | `default` | `2` | transfer, move money, put into savings |\n| `pay` | Pay | `to: ref \u2192 person`, `amount: money` |  | `default` | `1` | pay, give money, send money, venmo |\n| `pay_card` | Pay card | `card: ref \u2192 account`, `amount?: money` |  | `default` | `2` | pay off the card, pay the card, pay my credit card |\n| `sell_investments` | Sell investments | `amount: money` |  | `default` | `2` | sell stocks, sell shares, cash out |\n\n### Events\n\nIts own: `economy.anchor`, `economy.card_paid`, `economy.decline`, `economy.modifier`, `economy.note`, `economy.price`, `economy.statement`, `economy.txn`.\n\nChecks it adds to: `post`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `purchase` | `money` |\n| `transfer` | `money` |\n\n### Panels and slots\n\nPanels: `economy.money`. Slots it writes: `money`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `economy.accounts` | `money` | 3 | the world |\n| `economy.banking` | `money` | 4 | the world |\n| `economy.bills` | `money` | 3 | the world |\n| `economy.cards` | `money` | 3 | the world |\n| `economy.living` | `money` | 3 | the world |\n| `economy.markets` | `money` | 4 | the world |\n| `economy.payroll` | `money` | 3 | the world |\n\nDetail on demand: `money` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `economy.catalog` | Price catalog | `lre-table/economy.catalog/v1` | name (text), category (ref), unit (text), price_cents (band), notes (text, optional) | 340 |\n| `economy.categories` | Price categories | `lre-table/economy.categories/v1` | name (text), basis (text), notes (text, optional), price_unit_note (text, optional), item_count (int), price_cents (band) | 19 |\n| `economy.finance` | Finance parameters | `lre-table/economy.finance/v1` | title (text), values (json) | 7 |\n| `economy.occupations` | Occupations and pay | `lre-table/economy.occupations/v1` | title (text), category (enum), median_cents_per_h (int), median_cents_per_year (int), typical_earnings_cents_per_year (int), schedule_pattern (ref), typical_hours_per_week (number), weeks_per_year (number), weekend_work (enum), shifts (list), pay_frequency (enum), benefits (enum), benefits_note (text), withholding_rate_pct (number), description (text), wage_basis (text), tipped (bool, optional), tipped_cash_wage_cents_per_h (int, optional), self_employed (bool, optional), fica_exempt (bool, optional), estimated_tax_set_aside_pct (number, optional), withholding_note (text, optional) | 56 |\n| `economy.regions` | Regions (US states, DC and the national baseline) | `lre-table/economy.regions/v1` | name (text), abbr (text), scope (enum), census_region (enum, optional), census_division (enum, optional), time_zones (list, optional), observes_dst (bool, optional), state_income_tax_effective_pct (number, optional), local_income_tax_pct_typical (number, optional), sales_tax_combined_avg_pct (number), cost_of_living_multiplier (number), median_rent_1br_cents_per_month (int), median_rent_2br_cents_per_month (int), residential_electricity_cents_per_kwh (number), minimum_wage_cents_per_h (int), notes (text, optional) | 52 |\n\n### Lint codes\n\n`economy.accounts`, `economy.unpriced_cap`.\n\n## Gear & containers pack (`gear`)\n\nVersion 1 \xB7 realism domain `gear` \xB7 requires `space`.\n\n### Kinds\n\n#### `container`: Container\n\nExtends `item`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `capacity_l` | Capacity (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `max_load_kg` | Max load (kg) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `stock` | Contents category (sampled when first opened) | text |  |  |  |  |  |\n\n#### `item`: Item\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `catalog` | Catalog item | text (row of economy.catalog) |  |  |  |  |  |\n| `category` | Category | text |  |  |  |  |  |\n| `condition` | Condition | number | 0 \u2026 100 | `100` |  |  | live from gear 3; bound auto, \xB125 a turn; bands: broken, worn, good, like new |\n| `consumable` | Consumable | bool |  |  |  |  | live from gear 4 |\n| `from_kit` | From kit | ref |  |  |  |  | locked |\n| `notable` | Notable | bool |  |  |  |  | live from gear 1 |\n| `overdue` | Overdue | bool |  |  |  |  | locked |\n| `piece` | Kit piece | text |  |  |  |  | locked |\n| `qty` | Quantity | number | \u2265 0 | `1` |  |  | live from gear 2; bound confirm, \xB110 a turn |\n| `slot` | Equip slot | text |  |  |  |  | live from gear 3 |\n| `uses` | Uses left | number | \u2265 0 |  |  |  | live from gear 4 |\n| `volume_l` | Volume (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `weight_g` | Weight (g) | number | \u2265 0 |  |  |  | live from gear 2 |\n\n#### `kit`: Kit\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `kit` | Kit template | text |  |  |  |  | live from gear 3 |\n| `piece_count` | Piece count | number |  |  |  |  | live from gear 3 |\n| `pieces` | Pieces | list |  |  |  |  | live from gear 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `equipped` | Equipped by | `item` | `*` | many_one |  |  | `slot` |\n| `uses` | Uses (granted until) | `*` | `*` | many_many |  |  | none |\n| `worn_by` | Worn by | `item` | `*` | many_one |  |  | `slot` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `gear.drop` | `item`, `place?` |\n| `gear.give` | `item`, `from`, `to` |\n| `gear.lend` | `item`, `to`, `until?`, `said?` |\n| `gear.lose` | `item`, `thief?` |\n| `gear.receive` | `name`, `to`, `from?` |\n| `gear.remove` | `item` |\n| `gear.retrieve` | `item` |\n| `gear.take_piece` | `kit`, `piece`, `to` |\n| `gear.transfer` | `item`, `to` |\n| `gear.use` | `item`, `user?` |\n| `gear.wear` | `item`, `wearer`, `slot?` |\n\n### Formula functions\n\n- `carried_kg(holder)`\n- `carries(holder, item)`\n- `has_item(holder, what)`\n- `kit_complete(kit)`\n- `kit_present(kit)`\n- `lent_out(thing)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drop` | Drop | `item: ref \u2192 item` |  | `default` | `1` | drop, put down, leave |\n| `give` | Give | `item: ref \u2192 item`, `to: ref \u2192 person` |  | `default` | `1` | give, hand, pass |\n| `lend` | Lend | `item: ref \u2192 item`, `to: ref \u2192 person`, `days?: number`, `until?: text` |  | `default` | `2` | lend, loan, let borrow |\n| `lose` | Lose something | `item: ref \u2192 item` |  | `default` | `1` | lost my, lose, can't find my, is gone, is missing |\n| `reclaim` | Take back | `item: ref \u2192 item` |  | `default` | `5` | take back, get back, reclaim |\n| `remove` | Take off | `item: ref \u2192 item` |  | `default` | `2` | take off, remove, unequip |\n| `take` | Take | `item: ref \u2192 item` |  | `default` | `1` | take, pick up, grab |\n| `take_piece` | Take from a kit | `kit: ref \u2192 kit`, `piece: text` |  | `default` | `1` | take the, grab a, get a |\n| `use` | Use | `item: ref \u2192 item` |  | `default` | `5` | use, apply |\n| `wear` | Wear or equip | `item: ref \u2192 item` |  | `default` | `2` | wear, put on, equip |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `give` | `ref` |\n| `quantity` | `number` |\n\n### Panels and slots\n\nPanels: `gear.gear`. Slots it writes: `gear`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `gear.grants` | `gear` | 1 | the world |\n\nDetail on demand: `gear` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `gear.containers` | Containers | `lre-table/gear.containers/v1` | name (text), capacity_l (number), max_load_kg (number), empty_weight_g (int), location (enum), equip_slot (ref), price_cents (band), notes (text, optional) | 34 |\n| `gear.items` | Gear items | `lre-table/gear.items/v1` | name (text), category (enum), equip_slot (ref), weight_g (int), volume_l (number), price_cents (band), notes (text, optional) | 90 |\n| `gear.kits` | Kits | `lre-table/gear.kits/v1` | name (text), recommended_container (ref), description (text), piece_count (int), pieces_total_weight_g (number), packed_volume_l (number), price_cents (band), pieces (list), notes (text, optional) | 5 |\n| `gear.slots` | Equip slots | `lre-table/gear.slots/v1` | description (text) | 20 |\n\n### Lint codes\n\n`gear.kits`.\n\n## Relationships pack (`relationships`)\n\nVersion 1 \xB7 realism domain `relationships` \xB7 requires `space`.\n\n### Kinds\n\n#### `company`: Company\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `faction`: Faction\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `family`: Family\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `group`: Group\n\nExtends `thing`.\n\nNo fields of its own.\n\n#### `household`: Household\n\nExtends `group`.\n\nNo fields of its own.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `child_of` | Child of | `person` | `person` | many_many |  | `parent_of` | none |\n| `knows` | Knows | `*` | `*` | many_many |  |  | none |\n| `member_of` | Member of | `*` | `group` | many_many |  |  | `rank`, `role`, `since` |\n| `parent_of` | Parent of | `person` | `person` | many_many |  | `child_of` | none |\n| `partner_of` | Partner of | `person` | `person` | many_many | yes |  | `since` |\n| `regard` | Regard | `*` | `*` | many_many |  |  | `respect`, `trust`, `warmth` |\n| `sibling_of` | Sibling of | `person` | `person` | many_many | yes |  | none |\n| `spouse_of` | Spouse of | `person` | `person` | many_many | yes |  | `since` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `relationships.adjust` | `from`, `to`, `delta`, `axis?`, `why?` |\n| `relationships.appraise` | `from`, `to`, `appraisal`, `why?`, `mutual?` |\n\n### Formula functions\n\n- `faction_regard(group, to)`\n- `regard(from, to, axis)`\n- `regard_band(from, to)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `chat_with` | Chat with | `target: ref \u2192 person` |  | `default` | `15` | chat with, talk to, catch up with |\n| `give_gift` | Give a gift | `target: ref \u2192 person` |  | `default` | `5` | give a gift, surprise |\n\n### Events\n\nIts own: `relationships.regard`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `regard` | `number` |\n\n### Panels and slots\n\nPanels: none. Slots it writes: `people`.\n\n### Lint codes\n\n`relationships.axes`.\n\n## Character sheets pack (`sheets`)\n\nVersion 1 \xB7 realism domain `sheets` \xB7 requires `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `sheets.condition` | `condition`, `who?`, `label?`, `mod?`, `minutes?`, `clear?` |\n\n### Formula functions\n\n- `condition_mod(who)`\n- `derived(who, id)`\n- `difficulty_of(v)`\n- `has_condition(who, id)`\n- `stat(who, stat)`\n- `stat_mod(who, stat)`\n- `stat_word(who, stat)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `attempt` | Attempt | `stat: text`, `difficulty?: text` | `1d20` | `failure`, `great`, `success` | `5` | try to, attempt, check |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `condition` | `list` |\n\n### Panels and slots\n\nPanels: `sheets.you`. Slots it writes: `outcome`.\n\n### Lint codes\n\n`sheets.stat_range`.\n\n## Space & travel pack (`space`)\n\nVersion 1 \xB7 realism domain `space` \xB7 requires `calendar`.\n\n### Kinds\n\n#### `person`: Person\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `activity` | Activity | text |  | `\"idle\"` |  |  | live from castlife 1 |\n| `activity_until` | Activity ends | number |  |  |  |  | live from castlife 1; locked |\n| `agility` | Agility | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `appointments` | Appointments | list |  |  |  |  | live from castlife 2 |\n| `charm` | Charm | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `chores` | Chores | list |  |  |  |  | live from castlife 3 |\n| `conditions` | Conditions | list |  |  |  |  | live from sheets 4 |\n| `employer` | Employer | ref |  |  |  |  | live from money 3 |\n| `grit` | Grit | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `home` | Home | ref |  |  |  |  | live from space 1 |\n| `might` | Might | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `needs` | Needs | list |  |  |  |  | live from castlife 4; locked |\n| `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |\n| `region` | Region | text (row of economy.regions) |  |  |  |  | live from money 3 |\n| `scene` | Scene type | text |  |  |  |  |  |\n| `trips` | Trips | list |  |  |  |  | live from castlife 1 |\n| `wealth` | Wealth | text |  |  |  |  | live from money 1 |\n| `wits` | Wits | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n\n#### `thing`: Thing\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `owner` | Owner | ref |  |  |  |  |  |\n| `place` | Place | ref |  |  |  |  | live from space 1 |\n| `x` | Grid x | number |  |  |  |  | live from space 3 |\n| `y` | Grid y | number |  |  |  |  | live from space 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `in` | In | `*` | `*` | many_one |  |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `space.set_route` | `route`, `open?` |\n| `space.step` | `x`, `y`, `entity?` |\n\n### Formula functions\n\n- `distance_km(from, to, mode)`\n- `grid_minutes(place, x, y)`\n- `grid_reachable(place, x, y)`\n- `on_grid(thing)`\n- `reach(a, b)`\n- `route_exists(from, to, mode)`\n- `route_open(route)`\n- `travel_minutes(from, to, mode)`\n- `within(place, ancestor)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `go` | Go to | `to: ref \u2192 place` |  | `default` | `level.space < 2 ? (level.space < 1 ? 0 : 15) : travel_minutes(here, to, 'walk')` | go to, walk to, head to, head over to, leave for |\n| `step` | Move on the map | `x: number`, `y: number` |  | `default` | `grid_minutes(here, x, y)` | walk over to, cross to, move to |\n\n### Events\n\nIts own: `space.pos`, `space.route`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `location` | `ref` |\n\n### Panels and slots\n\nPanels: `space.map`. Slots it writes: `scene`.\n\n### Lint codes\n\n`space.grid`, `space.maps`, `space.references`.\n\n## Story pack (`story`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `story.answer` | `track`, `answer`, `decision?` |\n| `story.flag` | `name`, `value?` |\n\n### Formula functions\n\n- `flag(name)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `answer` | Answer | `puzzle?: text`, `answer: text`, `decision?: number` |  | `default` | `1` | the answer is, i think it's, solve, answer, the code is, the combination is, try the combination, dial, enter the code |\n\n### Events\n\nIts own: `story.flag`.\n\n### Panels and slots\n\nPanels: `story.quests`. Slots it writes: `quest`.\n\n### Lint codes\n\n`story.leaky_label`.\n\n## Vehicles pack (`vehicles`)\n\nVersion 1 \xB7 realism domain `vehicles` \xB7 requires `economy`, `gear`, `space`.\n\n### Kinds\n\n#### `vehicle`: Vehicle\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `class` | Vehicle class | text |  |  |  |  |  |\n| `engine_hours` | Engine hours | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `fuel_pct` | Fuel % | number | 0 \u2026 100 |  |  |  | live from vehicles 2; bound auto, \xB130 a turn |\n| `home` | Home base | ref |  |  |  |  | live from vehicles 3 |\n| `last_service` | Last service (mi or h) | number | \u2265 0 |  |  |  | live from vehicles 4 |\n| `odometer_mi` | Odometer (mi) | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `status` | Status | enum: ok, needs_service, broken |  | `\"ok\"` |  |  | live from vehicles 1; bound confirm |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `vehicles.drive` | `vehicle`, `to`, `driver?`, `riders?` |\n| `vehicles.refuel` | `vehicle`, `payer?`, `pct?` |\n| `vehicles.service` | `vehicle`, `payer?`, `repair?` |\n\n### Formula functions\n\n- `drive_minutes(vehicle, to)`\n- `fuel_ok(vehicle, to)`\n- `fuel_pct(vehicle)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drive` | Drive | `vehicle: ref \u2192 vehicle`, `to: ref \u2192 place` |  | `default` | `drive_minutes(vehicle, to)` | drive to, drive over to, take the truck, take the car, sail to, ride to |\n| `refuel` | Refuel | `vehicle: ref \u2192 vehicle` |  | `default` | `10` | refuel, fill up, gas up, charge the car |\n| `repair_vehicle` | Repair | `vehicle: ref \u2192 vehicle` |  | `default` | `180` | repair, fix the truck, fix the car, get it towed |\n| `service_vehicle` | Service | `vehicle: ref \u2192 vehicle` |  | `default` | `60` | service, oil change, tune up |\n\n### Panels and slots\n\nPanels: `vehicles.garage`. Slots it writes: `vehicles`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `vehicles.upkeep` | `vehicles` | 4 | the world |\n\nDetail on demand: `vehicles` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `vehicles.classes` | Vehicle classes | `lre-table/vehicles.classes/v1` | name (text), domain (enum), fuel_type (enum), factor_guide (ref), tank_capacity_gal (number, optional), tank_capacity_l (number, optional), usable_battery_kwh (number, optional), consumption_unit (enum), consumption (json), range_mi (int, optional), range_h (number, optional), price_new_cents (band), price_used_cents (band), insurance_liability_cents_per_month (int), insurance_full_cents_per_month (int), registration_cents_per_year (band), annual_maintenance_cents_per_year (int), maintenance (json), passengers (int), cargo_l (number), payload_kg (number), towing_kg (number, optional), charging (json, optional), notes (text) | 19 |\n| `vehicles.factors` | Consumption factor guides | `lre-table/vehicles.factors/v1` | basis (text), factors (json), note (text, optional) | 3 |\n\n### Lint codes\n\n`vehicles.classes`.\n\n## Weather pack (`weather`)\n\nVersion 1 \xB7 realism domain `weather` \xB7 requires `space`.\n\n### Kinds\n\n#### `region`: Weather region\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `climate` | Climate | text |  | `\"temperate\"` |  |  |  |\n| `temp_c` | Temperature (\xB0C) | number |  |  |  |  | live from weather 3; bound never |\n| `weather` | Weather | text |  | `\"clear\"` |  |  | live from weather 2; bound never |\n| `weather_hold` | Weather held until | number |  |  |  |  | live from weather 2; locked |\n| `weather_hold_until` | Weather held until (condition) | text |  |  |  |  | live from weather 2; locked |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `weather.clear` | `region`, `state?` |\n| `weather.set` | `region`, `state`, `minutes?`, `until?` |\n\n### Formula functions\n\n- `season()`\n- `weather(place)`\n\n### Panels and slots\n\nPanels: `weather.now`. Slots it writes: `scene`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `weather.climate` | `weather` | 2 | the world |\n\n### Lint codes\n\n`weather.climates`.\n";
 
 // src/backend/texts.ts
 var GUIDE = ASSISTANT_GUIDE_default;
@@ -40992,28 +41812,10 @@ class Assistant {
   }
 }
 
-// src/shared/bridge.ts
-var ENGINE_EXTENSION = "lumi_rp_engine";
-var STUDIO_EXTENSION = "lumi_rp_engine_studio";
-var OFFER_INBOUND = `rpc:${STUDIO_EXTENSION}.offer`;
-var encoder = new TextEncoder;
-function channelId(id) {
-  let out = "";
-  for (const byte of encoder.encode(id))
-    out += byte.toString(16).padStart(2, "0");
-  return out;
-}
-function offerChannel(userId) {
-  return `offer.${channelId(userId)}`;
-}
-function worldsEndpoint(userId) {
-  return `${ENGINE_EXTENSION}.studio-worlds.${channelId(userId)}`;
-}
-function chatsEndpoint(userId) {
-  return `${ENGINE_EXTENSION}.studio-chats.${channelId(userId)}`;
-}
-function worldEndpoint(userId, worldId, revision) {
-  return `${ENGINE_EXTENSION}.studio-world.${channelId(userId)}.${channelId(worldId)}${revision === undefined ? "" : `.${revision}`}`;
+// src/backend/bridge.ts
+var OFFER_FILE = "offer.json";
+function isStoredOffer(raw) {
+  return isRecord2(raw) && typeof raw.draftId === "string" && isRecord2(raw.offer) && typeof raw.offer.offerId === "string";
 }
 var str5 = (v) => typeof v === "string";
 function readWorldList(value) {
@@ -41041,14 +41843,22 @@ function readChats(value) {
     const clock = isRecord2(c.clock) && typeof c.clock.minutes === "number" && str5(c.clock.label) ? { minutes: c.clock.minutes, label: c.clock.label, dayPart: str5(c.clock.dayPart) ? c.clock.dayPart : "" } : null;
     const present = Array.isArray(c.present) ? c.present.flatMap((p) => isRecord2(p) && str5(p.id) && str5(p.name) ? [{ id: p.id, name: p.name, label: str5(p.label) ? p.label : p.name, ...str5(p.life) ? { life: p.life } : {} }] : []) : [];
     const quests = Array.isArray(c.quests) ? c.quests.flatMap((q) => isRecord2(q) && str5(q.id) && str5(q.label) ? [{ id: q.id, kind: str5(q.kind) ? q.kind : "quest", label: q.label, stage: str5(q.stage) ? q.stage : "", cue: str5(q.cue) ? q.cue : null }] : []) : [];
-    return [{ chatId: c.chatId, worldId: c.worldId, revision: c.revision, definitionsFrom: str5(c.definitionsFrom) ? c.definitionsFrom : null, status: str5(c.status) ? c.status : "idle", place, clock, cash: str5(c.cash) ? c.cash : null, present, quests, at: typeof c.at === "number" ? c.at : 0 }];
+    return [
+      {
+        chatId: c.chatId,
+        worldId: c.worldId,
+        revision: c.revision,
+        ...str5(c.definitionsFrom) ? { definitionsFrom: c.definitionsFrom } : {},
+        status: c.status === "in_flight" || c.status === "paused" ? c.status : "idle",
+        place,
+        clock,
+        cash: str5(c.cash) ? c.cash : null,
+        present,
+        quests,
+        at: typeof c.at === "number" ? c.at : 0
+      }
+    ];
   });
-}
-
-// src/backend/bridge.ts
-var OFFER_FILE = "offer.json";
-function isStoredOffer(raw) {
-  return isRecord2(raw) && typeof raw.draftId === "string" && isRecord2(raw.offer) && typeof raw.offer.offerId === "string";
 }
 function unreachable(error) {
   const detail = error instanceof Error ? error.message : String(error);
@@ -41065,7 +41875,7 @@ class EngineBridge {
     if (this.served.has(userId))
       return;
     this.served.add(userId);
-    this.host.rpc.handle(offerChannel(userId), [], async (requester) => {
+    this.host.rpc.handle(offerEndpoint(userId).slice(STUDIO_EXTENSION.length + 1), [], async (requester) => {
       if (requester !== ENGINE_EXTENSION)
         throw new Error(`only ${ENGINE_EXTENSION} may read this endpoint`);
       return (await this.pending(userId))?.offer ?? null;
@@ -41098,7 +41908,7 @@ class EngineBridge {
   async worlds(userId) {
     let raw;
     try {
-      raw = await this.host.rpc.read(worldsEndpoint(userId));
+      raw = await this.host.rpc.read(engineEndpoint(worldsChannel(userId)));
     } catch (error) {
       throw unreachable(error);
     }
@@ -41107,7 +41917,7 @@ class EngineBridge {
   async world(userId, worldId, revision) {
     let raw;
     try {
-      raw = await this.host.rpc.read(worldEndpoint(userId, worldId, revision));
+      raw = await this.host.rpc.read(engineEndpoint(worldChannel(userId, worldId, revision)));
     } catch (error) {
       throw unreachable(error);
     }
@@ -41116,7 +41926,7 @@ class EngineBridge {
   async chats(userId) {
     let raw;
     try {
-      raw = await this.host.rpc.read(chatsEndpoint(userId));
+      raw = await this.host.rpc.read(engineEndpoint(chatsChannel(userId)));
     } catch (error) {
       throw unreachable(error);
     }

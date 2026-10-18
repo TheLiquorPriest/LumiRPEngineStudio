@@ -481,26 +481,21 @@ function G2(n, t) {
   return typeof t == "function" ? t(n) : t;
 }
 
-// src/shared/json.ts
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+// node_modules/lumi-rp-engine/src/shared/json.ts
+var UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
-// src/shared/bridge.ts
+// node_modules/lumi-rp-engine/src/shared/studio-bridge.ts
 var STUDIO_EXTENSION = "lumi_rp_engine_studio";
 var STATE_EVENT = "lre-state-v1";
 var STATE_REQUEST_EVENT = "lre-state-request-v1";
-var OFFER_EVENT = "lre-studio-offer-v1";
-var INSTALLED_EVENT = "lre-studio-installed-v1";
-var OFFER_INBOUND = `rpc:${STUDIO_EXTENSION}.offer`;
+var STUDIO_OFFER_EVENT = "lre-studio-offer-v1";
+var STUDIO_INSTALLED_EVENT = "lre-studio-installed-v1";
+var STUDIO_INBOUND = ["file", `rpc:${STUDIO_EXTENSION}.offer`];
 var encoder = new TextEncoder;
-var str = (v) => typeof v === "string";
-function readInstalled(value) {
-  if (!isRecord(value) || !str(value.offerId) || !str(value.worldId) || !str(value.revision))
-    return null;
-  if (value.mode !== "new" && value.mode !== "revision")
-    return null;
-  return { offerId: value.offerId, mode: value.mode, worldId: value.worldId, revision: value.revision };
+
+// src/shared/json.ts
+function isRecord2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 // node_modules/preact/jsx-runtime/dist/jsxRuntime.mjs
 var o3 = 0;
@@ -515,6 +510,13 @@ function u3(t, e, n2, f, u, i) {
 }
 
 // src/frontend/app.tsx
+function readInstalled(value) {
+  if (!isRecord2(value) || typeof value.offerId !== "string" || typeof value.worldId !== "string" || typeof value.revision !== "string")
+    return null;
+  if (value.mode !== "new" && value.mode !== "revision")
+    return null;
+  return { offerId: value.offerId, mode: value.mode, worldId: value.worldId, revision: value.revision };
+}
 var KIND_LABEL = { chat: "This chat", character: "A character", books: "Lore books", blank: "Blank", world: "A LumiRPEngine world" };
 function message(error) {
   return error instanceof Error ? error.message : String(error);
@@ -565,8 +567,10 @@ function App(props) {
     });
     const onState = (event) => {
       const detail = event.detail;
-      if (isRecord(detail) && typeof detail.engineVersion === "string")
-        setEngine({ version: detail.engineVersion, offers: Array.isArray(detail.inbound) && detail.inbound.includes(OFFER_INBOUND) });
+      if (!isRecord2(detail) || typeof detail.engineVersion !== "string")
+        return;
+      const inbound = Array.isArray(detail.inbound) ? detail.inbound : [];
+      setEngine({ version: detail.engineVersion, offers: STUDIO_INBOUND.every((way) => inbound.includes(way)) });
     };
     const onInstalled = (event) => {
       const installed = readInstalled(event.detail);
@@ -580,14 +584,14 @@ function App(props) {
       }, (error) => setNotice({ text: `The Studio couldn't record what LumiRPEngine installed: ${error instanceof Error ? error.message : String(error)}`, error: true }));
     };
     window.addEventListener(STATE_EVENT, onState);
-    window.addEventListener(INSTALLED_EVENT, onInstalled);
+    window.addEventListener(STUDIO_INSTALLED_EVENT, onInstalled);
     window.dispatchEvent(new CustomEvent(STATE_REQUEST_EVENT, { detail: { version: 1 } }));
     const offChat = host.onChatChange(() => setChatId(host.activeChat()));
     return () => {
       offPush();
       offChat();
       window.removeEventListener(STATE_EVENT, onState);
-      window.removeEventListener(INSTALLED_EVENT, onInstalled);
+      window.removeEventListener(STUDIO_INSTALLED_EVENT, onInstalled);
     };
   }, []);
   const openDraft = (id) => act(async () => {
@@ -891,7 +895,7 @@ function DraftPanel(props) {
     if (attach && !props.chatId)
       throw new Error("Open the chat to attach it to first.");
     const r = await client.request({ type: "install", draftId: draft.id, mode, worldId: mode === "revision" ? target || null : null, attachChatId: attach ? props.chatId : null });
-    window.dispatchEvent(new CustomEvent(OFFER_EVENT, { detail: { offerId: r.offerId } }));
+    window.dispatchEvent(new CustomEvent(STUDIO_OFFER_EVENT, { detail: { offerId: r.offerId } }));
     props.setDraft((await client.request({ type: "draft.open", draftId: draft.id })).draft);
     props.notify("Offered to LumiRPEngine: review it in its Build tab and tap Install there.");
   });
@@ -1450,7 +1454,7 @@ class Client {
     return () => this.listeners.delete(listener);
   }
   receive(raw) {
-    if (!isRecord(raw) || raw.studio !== PROTOCOL || typeof raw.type !== "string")
+    if (!isRecord2(raw) || raw.studio !== PROTOCOL || typeof raw.type !== "string")
       return;
     const message = raw;
     if (message.type === "result" || message.type === "error") {
