@@ -210,6 +210,9 @@ export class Dispatcher {
       }
       case "chat": {
         const chat = await ownChat(this.host, userId, spec.chatId);
+        // A chat that plays a world refines that world: its draft starts from the world's head, linked.
+        const playing = await this.bridge.chatState(userId, chat.id).catch(() => null);
+        if (playing) return this.create(userId, name, { kind: "world", worldId: playing.worldId, chatId: chat.id });
         const ids = chatCharacterIds(chat);
         const cards = await cardsOf(this.host, userId, ids);
         const books = await booksFor(this.host, userId, chat, cards);
@@ -246,7 +249,8 @@ export class Dispatcher {
           const chat = await ownChat(this.host, userId, spec.chatId);
           const ids = chatCharacterIds(chat);
           const cards = await cardsOf(this.host, userId, ids);
-          source = { ...source, label: `World: ${read.name}, played in “${chat.name}”`, chatId: chat.id, characterIds: ids, books: await booksFor(this.host, userId, chat, cards) };
+          const persona = await this.host.personas.active(userId).catch(() => null);
+          source = { ...source, label: `World: ${read.name}, played in “${chat.name}”`, chatId: chat.id, characterIds: ids, books: await booksFor(this.host, userId, chat, cards), persona: persona ? { id: persona.id, name: persona.name } : null };
         }
         return this.drafts.create(userId, { name: title || read.name, source, doc: loaded.world, link: { worldId: read.worldId, revision: read.head }, note: `Started from LumiRPEngine's ${read.name} at its head revision ${read.head.slice(0, 8)}.` });
       }

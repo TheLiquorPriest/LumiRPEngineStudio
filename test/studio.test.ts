@@ -237,3 +237,14 @@ describe("LumiRPEngine Studio", () => {
   });
 });
 
+
+describe("drafts from a world chat", () => {
+  test("a draft from a chat that plays a world starts from that world's head, linked, to refine it", async () => {
+    const { host, engine, send } = rig();
+    engine.addWorld(newWorld("w_harbor", "Harbor"));
+    host.chatsById.set("chat-w", { id: "chat-w", owner: USER, name: "Harbor nights", characterId: "", metadata: {}, messages: [{ id: "m0", role: "assistant", name: "Narrator", content: "The tide is out." }] });
+    engine.attached.set("chat-w", { worldId: "w_harbor", revision: "r1" });
+    const draft = (await send("draft.create", { name: "", source: { kind: "chat", chatId: "chat-w" } })).draft;
+    expect([draft.link?.worldId, draft.name]).toEqual(["w_harbor", "Harbor"]);
+  });
+});
