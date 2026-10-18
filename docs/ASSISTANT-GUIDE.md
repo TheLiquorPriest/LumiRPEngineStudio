@@ -84,9 +84,9 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 ## Calendar and the start
 
 - `/start` is where and when play begins: `{ "place": "salt_quay", "at": "2026-09-14T18:30" }`, the POV's place and the story's present. Put the POV's `fields.place` at the same place.
-- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier. Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).
+- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier (with an invented calendar, exactly the start day). Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).
 - Read the present from the transcript: the last date, weekday, time of day or season it states, or what the events imply ("the next morning" after a night scene). If the story never says, pick a plausible date and say so.
-- An invented calendar uses `"system": "custom"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`).
+- An invented calendar uses `"system": "custom"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`). Set its `epoch` to midnight of the start's own day (`0412-08-25T00:00`): LumiRPEngine counts the start's clock from the epoch as an ordinary calendar would, so any day between them would shift the date the player sees in the invented months.
 - `dayParts` name the parts of the day (`{ "id": "morning", "label": "Morning", "start": "06:00" }`).
 
 ## Relations and regard
