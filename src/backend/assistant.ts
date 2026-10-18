@@ -61,7 +61,7 @@ export function systemPrompt(draft: Draft, sources: string, chatState: EngineCha
     .flatMap(([key, value]) => (value && typeof value === "object" && !Array.isArray(value) && ["entities", "places", "routes", "maps", "tracks", "lore", "schedules", "rules", "actions", "classifications", "kinds"].includes(key) ? [`${key} ${Object.keys(value).length}`] : []))
     .join(", ");
   const state = chatState
-    ? `\nThe source chat already plays LumiRPEngine world ${chatState.worldId} at revision ${chatState.revision}: the POV is at ${chatState.place?.name ?? "an unknown place"}, ${chatState.clock?.label ?? "at an unknown time"}${chatState.cash ? `, with ${chatState.cash}` : ""}; present: ${chatState.present.map((p) => p.name).join(", ") || "nobody"}; open quests: ${chatState.quests.map((q) => q.label).join(", ") || "none"}. Refine that world as a new revision (see the guide's "Refining a world in play").`
+    ? `\nThe source chat already plays LumiRPEngine world ${chatState.worldId} at revision ${chatState.revision}: the POV is at ${chatState.place?.name ?? "an unknown place"}, ${chatState.clock?.label ?? "at an unknown time"}${chatState.cash ? `, with ${chatState.cash}` : ""}; present: ${chatState.present.map((p) => (p.life ? `${p.name} (${p.life.toLowerCase()})` : p.name)).join(", ") || "nobody"}; open quests: ${chatState.quests.map((q) => q.label).join(", ") || "none"}. Refine that world as a new revision (see the guide's "Refining a world in play").`
     : "";
   return [
     INSTRUCTIONS,

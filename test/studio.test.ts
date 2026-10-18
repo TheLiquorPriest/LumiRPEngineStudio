@@ -146,13 +146,16 @@ describe("LumiRPEngine Studio", () => {
   });
 
   test("a revision of an engine world keeps the world's id, and reads of the engine go through its endpoints", async () => {
-    const { engine, send } = rig();
+    const { host, engine, send } = rig();
     const base = newWorld("w_harbor", "Harbor");
     engine.addWorld(base);
     expect((await send("pick.worlds")).worlds.map((w) => w.id)).toEqual(["w_harbor"]);
     const draft = (await send("draft.create", { name: "", source: { kind: "world", worldId: "w_harbor" } })).draft;
     expect(draft.link?.worldId).toBe("w_harbor");
     await send("install", { draftId: draft.id, mode: "revision", worldId: null, attachChatId: null });
+    // The offer names the revision the draft was taken from, so LumiRPEngine can tell when the world moved on.
+    const offered = await host.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(USER)}`, ENGINE_EXTENSION);
+    expect([Boolean(draft.link?.revision), isRecord(offered) && offered.baseRevision]).toEqual([true, draft.link?.revision]);
     const installed = await engine.install();
     expect([installed.mode, installed.worldId, engine.worlds.get("w_harbor")?.revisions.length]).toEqual(["revision", "w_harbor", 2]);
   });

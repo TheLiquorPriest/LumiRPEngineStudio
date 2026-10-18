@@ -58,6 +58,8 @@ export interface StudioOffer {
   worldId?: string;
   /** A chat to attach the world to once installed (LumiRPEngine asks first). */
   attachChatId?: string;
+  /** For a revision: the revision of `worldId` the draft was taken from, so LumiRPEngine can warn when the world has moved on since. */
+  baseRevision?: string;
   createdAt: number;
 }
 
@@ -96,7 +98,8 @@ export interface EngineChatSummary {
   place: { id: string | null; name: string } | null;
   clock: { minutes: number; label: string; dayPart: string } | null;
   cash: string | null;
-  present: { id: string; name: string; label: string }[];
+  /** `life`: their life state as the player knows it, when that isn't alive. */
+  present: { id: string; name: string; label: string; life?: string }[];
   quests: { id: string; kind: string; label: string; stage: string; cue: string | null }[];
   at: number;
 }
@@ -132,7 +135,7 @@ export function readChats(value: unknown): EngineChatSummary[] {
     if (!isRecord(c) || !str(c.chatId) || !str(c.worldId) || !str(c.revision)) return [];
     const place = isRecord(c.place) && str(c.place.name) ? { id: str(c.place.id) ? c.place.id : null, name: c.place.name } : null;
     const clock = isRecord(c.clock) && typeof c.clock.minutes === "number" && str(c.clock.label) ? { minutes: c.clock.minutes, label: c.clock.label, dayPart: str(c.clock.dayPart) ? c.clock.dayPart : "" } : null;
-    const present = Array.isArray(c.present) ? c.present.flatMap((p) => (isRecord(p) && str(p.id) && str(p.name) ? [{ id: p.id, name: p.name, label: str(p.label) ? p.label : p.name }] : [])) : [];
+    const present = Array.isArray(c.present) ? c.present.flatMap((p) => (isRecord(p) && str(p.id) && str(p.name) ? [{ id: p.id, name: p.name, label: str(p.label) ? p.label : p.name, ...(str(p.life) ? { life: p.life } : {}) }] : [])) : [];
     const quests = Array.isArray(c.quests)
       ? c.quests.flatMap((q) => (isRecord(q) && str(q.id) && str(q.label) ? [{ id: q.id, kind: str(q.kind) ? q.kind : "quest", label: q.label, stage: str(q.stage) ? q.stage : "", cue: str(q.cue) ? q.cue : null }] : []))
       : [];

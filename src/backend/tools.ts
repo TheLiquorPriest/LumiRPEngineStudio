@@ -425,7 +425,7 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
         state.place ? `The POV is at ${state.place.name}${state.place.id ? ` (${state.place.id})` : ""}.` : "The POV's place isn't shown.",
         state.clock ? `Clock: ${state.clock.label} (${state.clock.dayPart}, minute ${state.clock.minutes} of the calendar).` : "",
         state.cash ? `Cash: ${state.cash}.` : "",
-        state.present.length > 0 ? `Present: ${state.present.map((p) => `${p.name} (${p.id})`).join(", ")}.` : "Nobody else is present.",
+        state.present.length > 0 ? `Present: ${state.present.map((p) => `${p.name} (${p.id}${p.life ? `, ${p.life.toLowerCase()}` : ""})`).join(", ")}.` : "Nobody else is present.",
         state.quests.length > 0 ? `Open quests:\n${state.quests.map((q) => `- ${q.label} (${q.id}, ${q.kind}) at "${q.stage}"${q.cue ? `: ${q.cue}` : ""}`).join("\n")}` : "No open quests.",
       ];
       return done(lines.filter(Boolean).join("\n"), `Read the chat's state in ${state.worldId}`);

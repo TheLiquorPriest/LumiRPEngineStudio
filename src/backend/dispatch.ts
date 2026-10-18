@@ -263,7 +263,7 @@ export class Dispatcher {
     if (mode === "revision" && !worldId) throw new Error("Choose the LumiRPEngine world this is a revision of.");
     if (attachChatId) await ownChat(this.host, userId, attachChatId);
     const doc: WorldDoc = worldId ? { ...loaded.world, id: worldId } : loaded.world;
-    const offer: StudioOffer = { offerId: `o_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, doc: toJson(doc), mode, ...(worldId ? { worldId } : {}), ...(attachChatId ? { attachChatId } : {}), createdAt: Date.now() };
+    const offer: StudioOffer = { offerId: `o_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, doc: toJson(doc), mode, ...(worldId ? { worldId } : {}), ...(worldId && worldId === draft.link?.worldId && draft.link.revision ? { baseRevision: draft.link.revision } : {}), ...(attachChatId ? { attachChatId } : {}), createdAt: Date.now() };
     await this.bridge.publish(userId, draftId, offer);
     await this.drafts.update(userId, draftId, (d) => {
       d.offer = { offerId: offer.offerId, mode, createdAt: offer.createdAt };
