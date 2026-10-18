@@ -41,10 +41,10 @@ A converted world starts where the story is now. When the chat attaches it, the 
 An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tags in `tags`.
 
 - **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ "type": "member_of", "to": "harbor_guild", "fields": { "role": "Quartermaster" } }`.
-- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `"dying"`, someone who died is `"dead"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ "unconscious": { "label": "Unconscious", "acts": false, "reads": "lies unconscious" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`.
+- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `"dying"`, someone who died is `"dead"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ "unconscious": { "label": "Unconscious", "acts": false, "reads": "lies unconscious" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`. When the POV hasn't learned of a death or a dying, set `lifeKnownBy` to the ids of the people who know, including everyone who starts in the same place as the body; everyone else, the POV too, takes the person for alive until they see it or are told. Leaving `lifeKnownBy` out (or empty) means everyone knows, which tells the player; when nobody else knows yet, list the person themself. Old Bram here died in the net loft, and only Silas knows:
 
 ```json
-{ "id": "old_bram", "kind": "person", "name": "Old Bram", "tier": "supporting", "life": "dead", "fields": { "place": "net_loft" }, "relations": [] }
+{ "id": "old_bram", "kind": "person", "name": "Old Bram", "tier": "supporting", "life": "dead", "lifeKnownBy": ["silas"], "fields": { "place": "net_loft" }, "relations": [] }
 ```
 
 - **Cues** are what the narrator sees someone do while a secret of theirs stays hidden. Each cue stands for exactly one secret: a secret `track` (while it hides something), a secret `lore` entry (until its gate holds) or a story `flag` (until it is set). Write behaviour, never the secret, and name no one the POV doesn't know.
@@ -176,6 +176,7 @@ When the source chat already plays a world (`chat_state` says so), the draft sta
 - Every id an item names (a place, an owner, a relation target, a track in a formula) exists.
 - Everyone who has met the POV holds a `knows` or a `regard` toward them.
 - Each person's `life` is their state at the present, and the dead and dying are at the place they lie.
+- A death or dying the POV hasn't learned of sets `lifeKnownBy` to who knows, with everyone who starts where the body lies; left out, it tells the player.
 - Everything someone owns names them in `fields.owner`.
 - Openings are today's balances, and quests start at the stage the story reached.
 - No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: "true"`, so the first turn reveals it.
