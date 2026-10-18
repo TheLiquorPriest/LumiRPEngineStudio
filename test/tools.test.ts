@@ -142,4 +142,15 @@ describe("tool answers", () => {
     host.bookStore.set("book-p", { id: "book-p", owner: USER, name: "Rhea's past", description: "", metadata: {}, entryList: [] });
     expect((await booksFor(host, USER, null, [])).map((b) => [b.id, b.scope])).toEqual([["book-p", "persona"]]);
   });
+
+  test("every answer stays within OUTPUT_LIMIT, however big the sources", async () => {
+    const big = (size: number) => "word ".repeat(size / 5);
+    const lore = Array.from({ length: 1000 }, (_, i) => ({ id: `entry_${i}`, content: i < 12 ? big(20_000) : "short" }));
+    const card = { description: big(50_000), personality: big(50_000), scenario: big(50_000), firstMessage: big(50_000), exampleMessages: big(50_000), creatorNotes: big(50_000), alternateGreetings: [big(50_000)] };
+    const { ctx } = await setup({ lore, card });
+    const answers = [await runTool("lore_list", { book: "book-1" }, ctx), await runTool("lore_read", { ids: lore.slice(0, 12).map((e) => e.id) }, ctx), await runTool("cards_read", {}, ctx), await runTool("transcript_search", { query: "says", limit: 30 }, ctx)];
+    for (const answer of answers) expect(answer.content.length).toBeLessThanOrEqual(OUTPUT_LIMIT);
+    // A list too long for one answer says how to find the rest.
+    expect(answers[0]?.content).toContain("lore_search");
+  });
 });

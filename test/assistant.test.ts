@@ -61,4 +61,35 @@ describe("the assistant's loop", () => {
     // What an older patch touched still goes back, so the model knows what it did.
     expect(inputs[0]).toContain("/places/p1");
   });
+
+  test("Stop ends the run: calls not yet run are skipped, and the model isn't called again", async () => {
+    let stop = (): void => undefined;
+    const rig = await setup(() => {
+      stop();
+      return { content: "", reasoning: "", toolCalls: [{ id: "c1", name: "draft_check", args: {} }], finishReason: "tool_calls" };
+    });
+    stop = () => void rig.studio.assistant.stop(USER, rig.draft.id);
+    const chat = await run(rig);
+    expect(rig.host.modelCalls).toHaveLength(1);
+    expect(chat.find((e) => e.kind === "results")).toMatchObject({ results: [{ name: "draft_check", error: true }] });
+    expect(chat.at(-1)).toMatchObject({ kind: "note" });
+  });
+
+  test("a run that never answers stops at the round limit", async () => {
+    const rig = await setup(() => ({ content: "", reasoning: "", toolCalls: [{ id: "c1", name: "draft_check", args: {} }], finishReason: "tool_calls" }));
+    const chat = await run(rig);
+    const last = chat.at(-1);
+    expect(last?.kind).toBe("note");
+    expect(Number(/after (\d+) model calls/.exec(last?.kind === "note" ? last.text : "")?.[1])).toBe(rig.host.modelCalls.length);
+  });
+
+  test("a failed model call ends the run with what went wrong", async () => {
+    const rig = await setup(() => {
+      throw new Error("rate limited");
+    });
+    const chat = await run(rig);
+    expect(chat.some((e) => e.kind === "assistant")).toBe(false);
+    expect(chat.at(-1)).toMatchObject({ kind: "note" });
+    expect(JSON.stringify(chat.at(-1))).toContain("rate limited");
+  });
 });
