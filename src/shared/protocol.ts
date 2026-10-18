@@ -133,6 +133,7 @@ export type FrontendToBackend = { studio: typeof PROTOCOL; reqId: string } & (
   | { type: "draft.import"; name: string; file: JsonValue }
   | { type: "review.accept"; draftId: string; keys: string[] | null }
   | { type: "review.discard"; draftId: string }
+  | { type: "review.change"; draftId: string; key: string }
   | { type: "assistant.send"; draftId: string; text: string }
   | { type: "assistant.stop"; draftId: string }
   | { type: "install"; draftId: string; mode: "new" | "revision"; worldId: string | null; attachChatId: string | null }
@@ -172,6 +173,7 @@ export interface ResultBodies {
   "draft.import": { draft: DraftView };
   "review.accept": { draft: DraftView };
   "review.discard": { draft: DraftView };
+  "review.change": { before: JsonValue | null; after: JsonValue | null };
   "assistant.send": { started: true };
   "assistant.stop": { stopped: boolean };
   install: { offerId: string; mode: "new" | "revision" };

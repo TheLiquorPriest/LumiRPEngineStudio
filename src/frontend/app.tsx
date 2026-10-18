@@ -423,11 +423,7 @@ function DraftPanel(props: {
           </div>
           <div class="lres-chat">
             {draft.review.changes.map((c) => (
-              <label key={c.key} class="lres-row">
-                <input type="checkbox" checked={!declined.includes(c.key)} onChange={(e) => setDeclined(e.currentTarget.checked ? declined.filter((k) => k !== c.key) : [...declined, c.key])} />
-                <span class="lres-chip">{c.kind}</span>
-                <span class="lres-grow">{c.label}</span>
-              </label>
+              <ChangeRow key={c.key} change={c} ticked={!declined.includes(c.key)} toggle={(ticked) => setDeclined(ticked ? declined.filter((k) => k !== c.key) : [...declined, c.key])} compare={() => client.request({ type: "review.change", draftId: draft.id, key: c.key })} />
             ))}
           </div>
           <div class="lres-row">
@@ -548,5 +544,46 @@ function DraftPanel(props: {
         </div>
       </div>
     </>
+  );
+}
+
+/** One change under review: tick it in or out, and compare the item as the draft holds it with what the assistant proposes. */
+function ChangeRow(props: { change: NonNullable<DraftView["review"]>["changes"][number]; ticked: boolean; toggle(ticked: boolean): void; compare(): Promise<{ before: JsonValue | null; after: JsonValue | null }> }) {
+  const { change } = props;
+  const [shown, setShown] = useState<{ before: JsonValue | null; after: JsonValue | null } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const toggleCompare = () => {
+    if (shown) {
+      setShown(null);
+      return;
+    }
+    setProblem(null);
+    props.compare().then(setShown, (error: unknown) => setProblem(error instanceof Error ? error.message : String(error)));
+  };
+  const json = (value: JsonValue | null, none: string) => <pre style={{ whiteSpace: "pre-wrap", fontSize: "11px", maxHeight: "260px", overflow: "auto", margin: 0 }}>{value === null ? none : JSON.stringify(value, null, 2)}</pre>;
+  return (
+    <div>
+      <div class="lres-row">
+        <input type="checkbox" aria-label={`Take ${change.label}`} checked={props.ticked} onChange={(e) => props.toggle(e.currentTarget.checked)} />
+        <span class="lres-chip">{change.kind}</span>
+        <span class="lres-grow">{change.label}</span>
+        <button type="button" class="lres-btn" onClick={toggleCompare}>
+          {shown ? "Hide" : "Compare"}
+        </button>
+      </div>
+      {problem ? <div class="lres-muted">{problem}</div> : null}
+      {shown ? (
+        <div class="lres-row" style={{ alignItems: "flex-start" }}>
+          <div class="lres-grow">
+            <div class="lres-muted">Now</div>
+            {json(shown.before, "(not in the draft yet)")}
+          </div>
+          <div class="lres-grow">
+            <div class="lres-muted">Proposed</div>
+            {json(shown.after, "(removed)")}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

@@ -15,7 +15,7 @@ import type { EngineBridge } from "./bridge";
 import type { Draft, DraftStore } from "./drafts";
 import { draftIdOk } from "./drafts";
 import type { StudioHost } from "./host";
-import { getAt } from "./pointer";
+import { getAt, parsePointer } from "./pointer";
 import { acceptChanges, changesBetween } from "./review";
 import type { SettingsStore } from "./settings";
 import { booksFor, cardsOf, chatCharacterIds, isEngineBook, ownChat } from "./sources";
@@ -155,6 +155,13 @@ export class Dispatcher {
           d.chat.push({ kind: "note", text: "You discarded the assistant's changes.", at: Date.now() });
         });
         return { draft: this.view(userId, draft) };
+      }
+      case "review.change": {
+        // One change as the draft holds it and as the assistant proposes it, for the review's Compare.
+        const draft = await this.draft(userId, r.draftId);
+        if (!draft.proposed) throw new Error("There is nothing to review.");
+        const at = parsePointer(r.key);
+        return { before: getAt(toJson(draft.doc), at) ?? null, after: getAt(toJson(draft.proposed), at) ?? null };
       }
       case "assistant.send": {
         await this.draft(userId, r.draftId);
