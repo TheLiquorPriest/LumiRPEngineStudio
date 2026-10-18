@@ -1,38 +1,66 @@
 // The assistant's tools on a fake host: what an answer's header says was read is what the model
-// reads, and long sources come back in honest pieces.
+// reads, and long sources come back whole, in honest pieces.
 
 import { describe, expect, test } from "bun:test";
 import { newWorld } from "lumi-rp-engine/studio";
+import type { HostCharacter } from "../src/backend/host";
 import { startStudio } from "../src/backend/main";
 import { SourceReader } from "../src/backend/sources";
 import { OUTPUT_LIMIT, runTool } from "../src/backend/tools";
-import type { DraftSource } from "../src/shared/protocol";
+import type { BookRef, DraftSource } from "../src/shared/protocol";
 import { FakeHost } from "./support/fake-host";
 
 const USER = "UserTools1";
 
-/** Message `i` of a long chat: `size` characters ending in its own marker, so a test can tell it arrived whole. */
+/** Message `i`: `size` characters ending in its own marker, so a test can tell it arrived whole. */
 function message(i: number, size: number): string {
   const end = ` <end ${i}>`;
   return `${`m${i} says `.repeat(Math.ceil(size / 8)).slice(0, size - end.length)}${end}`;
 }
 
-async function setup(options: { messages?: number; size?: number; pasted?: string } = {}) {
+async function setup(options: { messages?: string[]; pasted?: string; lore?: { id: string; content: string }[]; card?: Partial<HostCharacter> } = {}) {
   const host = new FakeHost();
   const studio = startStudio(host);
-  const count = options.messages ?? 40;
+  const messages = options.messages ?? Array.from({ length: 40 }, (_, i) => message(i, 1500));
   host.chatsById.set("chat-long", {
     id: "chat-long",
     owner: USER,
     name: "Long",
     characterId: "",
     metadata: {},
-    messages: Array.from({ length: count }, (_, i) => ({ id: `m${i}`, role: i % 2 === 0 ? ("assistant" as const) : ("user" as const), name: i % 2 === 0 ? "Narrator" : "Rhea", content: message(i, options.size ?? 1500) })),
+    messages: messages.map((content, i) => ({ id: `m${i}`, role: i % 2 === 0 ? ("assistant" as const) : ("user" as const), name: i % 2 === 0 ? "Narrator" : "Rhea", content })),
   });
-  const source: DraftSource = { kind: "chat", label: "Chat: Long", chatId: "chat-long", characterIds: [], books: [], pasted: options.pasted ? [{ title: "Notes", text: options.pasted }] : [], worldId: null };
+  const books: BookRef[] = [];
+  if (options.lore) {
+    host.bookStore.set("book-1", { id: "book-1", owner: USER, name: "Lore", description: "", metadata: {}, entryList: options.lore.map((e) => ({ id: e.id, comment: e.id, keys: [], content: e.content, disabled: false, constant: false })) });
+    books.push({ id: "book-1", name: "Lore", scope: "picked" });
+  }
+  const characterIds: string[] = [];
+  if (options.card) {
+    host.cards.set("char-1", { id: "char-1", owner: USER, name: "Silas", description: "", personality: "", scenario: "", firstMessage: "", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: [], ...options.card });
+    characterIds.push("char-1");
+  }
+  const source: DraftSource = { kind: "chat", label: "Chat: Long", chatId: "chat-long", characterIds, books, pasted: options.pasted ? [{ title: "Notes", text: options.pasted }] : [], worldId: null };
   const draft = await studio.drafts.create(USER, { name: "Long", source, doc: newWorld("long", "Long"), link: null });
   const ctx = { userId: USER, draftId: draft.id, drafts: studio.drafts, reader: new SourceReader(host, USER, source), bridge: studio.bridge };
   return { host, studio, draft, ctx };
+}
+
+/** Reads a long text piece by piece, following each answer's `offset=` hint, checking every header names what its piece holds. */
+async function readAll(read: (offset: number) => Promise<string>, whole: string, first: string): Promise<number> {
+  let offset = Number(/offset=(\d+)/.exec(first)?.[1]);
+  expect(first).toContain(whole.slice(0, offset));
+  let pieces = 1;
+  while (offset < whole.length && pieces < 10) {
+    const next = await read(offset);
+    const [, a, b] = /characters (\d+)–(\d+) of/i.exec(next) ?? [];
+    expect([Number(a), next.length <= OUTPUT_LIMIT]).toEqual([offset, true]);
+    expect(next).toContain(whole.slice(Number(a), Number(b)));
+    offset = Number(b);
+    pieces++;
+  }
+  expect(offset).toBe(whole.length);
+  return pieces;
 }
 
 describe("tool answers", () => {
@@ -71,5 +99,31 @@ describe("tool answers", () => {
     expect(first.content).toContain(`${pasted.slice(0, Number(b))}\n\n(Read on with offset=${b}.)`);
     const second = await runTool("pasted_read", { index: 0, offset: Number(b) }, ctx);
     expect(second.content).toContain(pasted.slice(Number(b), Number(b) + 200));
+  });
+
+  test("a message longer than one answer is read whole, piece by piece", async () => {
+    const long = message(3, 50_000);
+    const { ctx } = await setup({ messages: [message(0, 500), message(1, 500), message(2, 5000), long, message(4, 500)] });
+    // A 5,000-character message is no longer cut short.
+    expect((await runTool("transcript_read", { from: 2, count: 1 }, ctx)).content).toContain(message(2, 5000));
+    const first = await runTool("transcript_read", { from: 3 }, ctx);
+    expect(first.content).toContain("Message 3 of 5, in part");
+    const pieces = await readAll(async (offset) => (await runTool("transcript_read", { from: 3, offset }, ctx)).content, long, first.content);
+    expect(pieces).toBe(3);
+  });
+
+  test("a long lore entry and a long card field are read whole", async () => {
+    const entry = `${"The guild's charter runs on. ".repeat(1100)}<end of charter>`;
+    const description = `${"Silas keeps the harbor books. ".repeat(400)}<end of description>`;
+    const { ctx } = await setup({ lore: [{ id: "charter", content: entry }, { id: "short", content: `${"Short. ".repeat(1500)}<end of short>` }], card: { description } });
+    // An entry of 10,500 characters is no longer cut at 8,000.
+    expect((await runTool("lore_read", { ids: ["short"] }, ctx)).content).toContain("<end of short>");
+    const first = await runTool("lore_read", { ids: ["charter", "short"] }, ctx);
+    expect(first.content).toContain("Not read, to keep this answer whole: short");
+    await readAll(async (offset) => (await runTool("lore_read", { ids: ["charter"], offset }, ctx)).content, entry, first.content);
+    const overview = await runTool("cards_read", {}, ctx);
+    expect(overview.content).toContain('cards_read name="Silas" field="description" offset=6000');
+    const field = await runTool("cards_read", { name: "Silas", field: "description" }, ctx);
+    expect(field.content).toContain(description);
   });
 });
