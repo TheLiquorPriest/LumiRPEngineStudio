@@ -9,11 +9,13 @@ import { FakeHost } from "./support/fake-host";
 
 const USER = "UserLoop1";
 
-async function setup(script: (n: number, request: ModelRequest) => ModelReply) {
+async function setup(script: (n: number, request: ModelRequest) => ModelReply, messages: string[] = []) {
   const host = new FakeHost();
   const studio = startStudio(host);
   host.model = (request, n) => script(n, request);
-  const source: DraftSource = { kind: "blank", label: "Blank", chatId: null, characterIds: [], books: [], pasted: [], worldId: null };
+  const chatId = messages.length > 0 ? "chat-1" : null;
+  if (chatId) host.chatsById.set(chatId, { id: chatId, owner: USER, name: "Harbor", characterId: "", metadata: {}, messages: messages.map((content, i) => ({ id: `m${i}`, role: i % 2 === 0 ? ("assistant" as const) : ("user" as const), name: i % 2 === 0 ? "Silas" : "Rhea", content })) });
+  const source: DraftSource = { kind: chatId ? "chat" : "blank", label: chatId ? "Chat: Harbor" : "Blank", chatId, characterIds: [], books: [], pasted: [], worldId: null };
   const draft = await studio.drafts.create(USER, { name: "Loop", source, doc: newWorld("loop", "Loop"), link: null });
   return { host, studio, draft };
 }
@@ -91,5 +93,27 @@ describe("the assistant's loop", () => {
     expect(chat.some((e) => e.kind === "assistant")).toBe(false);
     expect(chat.at(-1)).toMatchObject({ kind: "note" });
     expect(JSON.stringify(chat.at(-1))).toContain("rate limited");
+  });
+
+  test("every answer of a round reaches the model whole: calls that wouldn't fit in it aren't run, and say so", async () => {
+    // 200 messages of about 1,500 characters: a read of 15 brings about 22,000, so eight in one round ask for more than the run's budget.
+    const messages = Array.from({ length: 200 }, (_, i) => `<${i}> ${"The rain kept on over the harbor. ".repeat(45)}</${i}>`);
+    const reads = Array.from({ length: 8 }, (_, i) => ({ id: `t${i}`, name: "transcript_read", args: { from: i * 15, count: 15 } }));
+    const rig = await setup((n) => (n === 1 ? { content: "", reasoning: "", toolCalls: reads, finishReason: "tool_calls" } : answer("Read.")), messages);
+    await run(rig, "Convert this chat.");
+    const results = (rig.host.modelCalls[1]?.messages ?? []).flatMap((m) => (Array.isArray(m.content) ? m.content : [])).flatMap((p) => (p.type === "tool_result" ? [p] : []));
+    expect(results).toHaveLength(8);
+    const read = results.filter((r) => r.isError !== true);
+    const skipped = results.filter((r) => r.isError === true);
+    expect([read.length > 4, skipped.length > 0]).toEqual([true, true]);
+    // The calls that didn't fit are the last ones, and none of them read anything.
+    expect(results.map((r) => r.isError === true)).toEqual([...read.map(() => false), ...skipped.map(() => true)]);
+    for (const r of skipped) expect(r.content).not.toContain("<");
+    // Every message an answer's header names is there, to its end.
+    for (const r of read) {
+      const [, a, b] = /^Messages (\d+)–(\d+) of 200/.exec(r.content) ?? [];
+      expect(Number(b)).toBeGreaterThan(Number(a));
+      for (let i = Number(a); i <= Number(b); i++) expect(r.content).toContain(`</${i}>`);
+    }
   });
 });

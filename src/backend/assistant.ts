@@ -17,13 +17,19 @@ import { jsonEqual } from "./pointer";
 import type { SettingsStore } from "./settings";
 import { SourceReader } from "./sources";
 import { GUIDE } from "./texts";
-import { runTool, TOOLS } from "./tools";
+import { OUTPUT_LIMIT, runTool, TOOLS } from "./tools";
 
 /** Room for a thinking model's reasoning and a large patch in one answer. */
 const MAX_TOKENS = 8192;
 const CALL_TIMEOUT_MS = 240_000;
-/** The run's tool results sent back in full, newest first; older ones go back trimmed. */
+/**
+ * What a run's tool answers may take when they go back to the model. A round's answers always go
+ * back whole, so the loop runs no call that might take its round past this; older rounds, which
+ * the model read whole when they came, share what is left, newest first, and the rest go back
+ * shortened, saying so.
+ */
 const RUN_BUDGET = 160_000;
+/** How much of an older answer past the budget goes back. */
 const TRIMMED = 600;
 /** The run's latest assistant turns whose call arguments go back whole; older ones go back in short. */
 const CALLS_KEPT = 2;
@@ -49,10 +55,6 @@ How you work:
 - Keep secrets secret: a truth lives in a secret track stage's "truth" or a secret lore entry with a gate, and no public text repeats it.
 - You can't install anything. The user installs from the Studio and confirms in LumiRPEngine.
 - When you finish, answer in a few sentences: what the world holds now, what you assumed, and what the user should check.`;
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max)} …[trimmed]` : text;
-}
 
 /** The draft and its sources as the model starts each round with them. */
 export function systemPrompt(draft: Draft, sources: string, chatState: EngineChatSummary | null): string {
@@ -98,9 +100,10 @@ export async function describeSources(reader: SourceReader): Promise<string> {
 }
 
 /**
- * The conversation as model messages: the run under way with its tool calls and results (older
- * calls' arguments in short), earlier runs as plain text. A note made while tools ran waits until their results, which
- * must follow the call directly.
+ * The conversation as model messages: the run under way with its tool calls and results, earlier
+ * runs as plain text. The newest round's answers go back whole; older calls' arguments go back in
+ * short, and older answers past RUN_BUDGET shortened. A note made while tools ran waits until their
+ * results, which must follow the call directly.
  */
 export function modelMessages(system: string, chat: readonly ChatEntry[], run: number): ModelMessage[] {
   const out: ModelMessage[] = [{ role: "system", content: system }];
@@ -109,17 +112,16 @@ export function modelMessages(system: string, chat: readonly ChatEntry[], run: n
     if (last && last.role === role && typeof last.content === "string") last.content = `${last.content}\n\n${text}`;
     else out.push({ role, content: text });
   };
-  // Newest results first get their full text, within the run's budget.
-  const full = new Set<StoredResult>();
-  let used = 0;
-  for (let i = chat.length - 1; i >= 0; i--) {
-    const e = chat[i];
-    if (e?.kind !== "results" || e.run !== run) continue;
-    for (const r of e.results) {
-      if (used + r.content.length > RUN_BUDGET) continue;
-      full.add(r);
-      used += r.content.length;
-    }
+  // The newest round is what the model hasn't read yet: whole, always (the loop keeps a round within
+  // RUN_BUDGET). Older rounds share what is left, newest first; from the first answer that doesn't
+  // fit, the older ones are shortened.
+  const rounds = chat.filter((e): e is Extract<ChatEntry, { kind: "results" }> => e.kind === "results" && e.run === run);
+  const full = new Set<StoredResult>(rounds.at(-1)?.results);
+  let left = RUN_BUDGET - [...full].reduce((n, r) => n + r.content.length, 0);
+  for (const r of rounds.slice(0, -1).reverse().flatMap((e) => e.results)) {
+    if (r.content.length > left) break;
+    full.add(r);
+    left -= r.content.length;
   }
   const whole = new Set<ChatEntry>(chat.filter((e) => e.kind === "assistant" && e.run === run && e.calls.length > 0).slice(-CALLS_KEPT));
   const waiting: string[] = [];
@@ -140,7 +142,7 @@ export function modelMessages(system: string, chat: readonly ChatEntry[], run: n
       out.push({ role: "assistant", content: parts, ...(e.reasoning ? { reasoning: e.reasoning } : {}) });
       calling = true;
     } else if (e.run === run && calling) {
-      out.push({ role: "user", content: e.results.map((r): ModelPart => ({ type: "tool_result", toolUseId: r.id, content: full.has(r) ? r.content : clip(r.content, TRIMMED), isError: r.error })) });
+      out.push({ role: "user", content: e.results.map((r): ModelPart => ({ type: "tool_result", toolUseId: r.id, content: full.has(r) || r.content.length <= TRIMMED ? r.content : `${r.content.slice(0, TRIMMED)} …[the rest of this earlier answer is left out to save room; you read it whole when it came]`, isError: r.error })) });
       calling = false;
       for (const text of waiting.splice(0)) say("user", text);
     }
@@ -262,8 +264,16 @@ export class Assistant {
         break;
       }
       const results: StoredResult[] = [];
+      // A round's answers all go back to the model whole, so a round takes at most RUN_BUDGET: once
+      // the next answer might not fit, that call and the rest aren't run, and say so.
+      let room = RUN_BUDGET;
       for (const call of calls) {
-        const outcome = signal.aborted ? { content: "The user stopped the assistant before this ran.", error: true, summary: "Stopped", changed: false } : await runTool(call.name, call.args, ctx);
+        const outcome = signal.aborted
+          ? { content: "The user stopped the assistant before this ran.", error: true, summary: "Stopped", changed: false }
+          : room < OUTPUT_LIMIT
+            ? { content: `Not run: this round's calls asked for more than can come back to you at once. Call ${call.name} again on its own.`, error: true, summary: "Not run: the round asked for too much", changed: false }
+            : await runTool(call.name, call.args, ctx);
+        room -= outcome.content.length;
         // Kept whole: a tool's answer never passes OUTPUT_LIMIT (tools.ts), so the model reads what its header says.
         results.push({ id: call.id, name: call.name, content: outcome.content, error: outcome.error, summary: outcome.summary });
         this.activity(userId, draftId, { kind: "tool", name: call.name, summary: outcome.summary, error: outcome.error, at: Date.now() });
