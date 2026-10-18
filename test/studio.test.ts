@@ -248,3 +248,16 @@ describe("drafts from a world chat", () => {
     expect([draft.link?.worldId, draft.name]).toEqual(["w_harbor", "Harbor"]);
   });
 });
+
+describe("offers", () => {
+  test("a new offer replaces the last one, and an offer can be withdrawn", async () => {
+    const { host, studio, send } = rig();
+    const first = (await send("draft.create", { name: "First", source: { kind: "blank" } })).draft;
+    const second = (await send("draft.create", { name: "Second", source: { kind: "blank" } })).draft;
+    await send("install", { draftId: first.id, mode: "new", worldId: null, attachChatId: null });
+    await send("install", { draftId: second.id, mode: "new", worldId: null, attachChatId: null });
+    expect((await studio.drafts.get(USER, first.id))?.offer ?? null).toBeNull();
+    expect((await send("offer.withdraw", { draftId: second.id })).draft.offer).toBeNull();
+    expect(await host.pool.read(`${STUDIO_EXTENSION}.offer.${channelId(USER)}`, ENGINE_EXTENSION)).toBeNull();
+  });
+});

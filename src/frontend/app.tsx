@@ -78,7 +78,7 @@ export function App(props: { client: Client; host: FrontendHost }) {
       void client.request({ type: "installed", ...installed }).then((r) => {
         if (r.draft && r.draft.id === open.current) setDraft(r.draft);
         if (r.draft) setNotice({ text: `LumiRPEngine installed “${r.draft.name}”.`, error: false });
-      });
+      }, (error: unknown) => setNotice({ text: `The Studio couldn't record what LumiRPEngine installed: ${error instanceof Error ? error.message : String(error)}`, error: true }));
     };
     window.addEventListener(STATE_EVENT, onState);
     window.addEventListener(INSTALLED_EVENT, onInstalled);
@@ -191,7 +191,6 @@ function NewDraft(props: { client: Client; chatId: string | null; busy: boolean;
 
   useEffect(() => {
     setProblem(null);
-    setPick("");
     const load = async () => {
       if (kind === "chat" && props.chatId) setChat((await client.request({ type: "pick.chat", chatId: props.chatId })).chat);
       if (kind === "character" && !characters) setCharacters((await client.request({ type: "pick.characters" })).items);
@@ -215,7 +214,7 @@ function NewDraft(props: { client: Client; chatId: string | null; busy: boolean;
       <input class="lres-input" placeholder="Name (optional)" aria-label="Draft name" value={name} onInput={(e) => setName(e.currentTarget.value)} />
       <div class="lres-row">
         {(Object.keys(KIND_LABEL) as Kind[]).map((k) => (
-          <button key={k} type="button" class={k === kind ? "lres-btn primary" : "lres-btn"} disabled={k === "chat" && !props.chatId} onClick={() => setKind(k)}>
+          <button key={k} type="button" class={k === kind ? "lres-btn primary" : "lres-btn"} disabled={k === "chat" && !props.chatId} onClick={() => (setKind(k), setPick(""))}>
             {KIND_LABEL[k]}
           </button>
         ))}
@@ -485,7 +484,14 @@ function DraftPanel(props: {
 
       <div class="lres-card" data-lres-actions>
         <div class="lres-h">Actions</div>
-        {draft.offer ? <div class="lres-banner">Offered to LumiRPEngine ({draft.offer.mode === "new" ? "a new world" : "a new revision"}): review and install it in LumiRPEngine's Build tab.</div> : null}
+        {draft.offer ? (
+          <div class="lres-banner">
+            Offered to LumiRPEngine ({draft.offer.mode === "new" ? "a new world" : "a new revision"}): review and install it in LumiRPEngine's Build tab.{" "}
+            <button type="button" class="lres-btn" disabled={draft.running} onClick={() => void act(async () => props.setDraft((await client.request({ type: "offer.withdraw", draftId: draft.id })).draft))}>
+              Withdraw
+            </button>
+          </div>
+        ) : null}
         <div class="lres-row">
           <button type="button" class="lres-btn" onClick={() => void act(async () => (props.setDraft((await client.request({ type: "draft.validate", draftId: draft.id })).draft), props.notify("Checked with the engine: the problems are listed under the draft.")))}>
             Validate

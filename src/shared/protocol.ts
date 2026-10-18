@@ -138,6 +138,7 @@ export type FrontendToBackend = { studio: typeof PROTOCOL; reqId: string } & (
   | { type: "review.change"; draftId: string; key: string }
   | { type: "assistant.send"; draftId: string; text: string }
   | { type: "assistant.stop"; draftId: string }
+  | { type: "offer.withdraw"; draftId: string }
   | { type: "install"; draftId: string; mode: "new" | "revision"; worldId: string | null; attachChatId: string | null }
   | { type: "installed"; offerId: string; mode: "new" | "revision"; worldId: string; revision: string }
   | { type: "pick.characters" }
@@ -178,6 +179,7 @@ export interface ResultBodies {
   "review.change": { before: JsonValue | null; after: JsonValue | null };
   "assistant.send": { started: true };
   "assistant.stop": { stopped: boolean };
+  "offer.withdraw": { draft: DraftView };
   install: { offerId: string; mode: "new" | "revision" };
   installed: { draft: DraftView | null };
   "pick.characters": { items: { id: string; name: string }[] };

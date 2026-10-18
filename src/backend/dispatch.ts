@@ -171,6 +171,16 @@ export class Dispatcher {
       }
       case "assistant.stop":
         return { stopped: this.assistant.stop(userId, r.draftId) };
+      case "offer.withdraw": {
+        const draft = await this.draft(userId, r.draftId);
+        if (draft.offer) await this.bridge.withdraw(userId, draft.offer.offerId);
+        const updated = await this.drafts.update(userId, r.draftId, (d) => {
+          if (!d.offer) return;
+          d.offer = null;
+          d.chat.push({ kind: "note", text: "You withdrew the offer, so LumiRPEngine no longer sees it.", at: Date.now() });
+        });
+        return { draft: this.view(userId, updated) };
+      }
       case "install":
         return this.install(userId, r.draftId, r.mode, r.worldId, r.attachChatId);
       case "installed": {
@@ -269,7 +279,18 @@ export class Dispatcher {
     if (attachChatId) await ownChat(this.host, userId, attachChatId);
     const doc: WorldDoc = worldId ? { ...loaded.world, id: worldId } : loaded.world;
     const offer: StudioOffer = { offerId: `o_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`, doc: toJson(doc), mode, ...(worldId ? { worldId } : {}), ...(worldId && worldId === draft.link?.worldId && draft.link.revision ? { baseRevision: draft.link.revision } : {}), ...(attachChatId ? { attachChatId } : {}), createdAt: Date.now() };
+    const replaced = await this.bridge.pending(userId);
     await this.bridge.publish(userId, draftId, offer);
+    // The new offer replaces any other: the draft that made that one no longer has it waiting.
+    if (replaced && replaced.draftId !== draftId) {
+      await this.drafts
+        .update(userId, replaced.draftId, (d) => {
+          if (d.offer?.offerId !== replaced.offer.offerId) return;
+          d.offer = null;
+          d.chat.push({ kind: "note", text: "Another draft's offer replaced this one in LumiRPEngine.", at: Date.now() });
+        })
+        .catch(() => undefined);
+    }
     await this.drafts.update(userId, draftId, (d) => {
       d.offer = { offerId: offer.offerId, mode, createdAt: offer.createdAt };
       d.chat.push({ kind: "note", text: `Offered to LumiRPEngine as ${mode === "new" ? "a new world" : `a new revision of world ${worldId}`}${attachChatId ? ", to attach to a chat" : ""}. Review and install it in LumiRPEngine's Build tab.`, at: offer.createdAt });
