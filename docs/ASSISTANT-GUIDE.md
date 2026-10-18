@@ -4,7 +4,7 @@ This guide is what the Studio's assistant works from, and what you can read to k
 
 ## The goal
 
-A converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.
+A converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were (the dead where they lie), everyone who has met the POV knows them, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.
 
 ## Working order
 
@@ -41,6 +41,17 @@ A converted world starts where the story is now. When the chat attaches it, the 
 An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tags in `tags`.
 
 - **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ "type": "member_of", "to": "harbor_guild", "fields": { "role": "Quartermaster" } }`.
+- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `"dying"`, someone who died is `"dead"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ "unconscious": { "label": "Unconscious", "acts": false, "reads": "lies unconscious" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`.
+
+```json
+{ "id": "old_bram", "kind": "person", "name": "Old Bram", "tier": "supporting", "life": "dead", "fields": { "place": "net_loft" }, "relations": [] }
+```
+
+- **Cues** are what the narrator sees someone do while a secret of theirs stays hidden. Each cue stands for exactly one secret: a secret `track` (while it hides something), a secret `lore` entry (until its gate holds) or a story `flag` (until it is set). Write behaviour, never the secret, and name no one the POV doesn't know.
+
+```json
+"cues": [{ "text": "Changes the subject whenever the guild comes up.", "track": "silas_debt" }]
+```
 
 ## Places, routes and maps
 
@@ -87,6 +98,7 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 ```
 
 - **Knowledge.** `{ "type": "knows", "to": "harbor_guild" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.
+- **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ "type": "knows", "to": "rhea" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger ("Silas doesn't know you."), so a person the POV spent the chat with would greet them as one.
 - **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.
 - **Things** are where they are: `fields.place` for something lying somewhere, `{ "type": "in", "to": "rhea" }` for something carried, `owns` for ownership.
 
@@ -102,7 +114,7 @@ A track is a small state machine: `start` names its first stage, and each stage'
   "found": { "label": "The ledger is found", "next": [] } } }
 ```
 
-- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet.
+- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above).
 
 ```json
 { "id": "silas_debt", "kind": "secret", "label": "What Silas owes", "visibility": "secret", "owner": "silas", "start": "rumor", "stages": {
@@ -162,6 +174,8 @@ When the source chat already plays a world (`chat_state` says so), the draft sta
 - `draft_check` has no errors.
 - The POV exists, stands at the start place, and the start time is the story's present.
 - Every id an item names (a place, an owner, a relation target, a track in a formula) exists.
+- Everyone who has met the POV holds a `knows` or a `regard` toward them.
+- Each person's `life` is their state at the present, and the dead and dying are at the place they lie.
 - Openings are today's balances, and quests start at the stage the story reached.
 - No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: "true"`, so the first turn reveals it.
-- No public text gives a secret away.
+- No public text gives a secret away, and no cue states the secret it stands for.
