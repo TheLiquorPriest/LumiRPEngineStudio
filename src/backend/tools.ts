@@ -451,7 +451,9 @@ async function run(name: string, args: JsonObject, ctx: ToolContext): Promise<To
     }
     case "draft_patch": {
       if (!Array.isArray(args.ops) || args.ops.length === 0) return refused("Give ops: a list of JSON Patch operations.", "No operations");
-      const ops = args.ops.slice(0, 200).map((raw, i) => readOp(raw, i));
+      // Refused whole rather than cut short: a patch applied in part would leave the model believing all of it landed.
+      if (args.ops.length > 200) return refused(`That is ${args.ops.length} operations; send at most 200 in one draft_patch (about 40 makes a good batch). Nothing was changed.`, `Refused ${args.ops.length} operations`);
+      const ops = args.ops.map((raw, i) => readOp(raw, i));
       let report = { text: "", errors: 0, warnings: 0 };
       await ctx.drafts.update(ctx.userId, ctx.draftId, (draft) => {
         // An unchecked cast: the patch can write anything, and the check below reads what it wrote.

@@ -126,4 +126,12 @@ describe("tool answers", () => {
     const field = await runTool("cards_read", { name: "Silas", field: "description" }, ctx);
     expect(field.content).toContain(description);
   });
+
+  test("a patch of more than 200 operations is refused whole, not cut short", async () => {
+    const { ctx, studio, draft } = await setup();
+    const ops = Array.from({ length: 201 }, (_, i) => ({ op: "add", path: `/places/p${i}`, value: { id: `p${i}`, name: `Place ${i}`, fields: {} } }));
+    const out = await runTool("draft_patch", { ops }, ctx);
+    expect(out.error).toBe(true);
+    expect((await studio.drafts.get(USER, draft.id))?.proposed ?? null).toBeNull();
+  });
 });
