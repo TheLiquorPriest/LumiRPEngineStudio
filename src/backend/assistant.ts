@@ -7,6 +7,8 @@
 
 import { ENGINE_VERSION } from "../engine";
 import type { EngineChatSummary } from "../shared/bridge";
+import { isRecord } from "../shared/json";
+import type { JsonObject } from "../shared/json";
 import type { ChatLine } from "../shared/protocol";
 import type { EngineBridge } from "./bridge";
 import type { ChatEntry, Draft, DraftStore, StoredResult } from "./drafts";
@@ -23,6 +25,12 @@ const CALL_TIMEOUT_MS = 240_000;
 /** The run's tool results sent back in full, newest first; older ones go back trimmed. */
 const RUN_BUDGET = 160_000;
 const TRIMMED = 600;
+/** The run's latest assistant turns whose call arguments go back whole; older ones go back in short. */
+const CALLS_KEPT = 2;
+/** Arguments longer than this go back in short from an older turn. */
+const ARGS_KEPT = 600;
+/** Paths of an older patch listed when it goes back in short. */
+const PATHS_KEPT = 40;
 /** Finish reasons that mean the answer hit its token limit: OpenAI-compatible `length`, Anthropic `max_tokens`, Gemini `MAX_TOKENS`. */
 const CUT_OFF = /^(length|max_tokens|max_output_tokens)$/i;
 /** Cut-off answers in a row after which the run stops instead of asking again. */
@@ -62,6 +70,20 @@ export function systemPrompt(draft: Draft, sources: string, chatState: EngineCha
   ].join("\n\n");
 }
 
+/**
+ * A call's arguments as an older turn sends them back: a patch as the operations and paths it
+ * applied (its values are in the draft, for draft_read), anything else long as its opening. A long
+ * run would otherwise send every patch's full values back with each call.
+ */
+function shortArgs(name: string, args: JsonObject): JsonObject {
+  if (name === "draft_patch" && Array.isArray(args.ops)) {
+    const ops = args.ops.flatMap((op) => (isRecord(op) && typeof op.op === "string" && typeof op.path === "string" ? [`${op.op} ${op.path}`] : []));
+    return { sent_in_short: `${ops.length} operation${ops.length === 1 ? "" : "s"}: ${ops.slice(0, PATHS_KEPT).join(", ")}${ops.length > PATHS_KEPT ? ", …" : ""}` };
+  }
+  const json = JSON.stringify(args);
+  return json.length > ARGS_KEPT ? { sent_in_short: `${json.slice(0, ARGS_KEPT)}…` } : args;
+}
+
 /** What the draft's sources hold, in a few lines. */
 export async function describeSources(reader: SourceReader): Promise<string> {
   const s = reader.source;
@@ -75,8 +97,8 @@ export async function describeSources(reader: SourceReader): Promise<string> {
 }
 
 /**
- * The conversation as model messages: the run under way with its tool calls and results as they
- * were, earlier runs as plain text. A note made while tools ran waits until their results, which
+ * The conversation as model messages: the run under way with its tool calls and results (older
+ * calls' arguments in short), earlier runs as plain text. A note made while tools ran waits until their results, which
  * must follow the call directly.
  */
 export function modelMessages(system: string, chat: readonly ChatEntry[], run: number): ModelMessage[] {
@@ -98,6 +120,7 @@ export function modelMessages(system: string, chat: readonly ChatEntry[], run: n
       used += r.content.length;
     }
   }
+  const whole = new Set<ChatEntry>(chat.filter((e) => e.kind === "assistant" && e.run === run && e.calls.length > 0).slice(-CALLS_KEPT));
   const waiting: string[] = [];
   let calling = false;
   for (const e of chat) {
@@ -112,7 +135,7 @@ export function modelMessages(system: string, chat: readonly ChatEntry[], run: n
         if (text) say("assistant", text);
         continue;
       }
-      const parts: ModelPart[] = [...(e.text ? [{ type: "text" as const, text: e.text }] : []), ...e.calls.map((c): ModelPart => ({ type: "tool_use", id: c.id, name: c.name, input: c.args, ...(c.signature ? { signature: c.signature } : {}) }))];
+      const parts: ModelPart[] = [...(e.text ? [{ type: "text" as const, text: e.text }] : []), ...e.calls.map((c): ModelPart => ({ type: "tool_use", id: c.id, name: c.name, input: whole.has(e) ? c.args : shortArgs(c.name, c.args), ...(c.signature ? { signature: c.signature } : {}) }))];
       out.push({ role: "assistant", content: parts, ...(e.reasoning ? { reasoning: e.reasoning } : {}) });
       calling = true;
     } else if (e.run === run && calling) {

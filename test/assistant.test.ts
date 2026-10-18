@@ -50,4 +50,15 @@ describe("the assistant's loop", () => {
     expect(rig.host.modelCalls).toHaveLength(3);
     expect(chat.at(-1)).toMatchObject({ kind: "note" });
   });
+
+  test("a run's older calls go back to the model in short, its latest two whole", async () => {
+    const long = "A long description of the place, written out in full. ".repeat(60);
+    const patch = (n: number): ModelReply => ({ content: "", reasoning: "", toolCalls: [{ id: `c${n}`, name: "draft_patch", args: { ops: [{ op: "add", path: `/places/p${n}`, value: { id: `p${n}`, name: `Place ${n}`, fields: { description: long } } }] } }], finishReason: "tool_calls" });
+    const rig = await setup((n) => (n <= 4 ? patch(n) : answer("Done.")));
+    await run(rig);
+    const inputs = (rig.host.modelCalls[4]?.messages ?? []).flatMap((m) => (Array.isArray(m.content) ? m.content : [])).flatMap((p) => (p.type === "tool_use" ? [JSON.stringify(p.input)] : []));
+    expect(inputs.map((i) => i.includes(long))).toEqual([false, false, true, true]);
+    // What an older patch touched still goes back, so the model knows what it did.
+    expect(inputs[0]).toContain("/places/p1");
+  });
 });
