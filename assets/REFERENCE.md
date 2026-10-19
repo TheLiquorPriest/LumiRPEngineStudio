@@ -4,7 +4,7 @@
 
 What the engine and its packs register, as the registry has it: kinds and their fields, effects and the arguments they read, formula functions, actions, events, proposal channels, panels, slots, data tables and lint codes. Arguments and parameters marked `?` may be left out. The formula language is in [EXPRESSIONS.md](EXPRESSIONS.md), worked examples are in [RECIPES.md](RECIPES.md), and the [user guide](USER-GUIDE.md#authoring) shows the editors.
 
-Engine `0.1.0` · world format `lre-world-v1` · packs `engine` 1, `calendar` 1, `space` 1, `economy` 1, `gear` 1, `vehicles` 1, `weather` 1, `relationships` 1, `castlife` 1, `sheets` 1, `story` 1, `combat` 1.
+Engine `0.1.0` · world format `lre-world-v1` · packs `engine` 1, `calendar` 1, `space` 1, `economy` 1, `gear` 1, `vehicles` 1, `weather` 1, `relationships` 1, `castlife` 1, `sheets` 1, `story` 1, `combat` 1, `minds` 1.
 
 ## Contents
 
@@ -14,6 +14,7 @@ Engine `0.1.0` · world format `lre-world-v1` · packs `engine` 1, `calendar` 1,
 - [Combat pack](#combat-pack-combat)
 - [Economy pack](#economy-pack-economy)
 - [Gear & containers pack](#gear--containers-pack-gear)
+- [Minds pack](#minds-pack-minds)
 - [Relationships pack](#relationships-pack-relationships)
 - [Character sheets pack](#character-sheets-pack-sheets)
 - [Space & travel pack](#space--travel-pack-space)
@@ -108,17 +109,21 @@ Built in: `in`, `owns`, `uses`, `worn_by`, `equipped`, `knows`, `member_of`, `re
 |---|---|
 | `brief` | `text` |
 | `choices` | `text`, `effects` |
+| `consolidate` | `text` |
 | `contradiction` | `decision`, `text`, `effects` |
 | `extract` | `text`, `effects` |
 | `interpret` | `decision`, `text` |
 | `judge` | `decision`, `text` |
+| `memory` | `text` |
+| `mind` | `text` |
 | `npc.choose` | `decision`, `text` |
 | `outline` | `text` |
 | `puzzle.answer` | `decision`, `text` |
+| `skip` | `text` |
 
 Signals: `agents_present`, `always`, `beat`, `classifier`, `conflict`, `day_start`, `invitation`, `never`, `offscreen`, `present`, `reply`, `scene_change`, `slot_crossed`, `tie_zone`, `timelapse`, `typed_input`, and `every_n:<k>`.
 
-Template placeholders: `beats`, `brief`, `clock`, `facts`, `outcome`, `place`, `pov`, `present`, `recent`, `reply`, `scene`, `user`, `world`.
+Template placeholders: `beats`, `brief`, `character`, `clock`, `facts`, `outcome`, `place`, `pov`, `present`, `recent`, `reply`, `scene`, `user`, `world`.
 
 ### Sections
 
@@ -136,6 +141,7 @@ The slots a world gets when it defines none, kept in rank order on the section b
 | `quest` | Quest | 7 |
 | `outline` | Outline | 8 |
 | `stance` | Stance | 9 |
+| `minds` | Minds | 10 |
 
 ### Realism
 
@@ -240,7 +246,7 @@ Panels: `castlife.cast`. Slots it writes: `people`, `stance`.
 
 ### Lint codes
 
-`castlife.cues`, `castlife.double_booking`.
+`castlife.birthday`, `castlife.cues`, `castlife.double_booking`.
 
 ## Combat pack (`combat`)
 
@@ -300,61 +306,308 @@ Version 1 · realism domain `money` · requires `space`.
 |---|---|---|---|---|---|---|---|
 | `apr_pct` | APR % | number | ≥ 0 |  |  |  | live from money 4 |
 | `apy_pct` | APY % | number | ≥ 0 |  |  |  | live from money 4 |
-| `autopay` | Autopay | text |  | `"none"` |  |  | live from money 3 |
-| `due_day` | Due day of month | number | 1 … 31 |  |  |  | live from money 4 |
+| `autopay` | Autopay | enum: none, minimum, statement, full, fixed |  | `"none"` |  |  | live from money 3 |
+| `autopay_cents` | Autopay amount (fixed) | money | ≥ 0 |  |  |  | live from money 3 |
+| `autopay_from` | Autopay from | ref → account |  |  |  |  | live from money 3 |
+| `due_day` | Due day of month | number | 1 … 31 |  |  |  | live from money 3 |
 | `institution` | Institution | text |  |  |  |  | live from money 3 |
 | `limit` | Credit limit | money | ≥ 0 |  |  |  | live from money 3 |
-| `min_floor` | Minimum payment floor | money |  | `3500` |  |  | live from money 4 |
-| `min_pct` | Minimum payment % of balance | number |  | `1` |  |  | live from money 4 |
+| `min_floor` | Minimum payment floor | money | ≥ 0 |  |  |  | live from money 4 |
+| `min_pct` | Minimum payment % of balance | number | 0 … 100 |  |  |  | live from money 4 |
+| `months_left` | Months left (loans) | number | ≥ 0 |  |  |  | live from money 3 |
+| `opened` | Opened | date |  |  |  |  | live from money 4 |
 | `opening` | Opening balance | money |  |  |  |  | locked |
-| `owner` | Owner | ref |  |  |  |  | live from money 2 |
-| `payment` | Loan payment | money |  |  |  |  | live from money 4 |
-| `remaining_months` | Months left (loans) | number | ≥ 0 |  |  |  | live from money 4 |
-| `statement_day` | Statement day | number | 1 … 28 | `1` |  |  | live from money 4 |
-| `symbol` | Holding | text |  | `"broad_us_equity_index"` |  |  | live from money 4 |
-| `type` | Type | enum: cash, checking, savings, card, loan, brokerage |  |  |  |  | live from money 2 |
-| `units` | Units held | number | ≥ 0 |  |  |  | live from money 4; locked |
+| `overdraft` | Overdraft policy | enum: decline, fee, linked |  |  |  |  | live from money 2 |
+| `overdraft_limit` | Overdraft limit | money | ≥ 0 |  |  |  | live from money 2 |
+| `overdraft_link` | Overdraft from | ref → account |  |  |  |  | live from money 2 |
+| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |
+| `payment` | Monthly payment (loans) | money | ≥ 0 |  |  |  | live from money 3 |
+| `product` | Product (a world product, or a class: cash, checking, business_checking, savings, money_market, cd, trust, escrow, credit_card, charge_card, line_of_credit, loan, mortgage, brokerage, retirement) | text |  |  |  |  | live from money 2 |
+| `secured_by` | Secured by | ref |  |  |  |  | live from money 3 |
+| `statement_day` | Statement day | number | 1 … 28 |  |  |  | live from money 3 |
+| `status` | Status | enum: open, frozen, collections, charged_off, closed, paid_off, matured |  | `"open"` |  |  | live from money 2 |
+| `term_months` | Term in months | number | ≥ 0 |  |  |  | live from money 3 |
 
 #### `business`: Business
 
 Extends `thing`.
 
-No fields of its own.
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `collects_sales_tax` | Collects sales tax | bool |  |  |  |  | live from money 4 |
+| `daily_sales` | Walk-in takings a trading day | money | ≥ 0 |  |  |  | live from money 3 |
+| `distribution_every` | Paid out every | enum: month, quarter, year |  |  |  |  | live from money 4 |
+| `distribution_pct` | Profit paid out % | number | 0 … 100 |  |  |  | live from money 4 |
+| `industry` | Industry | text |  |  |  |  | live from money 3 |
+| `invoice_days` | Invoice terms (days) | number | ≥ 0 |  |  |  | live from money 3 |
+| `late_fee_pct` | Late fee % | number | ≥ 0 |  |  |  | live from money 4 |
+| `margin_pct` | Margin % | number | 0 … 100 |  |  |  | live from money 4 |
+| `operating_account` | Operating account | ref → account |  |  |  |  | live from money 3 |
+| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |
+| `places` | Places it trades at | list of ref |  |  |  |  | live from money 3 |
+| `sales_spread_pct` | Takings vary by up to ± % | number | 0 … 100 | `30` |  |  | live from money 3 |
+| `structure` | Structure | enum: sole_proprietorship, partnership, llc, s_corp, c_corp |  |  |  |  | live from money 4 |
+| `trading_days` | Trading days (0 is Sunday) | list of number |  |  |  |  | live from money 3 |
+| `valuation_multiple` | Valued at this many years of profit, over its books | number | ≥ 0 | `3` |  |  | live from money 4 |
+| `value` | Value (set: overrides the books) | money | ≥ 0 |  |  |  | live from money 3 |
+
+#### `card`: Payment card
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `account` | Account | ref → account |  |  |  |  | live from money 2 |
+| `daily_atm_limit` | Daily cash machine limit | money | ≥ 0 |  |  |  | live from money 4 |
+| `daily_purchase_limit` | Daily purchase limit | money | ≥ 0 |  |  |  | live from money 4 |
+| `holder` | Holder | ref |  |  |  |  | live from money 2 |
+| `item` | The card in gear | ref |  |  |  |  | live from money 2 |
+| `last4` | Last four digits | text |  |  |  |  | live from money 3 |
+| `network` | Card type | enum: debit, credit, charge |  |  |  |  | live from money 2 |
+| `replaced_by` | Replaced by | ref → card |  |  |  |  | live from money 2 |
+| `replaces` | Replaces | ref → card |  |  |  |  | live from money 2 |
+| `state` | State | enum: active, frozen, lost, cancelled |  | `"active"` |  |  | live from money 2 |
+
+#### `flow`: Money flow
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `amount_cents` | Amount | money | ≥ 0 |  |  |  | live from money 2 |
+| `amount_due` | What's due on the credit account it pays | enum: minimum, statement, balance |  |  |  |  | live from money 3 |
+| `amount_formula` | Amount formula | text |  |  |  |  | live from money 3 |
+| `amount_max` | Amount at most | money | ≥ 0 |  |  |  | live from money 3 |
+| `amount_min` | Amount at least | money | ≥ 0 |  |  |  | live from money 3 |
+| `amount_of` | Percent of this account's balance | ref → account |  |  |  |  | live from money 3 |
+| `amount_pct` | Percent of a balance | number | 0 … 100 |  |  |  | live from money 3 |
+| `amount_table` | Amount from a table (table.row.column) | text |  |  |  |  | live from money 3 |
+| `at` | Time of day (HH:MM) | text |  |  |  |  | live from money 2 |
+| `category` | Category | text |  |  |  |  | live from money 2 |
+| `count` | Times at most | number | ≥ 1 |  |  |  | live from money 2 |
+| `days` | Days of the month (-1 = the last) | list of number |  |  |  |  | live from money 2 |
+| `end` | Ends | date |  |  |  |  | live from money 2 |
+| `every` | Every | enum: day, week, month, year |  |  |  |  | live from money 2 |
+| `except` | Except holidays | list of text |  |  |  |  | live from money 3 |
+| `fallback` | Fallback (an account or a party) | text |  |  |  |  | live from money 3 |
+| `flow_kind` | Kind | enum: transfer, bill, rent, utility, subscription, premium, loan_payment, card_payment, savings, income, payroll, allowance, living, tax, distribution, invoice, draw, other |  | `"bill"` |  |  | live from money 2 |
+| `from` | From (an account, a party, or an outside payer) | text |  |  |  |  | live from money 2 |
+| `interval` | Every Nth period | number | ≥ 1 |  |  |  | live from money 2 |
+| `link` | Belongs to | ref |  |  |  |  | live from money 2 |
+| `method` | Paid by (cash, card, checking, savings) | text |  |  |  |  | live from money 3 |
+| `months` | Months (yearly) | list of number |  |  |  |  | live from money 2 |
+| `once` | Once, at (YYYY-MM-DDTHH:MM) | text |  |  |  |  | live from money 2 |
+| `retries` | Retries | number | ≥ 0 |  |  |  | live from money 3 |
+| `retry_days` | Retry after days | number | ≥ 1 |  |  |  | live from money 3 |
+| `roll` | Off a business day | enum: none, before, after |  | `"none"` |  |  | live from money 3 |
+| `shares` | Shares ({party, pct, from?}) | list |  |  |  |  | live from money 3 |
+| `shortfall` | When the money isn't there | enum: skip, partial, retry, fallback, overdraft, defer |  | `"skip"` |  |  | live from money 3 |
+| `splits` | Splits ({to, cents?, pct?}) | list |  |  |  |  | live from money 3 |
+| `start` | Starts | date |  |  |  |  | live from money 2 |
+| `status` | Status | enum: active, paused, ended |  | `"active"` |  |  | live from money 2 |
+| `to` | To (an account, a party, or an outside payee) | text |  |  |  |  | live from money 2 |
+| `weekdays` | Weekdays (0 = Sunday) | list of number |  |  |  |  | live from money 2 |
+
+#### `holding`: Holding
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `account` | Account | ref → account |  |  |  |  | live from money 4 |
+| `asset` | Asset | text |  |  |  |  | live from money 4 |
+| `lots` | Lots ({qty, cost, at}) | list |  |  |  |  | live from money 4 |
+| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |
+| `route` | Distributions go to (an account, or reinvest) | text |  |  |  |  | live from money 4 |
+
+#### `invoice`: Invoice
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `business` | Business | ref → business |  |  |  |  | live from money 3 |
+| `cents` | Amount | money | ≥ 0 |  |  |  | live from money 3 |
+| `customer` | Customer (a party, or an outside customer) | text |  |  |  |  | live from money 3 |
+| `days_late` | Days late | number | ≥ 0 |  |  |  | live from money 4 |
+| `due` | Due | date |  |  |  |  | live from money 3 |
+| `fees` | Late fees charged | number | ≥ 0 |  |  |  | live from money 4; locked |
+| `flow` | Paid by flow | text |  |  |  |  | live from money 3 |
+| `issued` | Issued | date |  |  |  |  | live from money 3 |
+| `late_fee` | Late fee charged | money | ≥ 0 |  |  |  | live from money 4 |
+| `memo` | For | text |  |  |  |  | live from money 3 |
+| `paid` | Paid | money | ≥ 0 |  |  |  | live from money 3 |
+| `state` | State | enum: open, paid, late, void |  | `"open"` |  |  | live from money 3 |
+
+#### `job`: Job
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `basis` | Paid by | enum: salary, hourly, per_shift, commission, tips, stipend |  | `"hourly"` |  |  | live from money 3 |
+| `commission_pct` | Commission % | number | ≥ 0 |  |  |  | live from money 3 |
+| `contractor` | Contractor (nothing withheld) | bool |  |  |  |  | live from money 4 |
+| `deductions` | Deductions ({label, pretax, cents?, pct?, kind?, match_pct?, to?}) | list |  |  |  |  | live from money 4 |
+| `employer` | Employer (a business, or an outside employer) | text |  |  |  |  | live from money 3 |
+| `end` | Ends | date |  |  |  |  | live from money 3 |
+| `hours` | Hours counted | enum: scheduled, attended, contract |  |  |  |  | live from money 3 |
+| `hours_per_week` | Hours a week | number | ≥ 0 |  |  |  | live from money 3 |
+| `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |
+| `pay_anchor` | First payday | date |  |  |  |  | live from money 3 |
+| `pay_days` | Paydays of the month | list of number |  |  |  |  | live from money 3 |
+| `pay_every` | Paid | enum: weekly, biweekly, semimonthly, monthly, per_job, custom |  | `"monthly"` |  |  | live from money 3 |
+| `pay_except` | Custom pay: except holidays | list of text |  |  |  |  | live from money 3 |
+| `pay_interval` | Custom pay: every Nth | number | ≥ 1 |  |  |  | live from money 3 |
+| `pay_months` | Custom pay: months | list of number |  |  |  |  | live from money 3 |
+| `pay_roll` | Payday off a business day | enum: none, before, after |  | `"before"` |  |  | live from money 3 |
+| `pay_unit` | Custom pay: every | enum: day, week, month, year |  |  |  |  | live from money 3 |
+| `pay_weekday` | Payday weekday (0 = Sunday) | number | 0 … 6 |  |  |  | live from money 3 |
+| `pay_weekdays` | Custom pay: weekdays | list of number |  |  |  |  | live from money 3 |
+| `rate` | Rate (a year, an hour or a shift) | money | ≥ 0 |  |  |  | live from money 3 |
+| `season_from` | Season from (MM-DD) | text |  |  |  |  | live from money 3 |
+| `season_to` | Season to (MM-DD) | text |  |  |  |  | live from money 3 |
+| `shift_pattern` | Shift pattern | text (row of calendar.shifts) |  |  |  |  | live from money 3 |
+| `shifts_per_week` | Shifts a week | number | ≥ 0 |  |  |  | live from money 3 |
+| `splits` | Pay goes to ({to, cents?, pct?}) | list |  |  |  |  | live from money 3 |
+| `start` | Started | date |  |  |  |  | live from money 3 |
+| `status` | Status | enum: active, leave, ended |  | `"active"` |  |  | live from money 3 |
+| `tips_per_hour` | Tips an hour | money | ≥ 0 |  |  |  | live from money 3 |
+| `title` | Title | text |  |  |  |  | live from money 3 |
+| `weeks_per_year` | Weeks a year | number | 0 … 53 |  |  |  | live from money 3 |
+| `worker` | Worker | ref → person |  |  |  |  | live from money 3 |
+| `workplace` | Workplace | ref |  |  |  |  | live from money 3 |
+
+#### `property`: Property
+
+Extends `thing`.
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `appreciation_pct` | Appreciation % a year | number |  |  |  |  | live from money 4 |
+| `asking_price` | Asking price (for sale) | money | ≥ 0 |  |  |  | live from money 3 |
+| `insurance` | Insurance a month | money | ≥ 0 |  |  |  | live from money 4 |
+| `lease_months` | Lease term, months | number | ≥ 1 | `12` |  |  | live from money 3 |
+| `let_from` | Let since | date |  |  |  |  | live from money 3 |
+| `managed` | Let to outside tenants | bool |  | `false` |  |  | live from money 3 |
+| `market_rent` | Market rent, a unit a month | money | ≥ 0 |  |  |  | live from money 3 |
+| `mortgage` | Mortgage | ref → account |  |  |  |  | live from money 3 |
+| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |
+| `place` | Place | ref |  |  |  |  | live from money 3 |
+| `purchase_price` | Purchase price | money | ≥ 0 |  |  |  | live from money 4 |
+| `purchased` | Purchased | date |  |  |  |  | live from money 4 |
+| `region` | Region (for its property tax) | text (row of economy.regions) |  |  |  |  | live from money 3 |
+| `rent_to` | Rent paid into | ref → account |  |  |  |  | live from money 3 |
+| `tax_installments` | Property tax bills a year | number | 1 … 12 | `2` |  |  | live from money 3 |
+| `tax_pct` | Property tax % a year | number | ≥ 0 |  |  |  | live from money 4 |
+| `units` | Units to let | number | ≥ 1 | `1` |  |  | live from money 3 |
+| `upkeep_pct` | Upkeep % a year | number | ≥ 0 |  |  |  | live from money 4 |
+| `vacancy_months` | Months empty between tenants, on average | number | ≥ 0 | `1` |  |  | live from money 3 |
+| `value` | Value | money | ≥ 0 |  |  |  | live from money 3 |
+| `volatility_pct` | Value swings, % a year | number | ≥ 0 |  |  |  | live from money 4 |
+
+#### `trust`: Trust
+
+Extends `thing`.
+
+| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |
+|---|---|---|---|---|---|---|---|
+| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |
 
 ### Effects
 
 | Effect | Arguments |
 |---|---|
-| `economy.buy` | `item?`, `category?`, `qty?`, `price?`, `exact?`, `stated?`, `name?`, `payer?`, `method?`, `from?`, `payee?`, `keep?` |
-| `economy.invest` | `cents`, `owner?`, `sell?` |
+| `economy.apply_credit` | `product`, `cents?`, `term?`, `secured_by?`, `who?` |
+| `economy.buy` | `item?`, `category?`, `qty?`, `price?`, `exact?`, `stated?`, `name?`, `payer?`, `method?`, `from?`, `payee?`, `keep?`, `cashback?` |
+| `economy.card_replace` | `card`, `who?` |
+| `economy.card_state` | `card`, `state`, `who?` |
+| `economy.close_account` | `account` |
+| `economy.deposit` | `account`, `cents`, `who?` |
+| `economy.distribute` | `business`, `cents?`, `by?` |
+| `economy.exercise` | `holding`, `qty?`, `from?`, `to?`, `party?` |
+| `economy.flow_create` | `label?`, `kind?`, `from?`, `to?`, `amount?`, `every?`, `interval?`, `weekday?`, `day?`, `month?`, `at?`, `once?`, `start?`, `end?`, `count?`, `shortfall?`, `retry_days?`, `retries?`, `fallback?`, `roll?`, `category?`, `who?` |
+| `economy.flow_status` | `flow`, `status`, `who?` |
+| `economy.flow_update` | `flow`, `label?`, `kind?`, `from?`, `to?`, `amount?`, `every?`, `interval?`, `weekday?`, `day?`, `month?`, `at?`, `once?`, `start?`, `end?`, `count?`, `shortfall?`, `retry_days?`, `retries?`, `fallback?`, `roll?`, `category?`, `who?` |
+| `economy.hire` | `business`, `worker`, `title?`, `occupation?`, `basis?`, `rate?`, `hours?`, `hours_per_week?`, `pay_every?`, `start?`, `by?` |
+| `economy.invoice_issue` | `business`, `customer?`, `customer_name?`, `cents`, `memo?`, `days?`, `by?` |
+| `economy.invoice_pay` | `invoice`, `by?` |
+| `economy.invoice_void` | `invoice`, `by?` |
+| `economy.job_end` | `job`, `end?`, `by?` |
+| `economy.job_raise` | `job`, `rate?`, `pct?`, `by?` |
+| `economy.lease_end` | `lease`, `on?`, `party?` |
+| `economy.lease_start` | `property`, `tenant`, `rent`, `months?`, `day?`, `unit?`, `from?`, `party?` |
 | `economy.lose` | `item`, `thief?` |
 | `economy.move` | `from`, `to`, `cents`, `memo?` |
+| `economy.owner_draw` | `business`, `cents`, `owner?`, `by?` |
 | `economy.pay_card` | `card`, `from?`, `cents?` |
 | `economy.price_modifier` | `percent`, `scope?`, `place?`, `minutes?`, `id?`, `clear?` |
+| `economy.property_buy` | `property`, `price?`, `from?`, `down?`, `term_months?`, `apr_pct?`, `party?` |
+| `economy.property_sell` | `property`, `price`, `buyer?`, `to?`, `party?` |
+| `economy.release_hold` | `account`, `hold` |
+| `economy.route` | `holding?`, `property?`, `business?`, `to?`, `party?` |
+| `economy.set_autopay` | `account`, `mode`, `from?`, `cents?`, `who?` |
+| `economy.set_pay_prefs` | `tiers`, `who?` |
+| `economy.set_price` | `asset`, `price` |
+| `economy.set_status` | `account`, `status` |
+| `economy.stake_sell` | `business`, `share`, `price`, `buyer?`, `to?`, `party?` |
+| `economy.trade` | `side?`, `party?`, `holding?`, `asset?`, `account?`, `qty?`, `amount?`, `from?`, `to?`, `right?`, `strike?`, `expiry?` |
 | `economy.transfer` | `to`, `cents`, `from?`, `memo?`, `method?` |
+| `economy.withdraw` | `account`, `cents`, `who?` |
 
 ### Formula functions
 
+- `asset_price(id)`
 - `balance(account)`
+- `business_value(id)`
 - `can_afford(who, cents)`
+- `credit_score(who)`
+- `employs(business, who)`
+- `holding_units(id)`
+- `holding_value(id)`
+- `holds(who, thing)`
+- `is_credit(account)`
+- `manages(who, business)`
+- `may_draw(who, business)`
+- `money_feature(feature, who)`
 - `net_worth(who)`
 - `price(item)`
+- `property_value(id)`
+- `spends(who, account)`
 - `wealth(who)`
 
 ### Actions
 
 | Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |
 |---|---|---|---|---|---|---|
-| `buy` | Buy | `item: text`, `qty?: number`, `price?: money`, `method?: text` |  | `default` | `5` | buy, purchase, order, pick up a |
-| `invest` | Invest | `amount: money` |  | `default` | `2` | invest, buy stocks, buy shares |
+| `apply_credit` | Apply for credit | `product: text`, `amount?: money`, `term?: number` |  | `default` | `15` | apply for a credit card, apply for a loan, take out a loan |
+| `buy` | Buy | `item: text`, `qty?: number`, `price?: money`, `method?: text`, `cashback?: money` |  | `default` | `5` | buy, purchase, order, pick up a |
+| `card_freeze` | Freeze card | `card: ref → card` |  | `default` | `2` | freeze my card, lock my card |
+| `card_replace` | Replace card | `card: ref → card` |  | `default` | `2` | replace my card, order a new card |
+| `card_report_lost` | Report card lost | `card: ref → card` |  | `default` | `2` | report my card lost, my card was stolen, cancel my card |
+| `card_unfreeze` | Unfreeze card | `card: ref → card` |  | `default` | `2` | unfreeze my card, unlock my card |
+| `deposit_cash` | Deposit cash | `account: ref → account`, `amount: money` |  | `default` | `3` | deposit, pay in cash, bank the cash |
+| `distribute_profit` | Distribute profit | `business: ref → business`, `amount?: money` |  | `default` | `10` | distribute profit, pay dividends, pay out the owners |
+| `exercise_option` | Exercise an option | `holding: ref → holding`, `qty?: number`, `from?: ref → account`, `to?: ref → account` |  | `default` | `2` | exercise the option, exercise my calls, exercise my puts |
+| `flow_create` | Set up a standing payment | `label?: text`, `kind?: text`, `from?: ref → account`, `to?: text`, `amount?: money`, `every?: text`, `interval?: number`, `weekday?: number`, `day?: number`, `month?: number`, `at?: text`, `once?: text`, `start?: text`, `end?: text`, `count?: number`, `shortfall?: text`, `retry_days?: number`, `retries?: number`, `fallback?: text`, `roll?: text`, `category?: text` |  | `default` | `2` | set up a standing order, schedule a payment, set up a recurring transfer |
+| `flow_delete` | Cancel a standing payment | `flow: ref → flow` |  | `default` | `2` | cancel the standing order, stop the recurring payment |
+| `flow_pause` | Pause a standing payment | `flow: ref → flow` |  | `default` | `2` | pause the standing order |
+| `flow_resume` | Resume a standing payment | `flow: ref → flow` |  | `default` | `2` | resume the standing order |
+| `flow_update` | Change a standing payment | `flow: ref → flow`, `label?: text`, `kind?: text`, `from?: ref → account`, `to?: text`, `amount?: money`, `every?: text`, `interval?: number`, `weekday?: number`, `day?: number`, `month?: number`, `at?: text`, `once?: text`, `start?: text`, `end?: text`, `count?: number`, `shortfall?: text`, `retry_days?: number`, `retries?: number`, `fallback?: text`, `roll?: text`, `category?: text` |  | `default` | `2` | change the standing order, change the recurring payment |
+| `invoice_issue` | Send an invoice | `business: ref → business`, `customer?: ref`, `customer_name?: text`, `amount: money`, `memo?: text`, `days?: number` |  | `default` | `10` | send an invoice, invoice, bill them |
+| `invoice_pay` | Pay an invoice | `invoice: ref → invoice` |  | `default` | `5` | pay the invoice, settle the bill |
+| `invoice_void` | Void an invoice | `invoice: ref → invoice` |  | `default` | `5` | void the invoice, cancel the invoice, write it off |
+| `job_end` | End a job | `job: ref → job` |  | `default` | `10` | fire, let go, quit, resign, hand in my notice |
+| `job_hire` | Hire | `business: ref → business`, `worker: ref → person`, `title?: text`, `basis?: text`, `rate?: money`, `hours_per_week?: number`, `pay_every?: text` |  | `default` | `15` | hire, take on, give a job to |
+| `job_raise` | Give a raise | `job: ref → job`, `rate: money` |  | `default` | `5` | give a raise, raise the pay, pay more |
+| `lease_end` | End a lease | `lease: ref → flow`, `on?: text` |  | `default` | `10` | end the lease, give notice, move out |
+| `lease_start` | Let a unit | `property: ref → property`, `tenant: ref → person`, `rent: money`, `months?: number`, `day?: number`, `unit?: text` |  | `default` | `20` | rent out, sign a lease, let the apartment |
 | `move_money` | Transfer between accounts | `from: ref → account`, `to: ref → account`, `amount: money` |  | `default` | `2` | transfer, move money, put into savings |
+| `owner_draw` | Take an owner's draw | `business: ref → business`, `amount: money` |  | `default` | `5` | take a draw, pay myself, take money out of the business |
 | `pay` | Pay | `to: ref → person`, `amount: money` |  | `default` | `1` | pay, give money, send money, venmo |
-| `pay_card` | Pay card | `card: ref → account`, `amount?: money` |  | `default` | `2` | pay off the card, pay the card, pay my credit card |
-| `sell_investments` | Sell investments | `amount: money` |  | `default` | `2` | sell stocks, sell shares, cash out |
+| `pay_card` | Pay card or loan | `card: ref → account`, `from?: ref → account`, `amount?: money` |  | `default` | `2` | pay off the card, pay the card, pay my credit card, make a loan payment |
+| `property_buy` | Buy a property | `property: ref → property`, `price?: money`, `from?: ref → account`, `down?: money`, `term_months?: number`, `apr_pct?: number` |  | `default` | `60` | buy the house, buy the property, make an offer on |
+| `property_sell` | Sell a property | `property: ref → property`, `price: money`, `buyer?: ref → person`, `to?: ref → account` |  | `default` | `60` | sell the house, sell the property |
+| `route_distributions` | Route dividends, rent or profits | `holding?: ref → holding`, `property?: ref → property`, `business?: ref → business`, `to?: text` |  | `default` | `1` | reinvest dividends, send dividends to, send the rent to |
+| `set_autopay` | Set autopay | `account: ref → account`, `mode: text`, `from?: ref → account`, `amount?: money` |  | `default` | `2` | set up autopay, turn on autopay, turn off autopay |
+| `set_pay_prefs` | Set how I pay | `tiers: text` |  | `default` | `2` | i'd rather pay with |
+| `stake_sell` | Sell a share of a business | `business: ref → business`, `share: number`, `price: money`, `buyer?: ref → person`, `to?: ref → account` |  | `default` | `60` | sell my share of the business, sell the shop |
+| `trade` | Buy or sell investments | `side?: text`, `holding?: ref → holding`, `asset?: text`, `account?: ref → account`, `qty?: number`, `amount?: money`, `from?: ref → account`, `to?: ref → account`, `right?: text`, `strike?: money`, `expiry?: text` |  | `default` | `2` | invest, buy stocks, buy shares, sell stocks, sell shares, cash out, buy an option |
+| `withdraw_cash` | Withdraw cash | `account: ref → account`, `amount: money` |  | `default` | `3` | withdraw, take out cash, hit the atm, get cash |
 
 ### Events
 
-Its own: `economy.anchor`, `economy.card_paid`, `economy.decline`, `economy.modifier`, `economy.note`, `economy.price`, `economy.statement`, `economy.txn`.
+Its own: `economy.accrue`, `economy.acquire`, `economy.anchor`, `economy.card_paid`, `economy.commission`, `economy.credit`, `economy.decline`, `economy.delinquency`, `economy.dispose`, `economy.estimated_tax`, `economy.exercise`, `economy.flow_run`, `economy.hold`, `economy.income`, `economy.invoice_paid`, `economy.lots`, `economy.mint`, `economy.modifier`, `economy.note`, `economy.open`, `economy.payout`, `economy.payslip`, `economy.price`, `economy.quote`, `economy.remit`, `economy.sale`, `economy.score`, `economy.settle`, `economy.spend`, `economy.stake_route`, `economy.statement`, `economy.status`, `economy.timesheet`, `economy.txn`.
 
 Checks it adds to: `post`.
 
@@ -374,14 +627,14 @@ Panels: `economy.money`. Slots it writes: `money`.
 | Process | Domain | From level | Steps |
 |---|---|---|---|
 | `economy.accounts` | `money` | 3 | the world |
-| `economy.banking` | `money` | 4 | the world |
-| `economy.bills` | `money` | 3 | the world |
-| `economy.cards` | `money` | 3 | the world |
-| `economy.living` | `money` | 3 | the world |
-| `economy.markets` | `money` | 4 | the world |
-| `economy.payroll` | `money` | 3 | the world |
+| `economy.invoices` | `money` | 3 | the world |
+| `economy.markets` | `money` | 3 | the world |
+| `economy.money` | `money` | 2 | the world |
+| `economy.property_values` | `money` | 3 | the world |
+| `economy.settlements` | `money` | 3 | the world |
+| `economy.timesheet` | `money` | 3 | the world |
 
-Detail on demand: `money` (version 1).
+Detail on demand: `money` (version 2).
 
 ### Data tables
 
@@ -391,11 +644,11 @@ Detail on demand: `money` (version 1).
 | `economy.categories` | Price categories | `lre-table/economy.categories/v1` | name (text), basis (text), notes (text, optional), price_unit_note (text, optional), item_count (int), price_cents (band) | 19 |
 | `economy.finance` | Finance parameters | `lre-table/economy.finance/v1` | title (text), values (json) | 7 |
 | `economy.occupations` | Occupations and pay | `lre-table/economy.occupations/v1` | title (text), category (enum), median_cents_per_h (int), median_cents_per_year (int), typical_earnings_cents_per_year (int), schedule_pattern (ref), typical_hours_per_week (number), weeks_per_year (number), weekend_work (enum), shifts (list), pay_frequency (enum), benefits (enum), benefits_note (text), withholding_rate_pct (number), description (text), wage_basis (text), tipped (bool, optional), tipped_cash_wage_cents_per_h (int, optional), self_employed (bool, optional), fica_exempt (bool, optional), estimated_tax_set_aside_pct (number, optional), withholding_note (text, optional) | 56 |
-| `economy.regions` | Regions (US states, DC and the national baseline) | `lre-table/economy.regions/v1` | name (text), abbr (text), scope (enum), census_region (enum, optional), census_division (enum, optional), time_zones (list, optional), observes_dst (bool, optional), state_income_tax_effective_pct (number, optional), local_income_tax_pct_typical (number, optional), sales_tax_combined_avg_pct (number), cost_of_living_multiplier (number), median_rent_1br_cents_per_month (int), median_rent_2br_cents_per_month (int), residential_electricity_cents_per_kwh (number), minimum_wage_cents_per_h (int), notes (text, optional) | 52 |
+| `economy.regions` | Regions (US states, DC and the national baseline) | `lre-table/economy.regions/v1` | name (text), abbr (text), scope (enum), census_region (enum, optional), census_division (enum, optional), time_zones (list, optional), observes_dst (bool, optional), state_income_tax_effective_pct (number, optional), local_income_tax_pct_typical (number, optional), sales_tax_combined_avg_pct (number), property_tax_effective_pct (number, optional), cost_of_living_multiplier (number), median_rent_1br_cents_per_month (int), median_rent_2br_cents_per_month (int), residential_electricity_cents_per_kwh (number), minimum_wage_cents_per_h (int), notes (text, optional) | 52 |
 
 ### Lint codes
 
-`economy.accounts`, `economy.unpriced_cap`.
+`economy.accounts`, `economy.assets`, `economy.business`, `economy.holdings`, `economy.property`, `economy.unpriced_cap`.
 
 ## Gear & containers pack (`gear`)
 
@@ -522,6 +775,22 @@ Detail on demand: `gear` (version 1).
 ### Lint codes
 
 `gear.kits`.
+
+## Minds pack (`minds`)
+
+Version 1 · realism domain none · requires none.
+
+### Events
+
+Its own: `minds.commitment`, `minds.commitment_edit`, `minds.consolidated`, `minds.memory`, `minds.mind`, `minds.note_edit`, `minds.pin`, `minds.plan`, `minds.plan_edit`, `minds.presence`, `minds.refresh`, `minds.round`, `minds.skip`.
+
+### Panels and slots
+
+Panels: none. Slots it writes: `minds`.
+
+### Lint codes
+
+`minds.config`, `minds.steps`.
 
 ## Relationships pack (`relationships`)
 
@@ -666,15 +935,19 @@ Extends `thing`.
 | `activity_until` | Activity ends | number |  |  |  |  | live from castlife 1; locked |
 | `agility` | Agility | number | 3 … 18 |  |  |  | live from sheets 1 |
 | `appointments` | Appointments | list |  |  |  |  | live from castlife 2 |
+| `birthday` | Birthday (MM-DD or YYYY-MM-DD) | date |  |  |  |  | live from castlife 3 |
 | `charm` | Charm | number | 3 … 18 |  |  |  | live from sheets 1 |
 | `chores` | Chores | list |  |  |  |  | live from castlife 3 |
 | `conditions` | Conditions | list |  |  |  |  | live from sheets 4 |
 | `employer` | Employer | ref |  |  |  |  | live from money 3 |
+| `filing_status` | Tax filing status | enum: single, married_filing_jointly, head_of_household |  |  |  |  | live from money 4 |
 | `grit` | Grit | number | 3 … 18 |  |  |  | live from sheets 1 |
 | `home` | Home | ref |  |  |  |  | live from space 1 |
+| `local_tax` | Pays local income tax | bool |  |  |  |  | live from money 4 |
 | `might` | Might | number | 3 … 18 |  |  |  | live from sheets 1 |
 | `needs` | Needs | list |  |  |  |  | live from castlife 4; locked |
 | `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |
+| `pay_prefs` | Pays with, in order ({use, min?, max?, categories?, except?}) | list |  |  |  |  | live from money 3 |
 | `region` | Region | text (row of economy.regions) |  |  |  |  | live from money 3 |
 | `scene` | Scene type | text |  |  |  |  |  |
 | `trips` | Trips | list |  |  |  |  | live from castlife 1 |

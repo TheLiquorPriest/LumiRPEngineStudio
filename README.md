@@ -37,7 +37,7 @@ The drawer tab and the link to LumiRPEngine (its shared RPC endpoints and window
 5. **Review** what it proposes: every person, place, quest, lore entry or part it added, changed or removed, with the engine's problem count. **Compare** shows an item as the draft holds it beside what the assistant proposes. Untick what you don't want, then **Accept**, or **Discard** it all. Only accepted changes reach the draft.
 6. The draft shows its counts per collection, its problems, and any item's JSON.
 7. Actions:
-   - **Validate** checks the draft as LumiRPEngine will.
+   - **Validate** checks the draft as LumiRPEngine will, and points out anything written in an older shape (such as money from before the money foundation) that LumiRPEngine converts each time it loads the world.
    - **Export file** saves an `lre-world-export-v1` file; **Import file** starts a draft from one.
    - **Install as new world**, **Install and attach to this chat** and **Install as new revision** (of the world the draft came from or was installed as, or one you pick) offer the accepted draft to LumiRPEngine. Its Build tab opens on the offer: what it is, what it holds, its problems and macros. Tap **Install** there. A new world installs as an import does; a revision lands on its world, whose chats stay on their revisions until you Upgrade them in **Settings → Pins and upgrade**. With **attach**, LumiRPEngine asks whether to attach the new world to the open chat, starting from its current message. One offer waits at a time: a new one replaces the last, and **Withdraw** takes it back. If the world changed in Build since the draft was taken from it, LumiRPEngine warns you, and **Install** becomes **Install anyway**.
 

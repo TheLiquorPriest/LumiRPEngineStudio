@@ -7,6 +7,7 @@ import type { HostCharacter } from "../src/backend/host";
 import { startStudio } from "../src/backend/main";
 import { booksFor, SourceReader } from "../src/backend/sources";
 import { OUTPUT_LIMIT, runTool } from "../src/backend/tools";
+import type { JsonObject } from "../src/shared/json";
 import type { BookRef, DraftSource } from "../src/shared/protocol";
 import { FakeHost } from "./support/fake-host";
 
@@ -160,5 +161,35 @@ describe("tool answers", () => {
     await runTool("draft_patch", { ops: [{ op: "add", path: "/entities/ghost", value: ghost }] }, ctx);
     const out = await runTool("draft_check", {}, ctx);
     for (const path of ["entities.ghost.life", "entities.ghost.lifeKnownBy", "entities.ghost.cues.0.text"]) expect(out.content).toContain(`error at ${path}:`);
+  });
+
+  test("a draft with a flow, a holding and a minds config checks clean, and a misspelt flow party draws the engine's warning", async () => {
+    const { ctx } = await setup();
+    const entity = (id: string, kind: string, fields: JsonObject) => ({ op: "add", path: `/entities/${id}`, value: { id, kind, name: id, tier: "background", fields, relations: [] } });
+    const owners = [{ party: "you", role: "owner" }];
+    const world = (from: string): JsonObject[] => [
+      { op: "add", path: "/realism/levels/money", value: 3 },
+      { op: "add", path: "/packs/economy", value: { version: 1, config: { assets: { glix: { label: "Great Lakes Index Fund", class: "fund", symbol: "GLIX", price: 11240 } } } } },
+      { op: "add", path: "/minds", value: { secrecy: "brief", thresholds: { live: 60, near: 35, far: 15 }, memory: { notes: { show: 10, keep: 30 } } } },
+      entity("acct_checking", "account", { owners, product: "checking", opening: 182000 }),
+      entity("acct_brokerage", "account", { owners, product: "brokerage", opening: 0 }),
+      entity("hold_glix", "holding", { account: "acct_brokerage", asset: "glix", lots: [{ qty: 20, cost: 196000, at: "2025-03-02" }], route: "reinvest" }),
+      entity("flow_rent", "flow", { flow_kind: "rent", from, to: "Harbor Lets", amount_cents: 95000, every: "month", days: [1] }),
+    ];
+    expect((await runTool("draft_patch", { ops: world("acct_checking") }, ctx)).error).toBe(false);
+    expect((await runTool("draft_check", {}, ctx)).content).not.toMatch(/^- (error|warning) /m);
+    await runTool("draft_patch", { ops: [{ op: "replace", path: "/entities/flow_rent/fields/from", value: "acct_chequing" }] }, ctx);
+    expect((await runTool("draft_check", {}, ctx)).content).toContain("warning at entities.flow_rent.fields.from:");
+  });
+
+  test("money in an older shape, which the engine converts as it loads, is reported until it's written the current way", async () => {
+    const { ctx } = await setup();
+    const purse = (fields: JsonObject) => ({ id: "purse", kind: "account", name: "Rhea's purse", tier: "background", fields, relations: [] });
+    await runTool("draft_patch", { ops: [{ op: "add", path: "/entities/purse", value: purse({ owner: "you", type: "cash", opening: 4250 }) }] }, ctx);
+    const old = (await runTool("draft_check", {}, ctx)).content;
+    expect(old).toContain("warning at entities.purse:");
+    expect(old).toContain('"fields.owners":[{"party":"you","role":"owner"}]');
+    await runTool("draft_patch", { ops: [{ op: "replace", path: "/entities/purse", value: purse({ owners: [{ party: "you", role: "owner" }], product: "cash", opening: 4250 }) }] }, ctx);
+    expect((await runTool("draft_check", {}, ctx)).content).not.toContain("entities.purse");
   });
 });
