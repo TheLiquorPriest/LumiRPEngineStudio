@@ -9,7 +9,7 @@ A converted world starts where the story is now. When the chat attaches it, the 
 ## Working order
 
 1. Read the sources first: skim the transcript from the start (`transcript_read` in ranges of 30 to 60), search it for names, places, money and dates (`transcript_search`), read the cards (`cards_read`) and list and read the lore (`lore_list`, `lore_search`, `lore_read`). Read the end of the chat closely: it is the present.
-2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people and their accounts, then relations, then tracks, lore, schedules, and last the start and calendar.
+2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people, then their money (accounts, flows, jobs), then relations, then tracks, lore, schedules, and last the start and calendar.
 3. Run `draft_check` after each batch and fix every error. Keep ids stable: other items refer to them.
 4. Finish with a short answer: what the world holds, what you assumed, what the user should look at.
 
@@ -25,11 +25,11 @@ A converted world starts where the story is now. When the chat attaches it, the 
 
 - **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.
 - **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `"agent": true` on someone who pursues their own goals off-screen (a rival, a schemer).
-- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: "tending bar"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, `employer`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. Description and personality belong in lore entries linked to the person, or in fields your own kind defines.
+- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: "tending bar"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. What someone earns is a job (see [Money](#money)). Who someone is goes in fields of their own kind (below): a character's mind reads their entity's fields, never their character card, so move a card's description, personality and manner there. History and background can also go in lore entries linked to them.
 - **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:
 
 ```json
-{ "id": "character", "label": "Character", "extends": "person", "fields": { "description": { "type": "text", "label": "Description" }, "role": { "type": "text", "label": "Role" } } }
+{ "id": "character", "label": "Character", "extends": "person", "fields": { "description": { "type": "text", "label": "Description" }, "role": { "type": "text", "label": "Role" }, "traits": { "type": "list", "of": "text", "label": "Traits" } } }
 ```
 
 - **Classifications** sort people for rules and for the GM: a facet with values, optionally nested. Keep a facet hidden (no `"shown": true`) when its values would spoil the story ("villain").
@@ -40,7 +40,7 @@ A converted world starts where the story is now. When the chat attaches it, the 
 
 An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tags in `tags`.
 
-- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ "type": "member_of", "to": "harbor_guild", "fields": { "role": "Quartermaster" } }`.
+- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ "type": "member_of", "to": "harbor_guild", "fields": { "role": "Quartermaster" } }`. A `household` can also hold money and share its bills (see [Money](#money)).
 - **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `"dying"`, someone who died is `"dead"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ "unconscious": { "label": "Unconscious", "acts": false, "reads": "lies unconscious" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`. When the POV hasn't learned of a death or a dying, set `lifeKnownBy` to the ids of the people who know, including everyone who starts in the same place as the body; everyone else, the POV too, takes the person for alive until they see it or are told. Leaving `lifeKnownBy` out (or empty) means everyone knows, which tells the player; when nobody else knows yet, list the person themself. Old Bram here died in the net loft, and only Silas knows:
 
 ```json
@@ -51,6 +51,27 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 
 ```json
 "cues": [{ "text": "Changes the subject whenever the guild comes up.", "track": "silas_debt" }]
+```
+
+## Character minds
+
+A character can have a **mind**: a model call made as that character alone, from what they know (their entity's fields, the lore they may read, the turns they were there for, their notes and commitments, their money and their day), which answers with their private read of the moment and what they intend, for the narrator to depict. Minds are blind to each other, and a mind reads its character's fields, never a character card, so write who each person is into their fields (see [your own kinds](#people-tiers-and-classifications)).
+
+Each turn a focus score puts each character on a ladder: **Live** (a mind every turn), **Near** and **Far** (a mind on their refresh) or **Background** (routine only). The score counts being in the POV's scene or close by, being named, a relation with the POV, a stake in tracks and rules under way, plans with the POV, and the person's tier. The world tunes it in `/minds`; every part is optional, and one left out reads as its default:
+
+```json
+{ "secrecy": "brief", "weights": { "mentioned": 50 }, "thresholds": { "live": 60, "near": 35, "far": 15 }, "always": { "ids": ["silas"] }, "never": { "tag": ["crowd"] }, "memory": { "notes": { "show": 10, "keep": 30 }, "salience": { "halfLifeDays": 14 } } }
+```
+
+- `secrecy` decides what reaches the narrator. `brief` (the default) gives only what anyone present could see, withheld where it would give away a secret or a name the POV can't know; `full` gives the character's thoughts and intent too. A mind knows its own character's secrets, so keep `brief` unless no one has a secret they would think about.
+- `weights` are the points each input adds, from −100 to 200 (`here` 45, `nearby` 20, `mentioned` 40, `regard` 10, `knows` 10, `owner` 15, `track` 8, `rule` 5, `pending` 15, `recent` 10, `band` per tier band, and `roles` per classification value, `antagonist` 20 by default); `thresholds` are the lowest scores for Live, Near and Far (60, 35 and 15). Only someone at hand (in the POV's scene, close by or named this turn) is ever Live.
+- `always` and `never` are selectors (`ids`, `kind`, `tier`, `memberOf`, `tag`, `class`): `always` keeps someone Live wherever they are, and `never` keeps them in the background without a mind, winning over `always`. Name only ids, kinds, tiers, groups and classification values the world has.
+- `memory` sets what a mind is shown and how long a note lasts: `notes.show` (8) and `notes.keep` (24 before the oldest fold into a summary), `witness.show`, `recall`, `commitments.show`, `salience.halfLifeDays` (7 game days) and `consolidate`.
+
+The defaults suit most worlds: pin the people the story turns on with `always`, and keep crowds out with `never`. A world can give minds its own voice with a step template in `/steps` of purpose `mind`, `memory`, `skip` or `consolidate`, one per purpose: `"output": "text"`, `"signals": []`, and a `template` holding the step's instructions only, where `{{character}}` is the character's name and `{{world}}` the world's. The engine adds the answer's format itself, so write how to think, never the JSON.
+
+```json
+{ "id": "mind_port_veil", "purpose": "mind", "output": "text", "signals": [], "template": "You are the private mind of {{character}} in {{world}}, a salt port where debts outlive names. Think as {{character}}, from only what they know below. Decide how they read this moment and what they intend; never script anyone else." }
 ```
 
 ## Places, routes and maps
@@ -71,15 +92,109 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 
 ## Money
 
-- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ "code": "GP", "symbol": "gp", "minorUnit": "copper", "decimals": 2, "format": "{sign}{amount} gp" }`. Amounts are always integer minor units.
-- **At Money 1** a person's `wealth` band is all there is. Set it from how the story treats them.
-- **Accounts** hold real balances (Money 2 and up): one entity per purse, wallet, bank account or card, owned by its holder. Its `opening` is the balance **now**, at the story's present, not when the story began. Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.
+Money is entities, a few fields and the economy pack's config. Amounts are whole minor units of the world's currency (4250 is $42.50) and percentages are percent units (22 is 22 %). Write money only in the shapes below: a `bills` list, a single `owner` or a `type` on an account, pay fields on a person (`hourly_cents`, `payday`, `deposit_to`) and `units` of a `symbol` on a brokerage account are older shapes, which `draft_check` warns about (`migrated`).
+
+- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ "code": "GP", "symbol": "gp", "minorUnit": "copper", "decimals": 2, "format": "{sign}{amount} gp" }`.
+- **How much runs** is `/realism/levels/money`, capped by a person's tier (never the POV's). At 1 a person's `wealth` band is all there is: set it from how the story treats them. At 2 their cash and one everyday account are real, and a payment they can't cover is declined. From 3 all their accounts run, with flows, cards, payment preferences, household shares, living costs, withholding on pay and property; from 4 statements, interest, fees, late payments, credit scores, cash only at a machine or a branch, holds, daily card limits, overdraft policies, tax brackets, sales and business tax and investments. A new draft is at 1: raise it to 2 when the story counts cash, and to 3 when it has wages, rent, cards or property.
+- **The economy config.** A new draft has no `/packs/economy`: add it whole once, `{ "version": 1, "config": {} }`. Its config holds `products` (the world's own account products), `features` (a feature switched on or off for this world, `{ "flows": true }`: from Money 2 for flows, cards, payment preferences, household shares, living costs, cash machines, daily limits and overdraft, from Money 3 for the rest), `assets` (what holdings are in), `region` (the world's tax region, a row of the regions data table such as `mi`) and `taxes` (`exempt`, the categories no sales tax falls on, and `corporatePct`). Add a map whole the first time (`/packs/economy/config/products` with its first product in it), then each further entry by its own path (`/packs/economy/config/products/<id>`): adding the whole map again replaces it, and every entry in it.
+- **Who owns money.** A party is a person, or an entity of kind `business`, `trust` or `household`. Every account, business, holding and property lists its holders in `fields.owners`, each `{ "party": "rhea", "role": "owner" }`: `owner` and `joint` spend, manage and count it; `authorized_user` only spends; `custodian` and `trustee` spend and manage it for a `beneficiary`, who counts it. A `share` (a percent) divides its worth between the holders who count it; given by none, they share equally.
+
+### Accounts and cards
+
+An `account` is one purse, wallet, bank account, card account, loan or investment account: `owners`, `product`, `institution` (the bank's name) and `opening`, the balance **now**, at the story's present, from the holder's side (a debt is negative). Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.
 
 ```json
-{ "id": "rhea_purse", "kind": "account", "name": "Rhea's purse", "tier": "background", "fields": { "owner": "rhea", "type": "cash", "opening": 4250 }, "relations": [] }
+{ "id": "rhea_checking", "kind": "account", "name": "Rhea's checking", "tier": "background", "fields": { "owners": [{ "party": "rhea", "role": "owner" }], "product": "checking", "institution": "Harbor Savings", "opening": 182000 }, "relations": [] }
 ```
 
-`type` is `cash`, `checking`, `savings`, `card`, `loan` or `brokerage`. A debt is a `loan` (or a `card`) whose opening is what is owed, as a negative amount.
+`product` is a class, each a built-in product (`cash`, `checking`, `business_checking`, `savings`, `money_market`, `cd`, `trust`, `escrow`, `credit_card`, `charge_card`, `line_of_credit`, `loan`, `mortgage`, `brokerage`, `retirement`), or one of the world's own products by id: a `class` with its terms (`label`, `institution`, `limit`, `apr_pct`, `apy_pct`, …). An account's own `limit`, `apr_pct`, `apy_pct`, `statement_day`, `due_day`, `payment`, `months_left` and `overdraft` win over its product's, and `autopay` (`minimum`, `statement`, `full` or `fixed`) with `autopay_from` pays a credit account by itself:
+
+```json
+"products": { "harbor_visa": { "label": "Harbor Savings Visa", "class": "credit_card", "institution": "Harbor Savings", "limit": 300000, "apr_pct": 21.9 } }
+```
+
+```json
+{ "id": "rhea_visa", "kind": "account", "name": "Harbor Visa", "tier": "background", "fields": { "owners": [{ "party": "rhea", "role": "owner" }], "product": "harbor_visa", "opening": -12500, "autopay": "statement", "autopay_from": "rhea_checking" }, "relations": [] }
+```
+
+A **card** is an entity of its own, kind `card`: the `account` it draws on, its `holder` (one of that account's owners; an `authorized_user` holds a card on someone else's account), `network` (`debit`, `credit` or `charge`), `state` (`active`, `frozen`, `lost` or `cancelled`) and optionally `item`, the card in the holder's gear.
+
+```json
+{ "id": "rhea_debit", "kind": "card", "name": "Rhea's debit card", "tier": "background", "fields": { "account": "rhea_checking", "holder": "rhea", "network": "debit" }, "relations": [] }
+```
+
+### Flows
+
+A **flow** is every scheduled or one-off movement of money: rent, a bill, a transfer to savings, an allowance, a loan payment, income from outside. Each is an entity of kind `flow`:
+
+- `flow_kind`: `transfer`, `bill`, `rent`, `utility`, `subscription`, `premium`, `loan_payment`, `card_payment`, `savings`, `income`, `payroll`, `allowance`, `living`, `tax`, `distribution`, `invoice`, `draw` or `other`.
+- `from` and `to`: an account; a party (paying as their preferences choose, or paid into their account); or an outside payer or payee in words (`"Harbor Lets"`). An id-shaped word that names no entity (`rhea_chequing`) draws a warning: it is read as an outside party, so the money would come from or go to nowhere.
+- The amount, the first of `amount_cents`, `amount_formula`, `amount_table`, `amount_min` with `amount_max` (a draw between them), `amount_pct` of `amount_of`'s balance, and `amount_due` (`minimum`, `statement` or `balance` of the credit account it pays).
+- When: `every` (`day`, `week`, `month` or `year`) with `interval` (biweekly is `week` with 2), `weekdays` (0 is Sunday), `days` of the month (−1 is the last) and `months`, at `at` (`HH:MM`); or `once`, a local date-time. `start`, `end` and `count` bound it.
+- `shortfall`, when the money isn't there: `skip` (the default), `partial`, `retry` (after `retry_days`, up to `retries` times), `fallback` (from `fallback`), `overdraft` or `defer`.
+- `link` ties it to what it belongs to (a property, a job, a loan), `splits` sends parts elsewhere, and `shares` splits a household's flow between its members.
+
+```json
+{ "id": "rhea_boat_fund", "kind": "flow", "name": "Boat fund", "tier": "background", "fields": { "flow_kind": "savings", "from": "rhea_checking", "to": "rhea_savings", "amount_cents": 4000, "every": "week", "interval": 2, "weekdays": [5] }, "relations": [] }
+```
+
+A **household** (kind `household`, its members holding `member_of` toward it) is a party too: a flow from it with `shares` has each member pay their percent from their own money. This one is also a **lease**: a `rent` flow from the tenants to the owner, `link`ed to the property.
+
+```json
+{ "id": "valen_rent", "kind": "flow", "name": "Rent on the Valen flat", "tier": "background", "fields": { "flow_kind": "rent", "from": "valen_household", "to": "silas", "amount_cents": 140000, "every": "month", "days": [1], "shares": [{ "party": "rhea", "pct": 60 }, { "party": "teo", "pct": 40 }], "shortfall": "retry", "retry_days": 3, "retries": 2, "link": "valen_flat_property" }, "relations": [] }
+```
+
+### Work, business and tax
+
+A **job** is one person's employment, kind `job`: `worker`; `employer` (a business entity, a place, or an outside employer in words; an id-shaped one that names no one and no place draws a warning); `workplace`; `title`; `basis` (`salary`, `hourly`, `per_shift`, `commission`, `tips` or `stipend`) with `rate` (a year's salary, the hourly rate or the pay per shift); and `pay_every`: `weekly` or `biweekly` (on `pay_weekday`, or counted from the first payday, `pay_anchor`), `semimonthly` or `monthly` (on `pay_days`), `per_job` or `custom`. `hours_per_week` or `shifts_per_week` say how much is worked, `splits` sends pay across the worker's accounts, a `contractor` has nothing withheld, and `season_from` and `season_to` (`MM-DD`), `start` and `end` bound it.
+
+```json
+{ "id": "rhea_pilot_job", "kind": "job", "name": "Harbor pilot", "tier": "background", "fields": { "worker": "rhea", "employer": "Port Veil Pilots", "workplace": "salt_quay", "title": "Harbor pilot", "basis": "hourly", "rate": 3800, "hours_per_week": 30, "pay_every": "biweekly", "pay_anchor": "2026-09-18" }, "relations": [] }
+```
+
+A **business** is kind `business`: `owners`, the `places` it trades at (a purchase there pays it), its `operating_account` (an account it owns), `collects_sales_tax`, `margin_pct`, and what it pays its owners (`distribution_pct`, `distribution_every`). An **invoice** it is owed is kind `invoice`: `business`, `customer` (a party, or an outside customer in words), `cents`, `memo`, `issued`, `due` and `state` (`open`, `paid`, `late` or `void`).
+
+```json
+{ "id": "chandlery", "kind": "business", "name": "Net Loft Chandlery", "tier": "background", "fields": { "owners": [{ "party": "silas", "role": "owner" }], "places": ["net_loft"], "operating_account": "chandlery_checking", "collects_sales_tax": true }, "relations": [] }
+```
+
+```json
+{ "id": "chandlery_invoice_rhea", "kind": "invoice", "name": "Rope and fittings", "tier": "background", "fields": { "business": "chandlery", "customer": "rhea", "cents": 18000, "memo": "Rope and fittings", "issued": "2026-09-01", "due": "2026-10-01", "state": "open" }, "relations": [] }
+```
+
+**Tax** reads a person's `filing_status` (`single`, `married_filing_jointly` or `head_of_household`) and `local_tax`, and a place's `sales_tax_pct`, `tax_region` and `tax_exempt` (categories), else the config's `region` and `taxes`.
+
+### Holdings and property
+
+An **asset** is defined once, in `/packs/economy/config/assets` by id: `label`, `class` (`security`, `fund`, `bond`, `option`, `property`, `business_stake`, `crypto` or `other`), an optional `symbol`, its `price` per unit at the start, and how it moves and pays (`annual_return_pct`, `annual_volatility_pct`, `yield_pct`). A **holding**, kind `holding`, is a position in one asset: in an `account` (a `brokerage` or `retirement` one) or held directly by its `owners`, with `lots` (each `qty`, its total `cost` and when it was bought, `at`) and `route` for what it pays out (an account id, or `reinvest`).
+
+```json
+"assets": { "glix": { "label": "Great Lakes Index Fund", "class": "fund", "symbol": "GLIX", "price": 11240, "yield_pct": 1.6 } }
+```
+
+```json
+{ "id": "rhea_glix", "kind": "holding", "name": "Great Lakes Index Fund", "tier": "background", "fields": { "account": "rhea_brokerage", "asset": "glix", "lots": [{ "qty": 20, "cost": 196000, "at": "2025-03-02" }], "route": "reinvest" }, "relations": [] }
+```
+
+A **property**, kind `property`, is real estate tied to a `place`: `owners`, its `value` now, `appreciation_pct` a year, `purchase_price` and `purchased`, and its upkeep (`tax_pct` of value a year, `insurance` a month, `upkeep_pct` a year). A **mortgage** is an account of product `mortgage` whose `secured_by` names the property, and the property's `mortgage` names the account back.
+
+```json
+{ "id": "valen_flat_property", "kind": "property", "name": "The Valen flat", "tier": "background", "fields": { "place": "valen_flat", "owners": [{ "party": "silas", "role": "owner" }], "value": 18500000, "appreciation_pct": 3, "mortgage": "silas_mortgage" }, "relations": [] }
+```
+
+```json
+{ "id": "silas_mortgage", "kind": "account", "name": "Mortgage on the Valen flat", "tier": "background", "fields": { "owners": [{ "party": "silas", "role": "owner" }], "product": "mortgage", "opening": -9200000, "payment": 98000, "months_left": 214, "secured_by": "valen_flat_property" }, "relations": [] }
+```
+
+### Paying
+
+- **`pay_prefs`**, a person field, orders how they pay: tiers of `use` (`cash`, `debit`, `credit`, `charge`, `checking`, `savings`, or a card or account id), each for amounts from `min` to `max` and for `categories`, but not those in `except`. Left out, they follow the person's wealth band and `traits`: a frugal or careful person keeps to cash and debit longer, an impulsive or flashy one reaches for credit first.
+
+```json
+"pay_prefs": [{ "use": "cash", "max": 2000 }, { "use": "debit", "max": 50000 }, { "use": "rhea_visa", "categories": ["travel"] }]
+```
+
+- **Cash machines and branches** are place fields: `atm`, `{ "bank": "Harbor Savings", "fee": 300, "limit": 40000 }` (`fee` the machine's own charge, `limit` the most one withdrawal takes, `deposits` whether it takes them), and `branch`, `{ "bank": "Harbor Savings" }`, a counter where that bank's customers withdraw and deposit. `bank` is the institution as the accounts name it. Where cash machines run (Money 4), cash comes out and goes in only at one of the two.
 
 ## Calendar and the start
 
@@ -100,7 +215,7 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 - **Knowledge.** `{ "type": "knows", "to": "harbor_guild" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.
 - **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ "type": "knows", "to": "rhea" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger ("Silas doesn't know you."), so a person the POV spent the chat with would greet them as one.
 - **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.
-- **Things** are where they are: `fields.place` for something lying somewhere, `{ "type": "in", "to": "rhea" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns.
+- **Things** are where they are: `fields.place` for something lying somewhere, `{ "type": "in", "to": "rhea" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns. Money is owned differently, through `owners` (see [Money](#money)).
 
 ## Quests and secrets as tracks
 
@@ -156,7 +271,7 @@ Schedules give people routines: where they are (`target: "place"`) or what they 
 
 ## Realism and the rest
 
-- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money to 2 when the story tracks cash, Relationships when feelings drive it. A chat can change levels later.
+- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money when the story counts money (see [Money](#money)), Relationships when feelings drive it. A chat can change levels later.
 - Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).
 
 ## Refining a world in play
@@ -177,7 +292,10 @@ When the source chat already plays a world (`chat_state` says so), the draft sta
 - Everyone who has met the POV holds a `knows` or a `regard` toward them.
 - Each person's `life` is their state at the present, and the dead and dying are at the place they lie.
 - A death or dying the POV hasn't learned of sets `lifeKnownBy` to who knows, with everyone who starts where the body lies; left out, it tells the player.
-- Everything someone owns names them in `fields.owner`.
+- Every thing someone owns names them in `fields.owner`, and every account, business, holding and property names its holders in `fields.owners`.
+- Every flow and job pays from and to something that exists (an id, or an outside party in words), with an amount and a schedule (`every`, or `once`).
+- No money is in an older shape: `draft_check` shows no `migrated` warning.
+- A world whose minds run in full (`"secrecy": "full"`) has no secret a character would think about openly.
 - Openings are today's balances, and quests start at the stage the story reached.
 - No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: "true"`, so the first turn reveals it.
 - No public text gives a secret away, and no cue states the secret it stands for.
