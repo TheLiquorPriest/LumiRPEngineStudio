@@ -11,7 +11,7 @@
   },
   "devDependencies": {
     "bun-types": "^1.4.2",
-    "lumi-rp-engine": "github:TheLiquorPriest/LumiRPEngine#340d354db9cf4b11ef18f83c09cde1d6ad6c2d35",
+    "lumi-rp-engine": "github:TheLiquorPriest/LumiRPEngine#8aa00142335524923aaf1943300f90ec4dfd0732",
     "lumiverse-spindle-types": "0.6.49",
     "preact": "^11.0.1",
     "typescript": "7.0.2"
