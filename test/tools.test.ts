@@ -196,4 +196,16 @@ describe("tool answers", () => {
       expect((await runTool("draft_check", {}, ctx)).content).not.toContain("entities.purse");
     }
   });
+
+  test("draft_check warns of an id that gives a secret away, until it names no one", async () => {
+    const { ctx } = await setup();
+    const danny = { id: "danny", kind: "person", name: "Danny Okafor", tier: "supporting", visibility: "secret", fields: { place: "home" }, relations: [] };
+    const savings = (id: string) => ({ op: "add", path: `/entities/${id}`, value: { id, kind: "account", name: "Savings", tier: "background", fields: { owners: [{ party: "danny", role: "owner" }], product: "savings", opening: 0 }, relations: [] } });
+    await runTool("draft_patch", { ops: [{ op: "add", path: "/entities/danny", value: danny }, savings("acct_danny_savings")] }, ctx);
+    const leaky = (await runTool("draft_check", {}, ctx)).content;
+    expect(leaky).toContain("warning at entities.acct_danny_savings.id:");
+    expect(leaky).toContain("[story.leaky_id]");
+    await runTool("draft_patch", { ops: [{ op: "remove", path: "/entities/acct_danny_savings" }, savings("acct_savings_1")] }, ctx);
+    expect((await runTool("draft_check", {}, ctx)).content).not.toContain("story.leaky_id");
+  });
 });
