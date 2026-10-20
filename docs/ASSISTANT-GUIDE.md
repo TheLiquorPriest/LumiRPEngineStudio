@@ -53,6 +53,8 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 "cues": [{ "text": "Changes the subject whenever the guild comes up.", "track": "silas_debt" }]
 ```
 
+- **Ids keep secrets too.** The player's views carry the ids of what the player acts on (an account, a flow, a job), so keep a secret entity's or place's id (`"visibility": "secret"`) out of every other entity's id, and any word of four letters or more from its name that no person or place the player can see shares: while Danny Okafor is secret, `bill_danny_rent` gives him away and `bill_rent` doesn't (`draft_check` warns, `story.leaky_id`, and suggests an id that names no one). A secret track's own id is safe: the player's quest log shows a stand-in for it.
+
 ## Character minds
 
 A character can have a **mind**: a model call made as that character alone, from what they know (their entity's fields, the lore they may read, the turns they were there for, their notes and commitments, their money and their day, and their own secrets whole), which answers with their private read of the moment and what they intend, for the narrator to depict. Minds are blind to each other, and a mind reads its character's fields, never a character card, so write who each person is into their fields (see [your own kinds](#people-tiers-and-classifications)). What a mind plans is lived only by an agent (see Tiers there).
@@ -98,6 +100,11 @@ Money is entities, a few fields and the economy pack's config. Amounts are whole
 - **How much runs** is `/realism/levels/money`, capped by a person's tier (never the POV's). At 1 a person's `wealth` band is all there is: set it from how the story treats them. At 2 their cash and one everyday account are real, and a payment they can't cover is declined. From 3 all their accounts run, with flows, cards, payment preferences, household shares, living costs, withholding on pay and property; from 4 statements, interest, fees, late payments, credit scores, cash only at a machine or a branch, holds, daily card limits, overdraft policies, tax brackets, sales and business tax and investments. A new draft is at 1: raise it to 2 when the story counts cash, and to 3 when it has wages, rent, cards or property.
 - **The economy config.** A new draft has no `/packs/economy`: add it whole once, `{ "version": 1, "config": {} }`. Its config holds `products` (the world's own account products), `features` (a feature switched on or off for this world by its id, `{ "flows": true }`: from Money 2 for `flows`, `cards`, `payment_prefs`, `households`, `living_costs`, `atm`, `daily_limits` and `overdraft`, from Money 3 for the rest), `assets` (what holdings are in), `region` (the world's region, a row of the regions data table such as `mi`, which sets its tax rates and cost of living) and `taxes` (`exempt`, the categories no sales tax falls on, and `corporatePct`). Add a map whole the first time (`/packs/economy/config/products` with its first product in it), then each further entry by its own path (`/packs/economy/config/products/<id>`): adding the whole map again replaces it, and every entry in it.
 - **Who owns money.** A party is a person, or an entity of kind `business`, `trust` or `household`. Every account, business, holding and property lists its holders in `fields.owners`, each `{ "party": "rhea", "role": "owner" }`: `owner` and `joint` spend, manage and count it; `authorized_user` only spends; `custodian` and `trustee` spend and manage it for a `beneficiary`, who counts it. A `share` (a percent) divides its worth between the holders who count it; given by none, they share equally. Managing an account is setting up and changing what it pays (its standing payments and autopay) and its cards. Whoever holds a managing role (`owner`, `joint`, `custodian` or `trustee`) on a business or a trust also manages every account that business or trust holds with a managing role, without a role on the account. Spending from it still takes a role on the account itself, such as `authorized_user`, and it counts toward their worth only through their share of the business.
+- **Money someone only manages** is run for whom it is, never for the manager. That is a business's or a trust's account they hold no spending role on, or the business or trust paying as a party. In play, LumiRPEngine holds its characters to this rule when they set up standing payments and autopay, hire, raise pay and bill, so write money as they could have set it up:
+  - No flow from such money, nor a `fallback` on it, pays the manager, their household or its members, or a party any of those counts the worth of (a business they own, a trust they benefit from); nor, unless they hold a share of that money themselves, an account they can spend from by a role of their own.
+  - Payments among whom the money is for are its own: a business's savings topping up its operating account, a trust paying its beneficiary. A business someone owns outright may pay their other businesses.
+  - An owner takes money out for themselves by a salary (a job at the business), its payouts (`distribution_pct`) or a draw in play, never by a flow to them or their household. A manager with no share of a business (a custodian, a trustee) puts neither themselves nor their household on its payroll.
+  - A credit account's `autopay_from` is its debtor's own money: an account they can spend from, or whose worth is theirs (a business's loan from the business's account, a custodial card from the custodial savings).
 
 ### Accounts and cards
 
@@ -245,7 +252,7 @@ A track is a small state machine: `start` names its first stage, and each stage'
   "known": { "label": "Silas owes the guild", "truth": "Silas borrowed the guild's harbor dues to pay a gambling debt.", "next": [] } } }
 ```
 
-- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`).
+- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`). The player answers a puzzle through their quest log, which reaches only puzzles they can see. An action or rule of the world's that answers one names it by its own id, with the `story.answer` effect's `track`: `{ "type": "story.answer", "args": { "track": "study_safe", "answer": "1887" } }`. Its `puzzle` is the player's reference, read through their quest log, so it never reaches a puzzle they can't see.
 
 ## Lore entries with audiences
 
@@ -280,6 +287,7 @@ Schedules give people routines: where they are (`target: "place"`) or what they 
 When the source chat already plays a world (`chat_state` says so), the draft starts from that world's head and becomes its **next revision**; the chat keeps running on its revision until the player chooses Upgrade in LumiRPEngine (**Settings → Pins and upgrade**), which shows every change and lets them take or keep each one. So:
 
 - Keep every id the chat uses. Renaming an id makes a new thing and strands the old one.
+- `chat_state` lists a secret quest under the stand-in id the player's quest log gives it (`~` and a hash), never its own: find the track itself with `engine_read`.
 - Add what the story introduced since the world was made: new people, places, quests, lore.
 - Fix definitions (a name, a description, a tier) freely; for state the chat has moved on (where someone is, a balance, a quest's stage), the Upgrade keeps the chat's value by default, which is usually right.
 - Don't remove what the chat still uses: the Upgrade keeps removed people unless the player picks Remove.
@@ -296,6 +304,8 @@ When the source chat already plays a world (`chat_state` says so), the draft sta
 - Every thing someone owns names them in `fields.owner`, and every account, business, holding and property names its holders in `fields.owners`.
 - Every flow and job pays from and to something that exists (an id, or an outside party in words), with an amount and a schedule (`every`, or `once`).
 - No money is in an older shape: `draft_check` shows no `migrated` warning.
+- No id gives a secret away: `draft_check` shows no `story.leaky_id` warning.
+- Money someone only manages pays for whom it is, never for its manager or their household.
 - A world whose minds run in full (`"secrecy": "full"`) has no secret a character would think about openly.
 - Openings are today's balances, and quests start at the stage the story reached.
 - No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: "true"`, so the first turn reveals it.
