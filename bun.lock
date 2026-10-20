@@ -6,7 +6,7 @@
       "name": "lumi-rp-engine-studio",
       "devDependencies": {
         "bun-types": "^1.4.2",
-        "lumi-rp-engine": "github:TheLiquorPriest/LumiRPEngine#8aa00142335524923aaf1943300f90ec4dfd0732",
+        "lumi-rp-engine": "github:TheLiquorPriest/LumiRPEngine#591c5f411d72dccbad1cd094e98226c2347f6a74",
         "lumiverse-spindle-types": "0.6.49",
         "preact": "^11.0.1",
         "typescript": "7.0.2",
@@ -58,7 +58,7 @@
 
     "bun-types": ["bun-types@1.4.3", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-tinRJNGOmUN+tEAsn2y2e942n9JHRHR42iUYzDH75NmhJqVBokGSQkkfSFdNWwsANIdrK6ACH9t01M452YyTwg=="],
 
-    "lumi-rp-engine": ["lumi-rp-engine@github:TheLiquorPriest/LumiRPEngine#8aa0014", { "dependencies": { "preact": "^11.0.1" }, "bin": { "lumirpengine": "dist/lumirpengine.js" } }, "TheLiquorPriest-LumiRPEngine-8aa0014", "sha512-07bfHx72LYSMA4AKA25hPq1mOxazuPoKhpB1eXm/HmcGiHFVDQjPhcKYPXCgMlMCYPeVQAGpdr6FasNudHYzng=="],
+    "lumi-rp-engine": ["lumi-rp-engine@github:TheLiquorPriest/LumiRPEngine#591c5f4", { "dependencies": { "preact": "^11.0.1" }, "bin": { "lumirpengine": "dist/lumirpengine.js" } }, "TheLiquorPriest-LumiRPEngine-591c5f4", "sha512-Se163cwhTERlRbJKAzn1zsLEWX3U+cgTEXev2LaRqlD74BxSiazTAJni0gvO/UfdJhkAf6WE1/4xFCQOiROJPw=="],
 
     "lumiverse-spindle-types": ["lumiverse-spindle-types@0.6.49", "", {}, "sha512-IsHVkpwHosNKdia+7TI89WxkalB8goyc1mzdqg1qKnOF9QffFUwnPpledgqa3aIQu5zQGOCchLxSJqF+Q3Y1Kg=="],
 
