@@ -24,7 +24,7 @@ A converted world starts where the story is now. When the chat attaches it, the 
 ## People, tiers and classifications
 
 - **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.
-- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `"agent": true` on someone who pursues their own goals off-screen (a rival, a schemer).
+- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `"agent": true` on someone who pursues their own goals off-screen (a rival, a schemer). From Cast life 3 (`castlife` in `/realism/levels`), an agent also lives the plans their mind makes (to go somewhere, to meet someone); anyone else keeps to their schedules, and their mind's plans lapse. A mind's plan to pay or lend someone money is paid either way, from the character's own money.
 - **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: "tending bar"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. What someone earns is a job (see [Money](#money)). Who someone is goes in fields of their own kind (below): a character's mind reads their entity's fields, never their character card, so move a card's description, personality and manner there. History and background can also go in lore entries linked to them.
 - **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:
 
@@ -55,7 +55,7 @@ An entity holds values in `class` (`"class": { "role": ["ally"] }`) and free tag
 
 ## Character minds
 
-A character can have a **mind**: a model call made as that character alone, from what they know (their entity's fields, the lore they may read, the turns they were there for, their notes and commitments, their money and their day), which answers with their private read of the moment and what they intend, for the narrator to depict. Minds are blind to each other, and a mind reads its character's fields, never a character card, so write who each person is into their fields (see [your own kinds](#people-tiers-and-classifications)).
+A character can have a **mind**: a model call made as that character alone, from what they know (their entity's fields, the lore they may read, the turns they were there for, their notes and commitments, their money and their day, and their own secrets whole), which answers with their private read of the moment and what they intend, for the narrator to depict. Minds are blind to each other, and a mind reads its character's fields, never a character card, so write who each person is into their fields (see [your own kinds](#people-tiers-and-classifications)). What a mind plans is lived only by an agent (see Tiers there).
 
 Each turn a focus score puts each character on a ladder: **Live** (a mind every turn), **Near** and **Far** (a mind on their refresh) or **Background** (routine only). The score counts being in the POV's scene or close by, being named, a relation with the POV, a stake in tracks and rules under way, plans with the POV, and the person's tier. The world tunes it in `/minds`; every part is optional, and one left out reads as its default:
 
@@ -131,14 +131,14 @@ A **flow** is every scheduled or one-off movement of money: rent, a bill, a tran
 - `from` and `to`: an account; a party (paying as their preferences choose, or paid into their account); or an outside payer or payee in words (`"Harbor Lets"`). An id-shaped word that names no entity (`rhea_chequing`) draws a warning: it is read as an outside party, so the money would come from or go to nowhere.
 - The amount, the first of `amount_cents`, `amount_formula`, `amount_table`, `amount_min` with `amount_max` (a draw between them), `amount_pct` of `amount_of`'s balance, and `amount_due` (`minimum`, `statement` or `balance` of the credit account it pays).
 - When: `every` (`day`, `week`, `month` or `year`) with `interval` (biweekly is `week` with 2), `weekdays` (0 is Sunday), `days` of the month (−1 is the last) and `months`, at `at` (`HH:MM`); or `once`, a local date-time. `start`, `end` and `count` bound it.
-- `shortfall`, when the money isn't there: `skip` (the default), `partial`, `retry` (after `retry_days`, up to `retries` times), `fallback` (from `fallback`), `overdraft` or `defer`.
+- `shortfall`, when the money isn't there: `skip` (the default), `partial`, `retry` (after `retry_days`, up to `retries` times), `fallback` (from `fallback`: another account the payer may spend from, by id; nothing else is drawn on, and a `fallback` that isn't in the world is an error), `overdraft` or `defer`.
 - `link` ties it to what it belongs to (a property, a job, a loan), `splits` sends parts elsewhere, and `shares` splits a household's flow between its members.
 
 ```json
 { "id": "rhea_boat_fund", "kind": "flow", "name": "Boat fund", "tier": "background", "fields": { "flow_kind": "savings", "from": "rhea_checking", "to": "rhea_savings", "amount_cents": 4000, "every": "week", "interval": 2, "weekdays": [5] }, "relations": [] }
 ```
 
-A **household** (kind `household`, its members holding `member_of` toward it) is a party too: a flow from it with `shares` has each member pay their percent from their own money. This one is also a **lease**: a `rent` flow from the tenants to the owner, `link`ed to the property.
+A **household** (kind `household`, its members holding `member_of` toward it) is a party too. Where household shares run (Money 3, or from 2 with `households` switched on), a flow from it with `shares` has each member pay their percent from their own money; below that, its payer pays it whole. This one is also a **lease**: a `rent` flow from the tenants to the owner, `link`ed to the property.
 
 ```json
 { "id": "valen_rent", "kind": "flow", "name": "Rent on the Valen flat", "tier": "background", "fields": { "flow_kind": "rent", "from": "valen_household", "to": "silas", "amount_cents": 140000, "every": "month", "days": [1], "shares": [{ "party": "rhea", "pct": 60 }, { "party": "teo", "pct": 40 }], "shortfall": "retry", "retry_days": 3, "retries": 2, "link": "valen_flat_property" }, "relations": [] }
@@ -229,7 +229,7 @@ A track is a small state machine: `start` names its first stage, and each stage'
   "found": { "label": "The ledger is found", "next": [] } } }
 ```
 
-- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above).
+- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above), and make them the track's `owner`: the owner's mind, and the mind of anyone with a cue that stands for it, knows its truths whatever the player has found out.
 
 ```json
 { "id": "silas_debt", "kind": "secret", "label": "What Silas owes", "visibility": "secret", "owner": "silas", "start": "rumor", "stages": {
@@ -256,7 +256,7 @@ Lore is what the world knows, for the engine's helpers: places' histories, peopl
 ```
 
 - `"visibility": "known_by"` keeps an entry to what the POV knows (they must know every linked person and place).
-- A **secret** entry holds a secret itself: `"secret": true` with a `gate` formula (`"stage('silas_debt') == 'known'"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator.
+- A **secret** entry holds a secret itself: `"secret": true` with a `gate` formula (`"stage('silas_debt') == 'known'"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator. Name in `holders` the people whose own secret it is: their minds read it, gate or no gate, and so does the mind of anyone with a cue that stands for it. No other mind ever reads a secret entry, whatever links it or opens its gate.
 - A public entry must never repeat a track's truth (lint error `secret_truth`).
 - Keep macros (`{{user}}`, `{{char}}`) out of lore unless the source used them on purpose: the engine lists them for review on install.
 
@@ -273,6 +273,7 @@ Schedules give people routines: where they are (`target: "place"`) or what they 
 
 - `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money when the story counts money (see [Money](#money)), Relationships when feelings drive it. A chat can change levels later.
 - Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).
+- **Data tables.** A new draft carries LumiRPEngine's seventeen default data tables (`/tables`: prices, pay, taxes, occupations, regions, gear, vehicles and the calendar's holidays, all Modern US), so a `region`, an `occupation` or an `amount_table` reads from them at once. Leave the tables as they are, with each one's `revision` and `/pins`: LumiRPEngine works a table's revision and pin out again only when Build edits it, so a table changed here would keep its old ones. When the setting needs other prices or pay, say so in your answer: the user adapts the tables in Build after installing.
 
 ## Refining a world in play
 
