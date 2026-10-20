@@ -182,14 +182,18 @@ describe("tool answers", () => {
     expect((await runTool("draft_check", {}, ctx)).content).toContain("warning at entities.flow_rent.fields.from:");
   });
 
-  test("money in an older shape, which the engine converts as it loads, is reported until it's written the current way", async () => {
-    const { ctx } = await setup();
-    const purse = (fields: JsonObject) => ({ id: "purse", kind: "account", name: "Rhea's purse", tier: "background", fields, relations: [] });
-    await runTool("draft_patch", { ops: [{ op: "add", path: "/entities/purse", value: purse({ owner: "you", type: "cash", opening: 4250 }) }] }, ctx);
-    const old = (await runTool("draft_check", {}, ctx)).content;
-    expect(old).toContain("warning at entities.purse:");
-    expect(old).toContain('"fields.owners":[{"party":"you","role":"owner"}]');
-    await runTool("draft_patch", { ops: [{ op: "replace", path: "/entities/purse", value: purse({ owners: [{ party: "you", role: "owner" }], product: "cash", opening: 4250 }) }] }, ctx);
-    expect((await runTool("draft_check", {}, ctx)).content).not.toContain("entities.purse");
+  test("money in an older shape is reported until it's written the current way, whether or not the draft configures the economy", async () => {
+    // The engine converts older shapes only in a world with /packs/economy; a new draft has none.
+    for (const economy of [false, true]) {
+      const { ctx } = await setup();
+      const purse = (fields: JsonObject) => ({ id: "purse", kind: "account", name: "Rhea's purse", tier: "background", fields, relations: [] });
+      const ops: JsonObject[] = [...(economy ? [{ op: "add", path: "/packs/economy", value: { version: 1, config: {} } }] : []), { op: "add", path: "/entities/purse", value: purse({ owner: "you", type: "cash", opening: 4250 }) }];
+      await runTool("draft_patch", { ops }, ctx);
+      const old = (await runTool("draft_check", {}, ctx)).content;
+      expect(old).toContain("warning at entities.purse:");
+      expect(old).toContain('"fields.owners":[{"party":"you","role":"owner"}]');
+      await runTool("draft_patch", { ops: [{ op: "replace", path: "/entities/purse", value: purse({ owners: [{ party: "you", role: "owner" }], product: "cash", opening: 4250 }) }] }, ctx);
+      expect((await runTool("draft_check", {}, ctx)).content).not.toContain("entities.purse");
+    }
   });
 });

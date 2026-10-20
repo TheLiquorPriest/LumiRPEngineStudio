@@ -4,7 +4,7 @@
 // backend, and from `lumi-rp-engine/studio-bridge`, which holds the contract alone, in the frontend,
 // so the frontend never bundles the engine.
 
-import { load } from "lumi-rp-engine/studio";
+import { load, migrate } from "lumi-rp-engine/studio";
 import type { LintIssue, WorldDoc } from "lumi-rp-engine/studio";
 import { jsonEqual } from "./backend/pointer";
 import { hasOwn, isRecord, toJson } from "./shared/json";
@@ -35,33 +35,40 @@ function parts(entity: object): Record<string, unknown> {
 }
 
 /**
- * What the engine's migration changed in a document's entities. LumiRPEngine converts older shapes
- * (a single money `owner`, a `bills` list, pay fields on a person, a brokerage's units of a symbol)
- * each time it loads a world, and says nothing; a draft keeps the older shape until it is written
- * again, so each change is reported, with what was written and what the engine reads instead.
+ * The world as LumiRPEngine's migration leaves it where the economy runs. The engine converts older
+ * money shapes only in a world that configures the economy (`/packs/economy`), and a new draft has
+ * none, so a draft without one is converted as if it had one, to find what it holds in an older shape.
  */
-function migrationIssues(before: JsonValue | string, after: WorldDoc): LintIssue[] {
+function converted(world: WorldDoc): WorldDoc {
+  return world.packs.economy ? world : migrate({ ...world, packs: { ...world.packs, economy: { version: 1, config: {} } } });
+}
+
+/**
+ * What the engine's migration changes in a document's entities. LumiRPEngine converts older shapes
+ * (a single money `owner`, a `bills` list, pay fields on a person, a brokerage's units of a symbol)
+ * as it loads a world, and says nothing, and only where the world configures the economy; a draft
+ * keeps the older shape until it is written again, so each one is reported, with what was written
+ * and its current shape.
+ */
+function migrationIssues(before: JsonValue | string, world: WorldDoc): LintIssue[] {
   if (!isRecord(before) || !isRecord(before.entities)) return [];
   const written = before.entities;
+  const after = converted(world);
+  const how = world.packs.economy ? "which the engine converts each time it loads the world" : "which the engine converts only in a world that configures the economy (/packs/economy), so in this draft it stays as written and may not work";
   const issues: LintIssue[] = [];
-  for (const id of new Set([...Object.keys(written), ...Object.keys(after.entities)])) {
+  for (const [id, now] of Object.entries(after.entities)) {
     const was = hasOwn(written, id) ? written[id] : undefined;
-    const now = hasOwn(after.entities, id) ? after.entities[id] : undefined;
     if (jsonEqual(was, now)) continue;
     const path = `entities.${id}`;
-    if (!now) {
-      issues.push({ severity: "warning", path, code: "migrated", message: `The engine drops ${id} as it loads the world: it is in a shape the engine no longer reads.` });
-      continue;
-    }
     if (!isRecord(was)) {
-      issues.push({ severity: "warning", path, code: "migrated", message: `The engine makes the ${now.kind} ${now.name} (${id}) out of an older shape in this draft as it loads the world: write it yourself, with the fields ${quote(now.fields)}, and remove what it came from.` });
+      issues.push({ severity: "warning", path, code: "migrated", message: `An older shape in this draft stands for the ${now.kind} ${now.name} (${id}), ${how}: write it yourself, with the fields ${quote(now.fields)}, and remove what it came from.` });
       continue;
     }
     const old = parts(was);
-    const read = parts(now);
-    const keys = [...new Set([...Object.keys(old), ...Object.keys(read)])].filter((k) => !jsonEqual(old[k], read[k]));
+    const current = parts(now);
+    const keys = [...new Set([...Object.keys(old), ...Object.keys(current)])].filter((k) => !jsonEqual(old[k], current[k]));
     const pick = (from: Record<string, unknown>) => Object.fromEntries(keys.filter((k) => hasOwn(from, k)).map((k) => [k, from[k]]));
-    issues.push({ severity: "warning", path, code: "migrated", message: `${now.name} is in an older shape, which the engine converts each time it loads the world: written ${quote(pick(old))}, read as ${quote(pick(read))}. Write it the way it is read.` });
+    issues.push({ severity: "warning", path, code: "migrated", message: `${now.name} is in an older shape, ${how}: written ${quote(pick(old))}, current ${quote(pick(current))}. Write it the current way.` });
   }
   return issues;
 }
@@ -69,9 +76,9 @@ function migrationIssues(before: JsonValue | string, after: WorldDoc): LintIssue
 /**
  * A world as LumiRPEngine reads one (a file, a world from the engine, a draft about to be
  * offered): a fresh copy, shape-checked, migrated to this engine (maps compiled, missing parts
- * filled, older shapes converted) and linted, errors first, with what the migration changed in its
- * entities (`migrated`). The assistant writes drafts piece by piece, so a document the engine
- * can't read comes back as an error rather than a throw.
+ * filled, older shapes converted) and linted, errors first, with what it holds in an older shape
+ * (`migrated`). The assistant writes drafts piece by piece, so a document the engine can't read
+ * comes back as an error rather than a throw.
  */
 export function readWorldDoc(input: unknown): Loaded {
   try {
