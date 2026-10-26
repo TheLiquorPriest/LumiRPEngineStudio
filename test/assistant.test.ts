@@ -14,7 +14,7 @@ async function setup(script: (n: number, request: ModelRequest) => ModelReply, m
   const studio = startStudio(host);
   host.model = (request, n) => script(n, request);
   const chatId = messages.length > 0 ? "chat-1" : null;
-  if (chatId) host.chatsById.set(chatId, { id: chatId, owner: USER, name: "Harbor", characterId: "", metadata: {}, messages: messages.map((content, i) => ({ id: `m${i}`, role: i % 2 === 0 ? ("assistant" as const) : ("user" as const), name: i % 2 === 0 ? "Silas" : "Rhea", content })) });
+  if (chatId) host.chatsById.set(chatId, { id: chatId, owner: USER, name: "Harbor", characterId: "", metadata: {}, messages: messages.map((content, i) => ({ id: `m${i}`, role: i % 2 === 0 ? ("assistant" as const) : ("user" as const), name: i % 2 === 0 ? "Corin" : "Rhea", content })) });
   const source: DraftSource = { kind: chatId ? "chat" : "blank", label: chatId ? "Chat: Harbor" : "Blank", chatId, characterIds: [], books: [], pasted: [], worldId: null };
   const draft = await studio.drafts.create(USER, { name: "Loop", source, doc: newWorld("loop", "Loop"), link: null });
   return { host, studio, draft };

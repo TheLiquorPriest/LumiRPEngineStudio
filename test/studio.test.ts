@@ -48,8 +48,8 @@ const CONVERSION: JsonObject[] = [
   { op: "add", path: "/places/salt_quay", value: { id: "salt_quay", name: "Salt Quay", parent: "port_veil", fields: { description: "Tar-black pilings and fish crates." } } },
   { op: "add", path: "/places/guild_office", value: { id: "guild_office", name: "The guild office", parent: "port_veil", fields: {}, visibility: "discoverable" } },
   { op: "add", path: "/routes/quay_to_guild", value: { id: "quay_to_guild", from: "salt_quay", to: "guild_office", modes: { walk: { minutes: 6 } }, bidirectional: true } },
-  { op: "add", path: "/entities/rhea", value: { id: "rhea", kind: "character", name: "Rhea Valen", tier: "principal", fields: { place: "salt_quay", description: "A courier who never reads what she carries." }, relations: [{ type: "regard", to: "silas", fields: { warmth: 20, trust: -10, respect: 30 } }, { type: "knows", to: "silas" }] } },
-  { op: "add", path: "/entities/silas", value: { id: "silas", kind: "character", name: "Silas Crane", tier: "supporting", fields: { place: "salt_quay" }, relations: [{ type: "regard", to: "rhea", fields: { warmth: 35, trust: 15, respect: 20 } }] } },
+  { op: "add", path: "/entities/rhea", value: { id: "rhea", kind: "character", name: "Rhea Valen", tier: "principal", fields: { place: "salt_quay", description: "A courier who never reads what she carries." }, relations: [{ type: "regard", to: "corin", fields: { warmth: 20, trust: -10, respect: 30 } }, { type: "knows", to: "corin" }] } },
+  { op: "add", path: "/entities/corin", value: { id: "corin", kind: "character", name: "Corin Crane", tier: "supporting", fields: { place: "salt_quay" }, relations: [{ type: "regard", to: "rhea", fields: { warmth: 35, trust: 15, respect: 20 } }] } },
   { op: "add", path: "/entities/rhea_purse", value: { id: "rhea_purse", kind: "account", name: "Rhea's purse", tier: "background", fields: { owner: "rhea", type: "cash", opening: 4250 }, relations: [] } },
   { op: "replace", path: "/pov", value: "rhea" },
   { op: "remove", path: "/entities/you" },
@@ -60,16 +60,16 @@ const CONVERSION: JsonObject[] = [
   {
     op: "add",
     path: "/tracks/lost_ledger",
-    value: { id: "lost_ledger", kind: "quest", label: "The lost ledger", visibility: "public", start: "searching", stages: { searching: { label: "Searching for the ledger", cue: "Silas swears the ledger left the archive in May.", next: [{ to: "found", when: "flag('ledger_found')" }] }, found: { label: "The ledger is found", next: [] } } },
+    value: { id: "lost_ledger", kind: "quest", label: "The lost ledger", visibility: "public", start: "searching", stages: { searching: { label: "Searching for the ledger", cue: "Corin swears the ledger left the archive in May.", next: [{ to: "found", when: "flag('ledger_found')" }] }, found: { label: "The ledger is found", next: [] } } },
   },
   {
     op: "add",
-    path: "/tracks/silas_debt",
-    value: { id: "silas_debt", kind: "secret", label: "What Silas owes", visibility: "secret", owner: "silas", start: "rumor", stages: { rumor: { label: "Something is off", cue: "Silas flinches whenever the guild is mentioned.", next: [{ to: "known", when: "at(pov, 'guild_office')" }] }, known: { label: "Silas owes the guild", truth: "Silas borrowed the guild's harbor dues to pay a gambling debt.", next: [] } } },
+    path: "/tracks/corin_debt",
+    value: { id: "corin_debt", kind: "secret", label: "What Corin owes", visibility: "secret", owner: "corin", start: "rumor", stages: { rumor: { label: "Something is off", cue: "Corin flinches whenever the guild is mentioned.", next: [{ to: "known", when: "at(pov, 'guild_office')" }] }, known: { label: "Corin owes the guild", truth: "Corin borrowed the guild's harbor dues to pay a gambling debt.", next: [] } } },
   },
   { op: "add", path: "/lore/lore_port_veil", value: { id: "lore_port_veil", title: "Port Veil", content: "A salt-trading port of nine thousand people.", keys: ["Port Veil"], aliases: ["the Veil"], topics: ["places"], links: ["port_veil"] } },
-  { op: "add", path: "/lore/silas_secret", value: { id: "silas_secret", title: "Silas's debt", content: "Silas borrowed the guild's harbor dues to pay a gambling debt.", keys: ["dues"], links: ["silas"], secret: true, gate: "stage('silas_debt') == 'known'", audience: ["npc.choose"] } },
-  { op: "add", path: "/schedules/silas_days", value: { id: "silas_days", owner: "silas", target: "place", recurrence: { every: "week", weekdays: [1, 2, 3, 4, 5] }, slots: [{ start: "08:00", end: "17:00", value: "guild_office" }] } },
+  { op: "add", path: "/lore/corin_secret", value: { id: "corin_secret", title: "Corin's debt", content: "Corin borrowed the guild's harbor dues to pay a gambling debt.", keys: ["dues"], links: ["corin"], secret: true, gate: "stage('corin_debt') == 'known'", audience: ["npc.choose"] } },
+  { op: "add", path: "/schedules/corin_days", value: { id: "corin_days", owner: "corin", target: "place", recurrence: { every: "week", weekdays: [1, 2, 3, 4, 5] }, slots: [{ start: "08:00", end: "17:00", value: "guild_office" }] } },
 ];
 
 describe("LumiRPEngine Studio", () => {
@@ -79,15 +79,15 @@ describe("LumiRPEngine Studio", () => {
       id: "chat-1",
       owner: USER,
       name: "Evening on Salt Quay",
-      characterId: "char-silas",
+      characterId: "char-corin",
       metadata: { chat_world_book_ids: ["book-veil", "book-engine"] },
       messages: [
-        { id: "m1", role: "assistant", name: "Silas", content: "Silas waves you over at Salt Quay. 'The ledger left the archive in May, I swear it.'" },
+        { id: "m1", role: "assistant", name: "Corin", content: "Corin waves you over at Salt Quay. 'The ledger left the archive in May, I swear it.'" },
         { id: "m2", role: "user", name: "Rhea", content: "I count my purse: forty-two fifty left after the ferry." },
-        { id: "m3", role: "assistant", name: "Silas", content: "He flinches when you mention the guild. The lamps come on; it's half past six." },
+        { id: "m3", role: "assistant", name: "Corin", content: "He flinches when you mention the guild. The lamps come on; it's half past six." },
       ],
     });
-    host.cards.set("char-silas", { id: "char-silas", owner: USER, name: "Silas", description: "A nervous harbor clerk.", personality: "evasive", scenario: "Port Veil", firstMessage: "Over here!", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: [] });
+    host.cards.set("char-corin", { id: "char-corin", owner: USER, name: "Corin", description: "A nervous harbor clerk.", personality: "evasive", scenario: "Port Veil", firstMessage: "Over here!", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: [] });
     host.bookStore.set("book-veil", { id: "book-veil", owner: USER, name: "Veil Lore", description: "", metadata: {}, entryList: [{ id: "e-guild", comment: "The harbor guild", keys: ["guild"], content: "The guild collects harbor dues every quarter.", disabled: false, constant: false }] });
     host.bookStore.set("book-engine", { id: "book-engine", owner: USER, name: "LumiRPEngine · Old", description: "", metadata: { lumi_rp_engine: true }, entryList: [] });
     const script: ModelReply[] = [
@@ -95,7 +95,7 @@ describe("LumiRPEngine Studio", () => {
       { content: "", reasoning: "Now the details.", toolCalls: [call("c3", "lore_read", { ids: ["e-guild"] }), call("c4", "cards_read", {})], finishReason: "tool_calls" },
       { content: "Writing the world.", reasoning: "", toolCalls: [call("c5", "draft_patch", { ops: CONVERSION })], finishReason: "tool_calls" },
       { content: "", reasoning: "", toolCalls: [call("c6", "draft_check", {})], finishReason: "tool_calls" },
-      { content: "Port Veil is ready: Rhea at Salt Quay at 18:30 with $42.50, Silas, the ledger quest and his secret debt.", reasoning: "", toolCalls: [], finishReason: "stop" },
+      { content: "Port Veil is ready: Rhea at Salt Quay at 18:30 with $42.50, Corin, the ledger quest and his secret debt.", reasoning: "", toolCalls: [], finishReason: "stop" },
     ];
     host.model = (_request: ModelRequest, n: number) => {
       const reply = script[n - 1];

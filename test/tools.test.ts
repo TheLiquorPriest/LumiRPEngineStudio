@@ -38,7 +38,7 @@ async function setup(options: { messages?: string[]; pasted?: string; lore?: { i
   }
   const characterIds: string[] = [];
   if (options.card) {
-    host.cards.set("char-1", { id: "char-1", owner: USER, name: "Silas", description: "", personality: "", scenario: "", firstMessage: "", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: [], ...options.card });
+    host.cards.set("char-1", { id: "char-1", owner: USER, name: "Corin", description: "", personality: "", scenario: "", firstMessage: "", exampleMessages: "", creatorNotes: "", alternateGreetings: [], tags: [], bookIds: [], ...options.card });
     characterIds.push("char-1");
   }
   const source: DraftSource = { kind: "chat", label: "Chat: Long", chatId: "chat-long", characterIds, books, pasted: options.pasted ? [{ title: "Notes", text: options.pasted }] : [], worldId: null, persona: options.persona ?? null };
@@ -115,7 +115,7 @@ describe("tool answers", () => {
 
   test("a long lore entry and a long card field are read whole", async () => {
     const entry = `${"The guild's charter runs on. ".repeat(1100)}<end of charter>`;
-    const description = `${"Silas keeps the harbor books. ".repeat(400)}<end of description>`;
+    const description = `${"Corin keeps the harbor books. ".repeat(400)}<end of description>`;
     const { ctx } = await setup({ lore: [{ id: "charter", content: entry }, { id: "short", content: `${"Short. ".repeat(1500)}<end of short>` }], card: { description } });
     // An entry of 10,500 characters is no longer cut at 8,000.
     expect((await runTool("lore_read", { ids: ["short"] }, ctx)).content).toContain("<end of short>");
@@ -123,8 +123,8 @@ describe("tool answers", () => {
     expect(first.content).toContain("Not read, to keep this answer whole: short");
     await readAll(async (offset) => (await runTool("lore_read", { ids: ["charter"], offset }, ctx)).content, entry, first.content);
     const overview = await runTool("cards_read", {}, ctx);
-    expect(overview.content).toContain('cards_read name="Silas" field="description" offset=6000');
-    const field = await runTool("cards_read", { name: "Silas", field: "description" }, ctx);
+    expect(overview.content).toContain('cards_read name="Corin" field="description" offset=6000');
+    const field = await runTool("cards_read", { name: "Corin", field: "description" }, ctx);
     expect(field.content).toContain(description);
   });
 

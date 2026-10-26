@@ -209,14 +209,14 @@ function canonicalJson(v, depth) {
       if (depth >= MAX_JSON_DEPTH)
         throw new TypeError("hashJson: value is cyclic or nested deeper than 128");
       if (Array.isArray(v)) {
-        let s = "[";
+        let s2 = "[";
         for (let i = 0;i < v.length; i++) {
           if (i)
-            s += ",";
+            s2 += ",";
           const item = v[i];
-          s += item === undefined ? "null" : canonicalJson(item, depth + 1);
+          s2 += item === undefined ? "null" : canonicalJson(item, depth + 1);
         }
-        return s + "]";
+        return s2 + "]";
       }
       const proto = Object.getPrototypeOf(v);
       if (proto !== Object.prototype && proto !== null)
@@ -679,10 +679,10 @@ function checkSchema(root, value, others = []) {
       const uri = hash < 0 ? s.$ref : s.$ref.slice(0, hash);
       const name = hash < 0 ? "" : s.$ref.slice(hash);
       if (uri !== "") {
-        const target = documents.find((d) => d.$id === uri);
-        if (!target)
+        const target2 = documents.find((d) => d.$id === uri);
+        if (!target2)
           return [{}, doc];
-        doc = target;
+        doc = target2;
       }
       if (name === "" || name === "#") {
         s = doc;
@@ -696,66 +696,66 @@ function checkSchema(root, value, others = []) {
     }
     return [s, doc];
   };
-  const text = (schema, value, path, subject, into) => {
-    const length = [...value].length;
+  const text = (schema, value2, path, subject, into) => {
+    const length = [...value2].length;
     if (schema.minLength !== undefined && length < schema.minLength)
       into.push({ path, message: schema.minLength === 1 ? `${subject}can't be empty` : `${subject}should be at least ${schema.minLength} characters` });
     if (schema.maxLength !== undefined && length > schema.maxLength)
       into.push({ path, message: schema.maxLength === 1 ? `${subject}should be one character` : `${subject}should be at most ${schema.maxLength} characters` });
-    if (schema.pattern !== undefined && !new RegExp(schema.pattern, "u").test(value))
+    if (schema.pattern !== undefined && !new RegExp(schema.pattern, "u").test(value2))
       into.push({ path, message: `${subject}should be ${schema.description ?? `like ${schema.pattern}`}` });
   };
-  const visit = (raw, value, path, into, base) => {
+  const visit = (raw, value2, path, into, base) => {
     const [schema, doc] = resolve(raw, base);
     const push = (message, at = path) => void into.push({ path: at, message });
-    if (schema.type !== undefined && !hasType(value, schema.type))
+    if (schema.type !== undefined && !hasType(value2, schema.type))
       return push(`should be ${TYPE_WORDS[schema.type] ?? schema.type}`);
-    if (schema.enum && !schema.enum.some((e) => e === value))
+    if (schema.enum && !schema.enum.some((e) => e === value2))
       return push(`should be ${schema.enum.map(quoted).join(", ").replace(/, ([^,]*)$/, " or $1")}`);
     if (schema.anyOf) {
       const tries = schema.anyOf.map((branch) => {
         const found = [];
-        visit(branch, value, path, found, doc);
+        visit(branch, value2, path, found, doc);
         return { branch: resolve(branch, doc)[0], found };
       });
       if (tries.some((t) => t.found.length === 0))
         return;
-      const objects = isRecord(value) ? tries.filter((t) => t.branch.type === "object") : [];
+      const objects = isRecord(value2) ? tries.filter((t) => t.branch.type === "object") : [];
       const tagged = objects.filter((t) => {
         const tags = Object.entries(t.branch.properties ?? {}).flatMap(([key, s]) => {
           const allowed = resolve(s, doc)[0].enum;
           return allowed?.length === 1 ? [[key, allowed[0]]] : [];
         });
-        return tags.length > 0 && isRecord(value) && tags.every(([key, tag]) => hasOwn(value, key) && value[key] === tag);
+        return tags.length > 0 && isRecord(value2) && tags.every(([key, tag]) => hasOwn(value2, key) && value2[key] === tag);
       });
-      const named = tagged.length > 0 ? tagged : objects.filter((t) => isRecord(value) && (t.branch.required ?? []).every((k) => hasOwn(value, k)));
+      const named = tagged.length > 0 ? tagged : objects.filter((t) => isRecord(value2) && (t.branch.required ?? []).every((k) => hasOwn(value2, k)));
       if (named.length === 1 && named[0])
         return void into.push(...named[0].found);
       return push(`should be ${tries.map((t) => t.branch.title ?? TYPE_WORDS[t.branch.type ?? ""] ?? "something else").join(", ").replace(/, ([^,]*)$/, " or $1")}`);
     }
-    if (typeof value === "string")
-      text(schema, value, path, "", into);
-    if (typeof value === "number") {
-      if (schema.minimum !== undefined && value < schema.minimum)
+    if (typeof value2 === "string")
+      text(schema, value2, path, "", into);
+    if (typeof value2 === "number") {
+      if (schema.minimum !== undefined && value2 < schema.minimum)
         push(`should be at least ${schema.minimum}`);
-      if (schema.maximum !== undefined && value > schema.maximum)
+      if (schema.maximum !== undefined && value2 > schema.maximum)
         push(`should be at most ${schema.maximum}`);
-      if (schema.exclusiveMinimum !== undefined && value <= schema.exclusiveMinimum)
+      if (schema.exclusiveMinimum !== undefined && value2 <= schema.exclusiveMinimum)
         push(`should be more than ${schema.exclusiveMinimum}`);
     }
-    if (Array.isArray(value)) {
-      if (schema.minItems !== undefined && value.length < schema.minItems)
+    if (Array.isArray(value2)) {
+      if (schema.minItems !== undefined && value2.length < schema.minItems)
         push(schema.minItems === schema.maxItems ? `should have ${schema.minItems} items` : `should have at least ${schema.minItems} item${schema.minItems === 1 ? "" : "s"}`);
-      else if (schema.maxItems !== undefined && value.length > schema.maxItems)
+      else if (schema.maxItems !== undefined && value2.length > schema.maxItems)
         push(schema.minItems === schema.maxItems ? `should have ${schema.maxItems} items` : `should have at most ${schema.maxItems} items`);
       if (schema.items)
-        value.forEach((item, i) => visit(schema.items ?? {}, item, [...path, i], into, doc));
+        value2.forEach((item, i) => visit(schema.items ?? {}, item, [...path, i], into, doc));
     }
-    if (isRecord(value)) {
+    if (isRecord(value2)) {
       for (const key of schema.required ?? [])
-        if (!hasOwn(value, key))
+        if (!hasOwn(value2, key))
           push(`needs "${key}"`);
-      for (const [key, item] of Object.entries(value)) {
+      for (const [key, item] of Object.entries(value2)) {
         const own = schema.properties && hasOwn(schema.properties, key) ? schema.properties[key] : undefined;
         if (schema.propertyNames)
           text(resolve(schema.propertyNames, doc)[0], key, [...path, key], `the key ${quoted(key)} `, into);
@@ -879,9 +879,9 @@ function compileGrid(key, map, mine, places, grids) {
     const votes = new Map;
     const x = t.index % width;
     for (const n of [t.index - width, t.index + width, x > 0 ? t.index - 1 : -1, x < width - 1 ? t.index + 1 : -1]) {
-      const room = rooms.get(n);
-      if (room !== undefined)
-        votes.set(room, (votes.get(room) ?? 0) + 1);
+      const room2 = rooms.get(n);
+      if (room2 !== undefined)
+        votes.set(room2, (votes.get(room2) ?? 0) + 1);
     }
     const room = t.place ?? [...votes].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0];
     if (room !== undefined)
@@ -2102,8 +2102,8 @@ function ruleDay(cal, holidays, rule, year, depth) {
       if (rule.n >= 0) {
         const first = cal.system.abs(year, rule.month, 1);
         const offset = mod(rule.weekday - cal.system.weekday(first), wdCount);
-        const day = 1 + offset + (Math.max(1, rule.n) - 1) * wdCount;
-        return day <= len ? first + day - 1 : null;
+        const day2 = 1 + offset + (Math.max(1, rule.n) - 1) * wdCount;
+        return day2 <= len ? first + day2 - 1 : null;
       }
       const last = cal.system.abs(year, rule.month, len);
       const back = mod(cal.system.weekday(last) - rule.weekday, wdCount);
@@ -2927,16 +2927,16 @@ function walk(n, c) {
     }
     case "bin": {
       if (c.opts.all && (n.op === "and" || n.op === "or")) {
-        const a = walk(n.a, c), b = walk(n.b, c);
-        return n.op === "and" ? truthy(a) ? b : a : truthy(a) ? a : b;
+        const a2 = walk(n.a, c), b2 = walk(n.b, c);
+        return n.op === "and" ? truthy(a2) ? b2 : a2 : truthy(a2) ? a2 : b2;
       }
       if (n.op === "and") {
-        const a = walk(n.a, c);
-        return truthy(a) ? walk(n.b, c) : a;
+        const a2 = walk(n.a, c);
+        return truthy(a2) ? walk(n.b, c) : a2;
       }
       if (n.op === "or") {
-        const a = walk(n.a, c);
-        return truthy(a) ? a : walk(n.b, c);
+        const a2 = walk(n.a, c);
+        return truthy(a2) ? a2 : walk(n.b, c);
       }
       const a = walk(n.a, c);
       const b = walk(n.b, c);
@@ -4218,18 +4218,18 @@ function unseenPlaceNames(reg, world, state, pov) {
 function findLeaks(value, secrets) {
   const needles = secrets.map((s) => s.toLowerCase()).filter((s) => s.length > 0);
   const out = [];
-  const visit = (v) => {
+  const visit2 = (v) => {
     if (typeof v === "string") {
       const lower = v.toLowerCase();
       for (const n of needles)
         if (lower.includes(n))
           out.push(v);
     } else if (Array.isArray(v))
-      v.forEach(visit);
+      v.forEach(visit2);
     else if (isRecord(v))
-      Object.values(v).forEach((x) => visit(x));
+      Object.values(v).forEach((x) => visit2(x));
   };
-  visit(value);
+  visit2(value);
   return out;
 }
 var ACCENTS = /[\u0300-\u036f]/g;
@@ -4284,9 +4284,9 @@ function namesAny(text, people, labels = [], heard = "") {
   for (const label of labels) {
     const all = spellings(label);
     const named = all.filter((w) => !hasOwn(FUNCTION_WORDS, w.plain));
-    const whole = named.length === 0;
-    const parts = whole ? all : named;
-    if (parts.length > 0 && said.says(parts, whole) && !known.says(parts, whole))
+    const whole3 = named.length === 0;
+    const parts = whole3 ? all : named;
+    if (parts.length > 0 && said.says(parts, whole3) && !known.says(parts, whole3))
       return true;
   }
   return false;
@@ -5036,9 +5036,9 @@ function objectAt(parent, key) {
   return fresh;
 }
 function writable2(state, id) {
-  const slice = state.packs[PACK3] ?? {};
-  state.packs[PACK3] = slice;
-  return objectAt(objectAt(slice, SLICE3), id);
+  const slice2 = state.packs[PACK3] ?? {};
+  state.packs[PACK3] = slice2;
+  return objectAt(objectAt(slice2, SLICE3), id);
 }
 function touch(state, t) {
   if (!own(state.entities, t.entity))
@@ -5246,7 +5246,7 @@ function hiddenEntityNames(reg, world, state, pov) {
 function hiddenNameCheck(reg, world, state, pov) {
   const hidden = hiddenEntityNames(reg, world, state, pov);
   const labels = [...hidden.things, ...unseenPlaceNames(reg, world, state, pov), ...hiddenTrackLabels(reg, world, state, pov), ...secretLoreTitles(reg, world, state)];
-  return (text) => namesAny(text, hidden.people, labels);
+  return (text2) => namesAny(text2, hidden.people, labels);
 }
 
 // node_modules/lumi-rp-engine/src/engine/relations.ts
@@ -5291,7 +5291,7 @@ function endOf(state, id) {
 }
 function linkProblem(reg, world, state, def, a, b) {
   const worded = (code, say) => {
-    const sentence = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+    const sentence = (text2) => text2.charAt(0).toUpperCase() + text2.slice(1);
     const reason = sentence(say((end) => playerKnows(reg, world, state, world.pov, end.id) ? end.name : "someone"));
     const gm = sentence(say((end) => end.name));
     return reason === gm ? reject2(code, reason) : { code, reason, gm };
@@ -5314,24 +5314,24 @@ function linkProblem(reg, world, state, def, a, b) {
 }
 function linkEvents(reg, world, state, link) {
   const extra = { ...link.fields ? { fields: link.fields } : {}, ...link.until !== undefined ? { until: link.until } : {} };
-  const events = [{ type: "link", rel: link.rel, from: link.from, to: link.to, ...extra }];
+  const events2 = [{ type: "link", rel: link.rel, from: link.from, to: link.to, ...extra }];
   const a = endOf(state, link.from);
   const b = endOf(state, link.to);
   if (!a || !b)
-    return events;
+    return events2;
   const def = relationDef(reg, world, link.rel);
   const problem = def ? linkProblem(reg, world, state, def, a, b) : null;
   if (problem)
     return problem;
   const back = counterpartOf(reg, world, link.rel);
   if (!back || back === link.rel && link.from === link.to)
-    return events;
+    return events2;
   const backDef = relationDef(reg, world, back);
   const backProblem = backDef ? linkProblem(reg, world, state, backDef, b, a) : null;
   if (backProblem)
     return backProblem;
-  events.push({ type: "link", rel: back, from: link.to, to: link.from, ...extra });
-  return events;
+  events2.push({ type: "link", rel: back, from: link.to, to: link.from, ...extra });
+  return events2;
 }
 function spawnLinks(reg, world, state, entity) {
   const self = { id: entity.id, kind: entity.kind, name: entity.name, relations: entity.relations };
@@ -5362,13 +5362,13 @@ function spawnLinks(reg, world, state, entity) {
   return out;
 }
 function unlinkEvents(reg, world, state, link) {
-  const events = [{ type: "unlink", rel: link.rel, from: link.from, to: link.to }];
+  const events2 = [{ type: "unlink", rel: link.rel, from: link.from, to: link.to }];
   const back = counterpartOf(reg, world, link.rel);
   if (!back || back === link.rel && link.from === link.to)
-    return events;
+    return events2;
   if (own(state.entities, link.to)?.relations.some((r) => r.type === back && r.to === link.from))
-    events.push({ type: "unlink", rel: back, from: link.to, to: link.from });
-  return events;
+    events2.push({ type: "unlink", rel: back, from: link.to, to: link.from });
+  return events2;
 }
 function completeRelations(types, world, entities) {
   const added = [];
@@ -5462,10 +5462,10 @@ function within(v, lo, hi) {
 function clampUnitCap(cap) {
   const max = TIME_LIMITS.unitCap;
   const days = finite(cap?.agentDays);
-  const events = finite(cap?.events);
+  const events2 = finite(cap?.events);
   return {
     agentDays: days === null ? max.agentDays : within(days, 1 / 24, max.agentDays),
-    events: events === null ? max.events : Math.round(within(events, 1, max.events))
+    events: events2 === null ? max.events : Math.round(within(events2, 1, max.events))
   };
 }
 function clampTick(v, fallback = 2) {
@@ -5762,14 +5762,14 @@ function applyEvent(types, event, state, ctx) {
   if (def)
     def.apply(event, state, ctx);
 }
-function eventUnits(events) {
+function eventUnits(events2) {
   const out = [];
   let i = 0;
-  while (i < events.length) {
-    const group = events[i]?.group;
+  while (i < events2.length) {
+    const group = events2[i]?.group;
     let j = i + 1;
     if (group !== undefined)
-      while (j < events.length && events[j]?.group === group)
+      while (j < events2.length && events2[j]?.group === group)
         j++;
     out.push([i, j]);
     i = j;
@@ -5872,30 +5872,30 @@ function rowOf2(reg, ctx, entity, row, fixes) {
     return { label: row.label, ...display(ctx, undefined, v) };
   }
   if ("pool" in row) {
-    const def = fieldDef(reg, ctx.world, e.kind, row.pool);
-    if (!def?.pool)
+    const def2 = fieldDef(reg, ctx.world, e.kind, row.pool);
+    if (!def2?.pool)
       return null;
     const read = env.lookup(["self", row.pool]);
     const current = typeof read === "number" ? read : 0;
-    const max = poolMax(reg, ctx, entity, def.pool);
-    const min = def.pool.min ?? 0;
-    const fix = fixes ? fixOf(entity, row.pool, def, own(e.fields, row.pool) ?? current, { min, ...max !== null ? { max } : {} }) : undefined;
-    return { label: row.label ?? def.label ?? words(row.pool), value: `${shown(current)} / ${max === null ? "\u2014" : shown(max)}`, pool: { current, min, max }, ...fix ? { fix } : {} };
+    const max = poolMax(reg, ctx, entity, def2.pool);
+    const min = def2.pool.min ?? 0;
+    const fix2 = fixes ? fixOf(entity, row.pool, def2, own(e.fields, row.pool) ?? current, { min, ...max !== null ? { max } : {} }) : undefined;
+    return { label: row.label ?? def2.label ?? words(row.pool), value: `${shown(current)} / ${max === null ? "\u2014" : shown(max)}`, pool: { current, min, max }, ...fix2 ? { fix: fix2 } : {} };
   }
   if ("progression" in row) {
     const prog = own(ctx.world.ruleset?.progression ?? {}, row.progression);
     const p = prog ? progressOf(reg, ctx, entity, prog) : null;
     if (!prog || !p)
       return null;
-    const def = fieldDef(reg, ctx.world, e.kind, prog.xpField);
-    const xpLabel = def?.label ?? "XP";
-    const fix = fixes && def ? fixOf(entity, prog.xpField, def, own(e.fields, prog.xpField) ?? p.xp, { min: def.min, max: def.max }) : undefined;
+    const def2 = fieldDef(reg, ctx.world, e.kind, prog.xpField);
+    const xpLabel = def2?.label ?? "XP";
+    const fix2 = fixes && def2 ? fixOf(entity, prog.xpField, def2, own(e.fields, prog.xpField) ?? p.xp, { min: def2.min, max: def2.max }) : undefined;
     return {
       label: row.label ?? prog.label,
       value: shown(p.level),
       detail: p.next === null ? `${shown(p.xp)} ${xpLabel} \xB7 top level` : `${shown(p.xp)} / ${shown(p.next)} ${xpLabel}`,
       progress: { level: p.level, xp: p.xp, from: p.from, next: p.next },
-      ...fix ? { fix } : {}
+      ...fix2 ? { fix: fix2 } : {}
     };
   }
   if (typeof row.field !== "string")
@@ -5980,18 +5980,18 @@ function lintLore(world) {
   }
   for (const [term, raw] of Object.entries(world.loreIndex.terms)) {
     const path = `loreIndex.terms.${term}`;
-    const entries = ids(raw);
+    const entries2 = ids(raw);
     const matched = loreTerm(term);
     if (matched === "")
       push("warning", path, "empty_term", "a blank term matches nothing");
     else if (matched !== term)
       push("warning", path, "term_case", `lookups match this term as "${matched}"`);
-    if (entries.length === 0)
+    if (entries2.length === 0)
       push("warning", path, "empty_term", `"${term}" leads to no entry`);
-    for (const id of entries)
+    for (const id of entries2)
       if (!hasOwn(world.lore, id))
         push("warning", path, "missing_ref", `"${id}" is not a lore entry`);
-    const elsewhere = [...new Set(aliases.get(matched) ?? [])].filter((id) => !entries.includes(id));
+    const elsewhere = [...new Set(aliases.get(matched) ?? [])].filter((id) => !entries2.includes(id));
     if (elsewhere.length > 0)
       push("warning", path, "alias_elsewhere", `"${term}" is an alias of ${elsewhere.map((id) => `"${world.lore[id]?.title ?? id}"`).join(", ")}, but the term doesn't lead there`);
   }
@@ -6121,10 +6121,10 @@ function sample(reg, ctx, entity, domain, runSeed) {
   const version = pinnedVersion(ctx.world, reg, domain);
   if (typeof version !== "number")
     return null;
-  const events = def.materialize(entity, ctx, createRng(materializationSeed(runSeed, entity, domain)), version);
-  if (events.length === 0)
+  const events2 = def.materialize(entity, ctx, createRng(materializationSeed(runSeed, entity, domain)), version);
+  if (events2.length === 0)
     return null;
-  return { type: "materialize", entity, domain, generatorVersion: version, tablesRevision: tablesRevision(ctx.world), events };
+  return { type: "materialize", entity, domain, generatorVersion: version, tablesRevision: tablesRevision(ctx.world), events: events2 };
 }
 function materializeIfNeeded(reg, w, entity, domain, runSeed) {
   if (isMaterialized(w.state, entity, domain))
@@ -6170,7 +6170,7 @@ function rulesetFloor(world, domain, level) {
   return Math.max(level, grid, authored === undefined ? 0 : clampLevel(authored));
 }
 function createRegistry(packs) {
-  const events = new Map;
+  const events2 = new Map;
   const guards = new Map;
   const kinds = new Map;
   const relations = new Map;
@@ -6209,7 +6209,7 @@ function createRegistry(packs) {
     proposals,
     lints,
     views,
-    get: (type) => events.get(type),
+    get: (type) => events2.get(type),
     context(world, state, overrides) {
       return {
         registry,
@@ -6234,7 +6234,7 @@ function createRegistry(packs) {
     }
   };
   for (const def of coreEventTypes(() => registry))
-    once(events, def.type, knowing(observing(def, canSeeEntity)), "event type");
+    once(events2, def.type, knowing(observing(def, canSeeEntity)), "event type");
   const seen = new Set;
   for (const pack of packs) {
     if (seen.has(pack.id))
@@ -6249,7 +6249,7 @@ function createRegistry(packs) {
       event: (d) => {
         if (!d.type.startsWith(`${pack.id}.`))
           throw new RegistryError(`pack ${pack.id} may only register ${pack.id}.* events, not ${d.type}`);
-        once(events, d.type, d, "event type");
+        once(events2, d.type, d, "event type");
       },
       guard: (d) => {
         const list = guards.get(d.type) ?? [];
@@ -6278,15 +6278,15 @@ function createRegistry(packs) {
     pack.register(r);
   }
   for (const [type, list] of guards) {
-    const def = events.get(type);
+    const def = events2.get(type);
     if (!def)
       throw new RegistryError(`pack ${list[0]?.pack ?? "?"} guards unknown event type ${type}`);
-    events.set(type, {
+    events2.set(type, {
       ...def,
       validate: (e, ctx) => {
-        const own = def.validate(e, ctx);
-        if (own)
-          return own;
+        const own2 = def.validate(e, ctx);
+        if (own2)
+          return own2;
         for (const g of list) {
           const rejection = g.def.validate(e, ctx);
           if (rejection)
@@ -6296,8 +6296,8 @@ function createRegistry(packs) {
       }
     });
   }
-  for (const [type, def] of events)
-    events.set(type, touching(def));
+  for (const [type, def] of events2)
+    events2.set(type, touching(def));
   return Object.freeze(registry);
 }
 
@@ -6760,15 +6760,15 @@ function checkSites(path, check) {
 }
 function argSites(path, spec) {
   const out = [];
-  const visit = (at, v) => {
+  const visit2 = (at, v) => {
     if (typeof v === "string") {
       if (v.startsWith("="))
         out.push({ path: at, expr: v.slice(1), effectArg: true });
     } else if (Array.isArray(v))
-      v.forEach((x, i) => visit(`${at}.${i}`, x));
+      v.forEach((x, i) => visit2(`${at}.${i}`, x));
     else if (isRecord(v))
       for (const [k, x] of Object.entries(v))
-        visit(`${at}.${k}`, x);
+        visit2(`${at}.${k}`, x);
   };
   for (const [key, value] of Object.entries(spec.args ?? {})) {
     if (spec.type === "check" && key === "outcomes")
@@ -6776,7 +6776,7 @@ function argSites(path, spec) {
     if (spec.type === "check" && key === "check" && isRecord(value))
       out.push(...checkSites(`${path}.args.check`, value));
     else
-      visit(`${path}.args.${key}`, value);
+      visit2(`${path}.args.${key}`, value);
   }
   return out;
 }
@@ -6829,9 +6829,9 @@ function exprSites(world) {
   }
   const combat = world.ruleset?.combat;
   if (isRecord(combat)) {
-    for (const [key, sub] of [["tieBreak", null], ["end", null], ["down", "when"], ["sides", "hostile"], ["sides", "ally"], ["tactics", "threat"], ["tactics", "lowHp"]]) {
-      const v = sub === null ? combat[key] : isRecord(combat[key]) ? combat[key][sub] : undefined;
-      push(`ruleset.combat.${key}${sub === null ? "" : `.${sub}`}`, typeof v === "string" ? v : undefined);
+    for (const [key, sub2] of [["tieBreak", null], ["end", null], ["down", "when"], ["sides", "hostile"], ["sides", "ally"], ["tactics", "threat"], ["tactics", "lowHp"]]) {
+      const v = sub2 === null ? combat[key] : isRecord(combat[key]) ? combat[key][sub2] : undefined;
+      push(`ruleset.combat.${key}${sub2 === null ? "" : `.${sub2}`}`, typeof v === "string" ? v : undefined);
     }
     if (isRecord(combat.economy)) {
       for (const [id, b] of Object.entries(combat.economy))
@@ -7355,7 +7355,7 @@ function scheduleOverlaps(reg, world) {
   }
   const cal = calendarOf(world);
   const state = initialState(world, "", reg);
-  const entries = allSchedules(reg, world).map((schedule) => ({ schedule, rank: ownerRank(reg, world, state, schedule), owners: new Set(scheduleOwners(reg, world, state, schedule)) }));
+  const entries2 = allSchedules(reg, world).map((schedule) => ({ schedule, rank: ownerRank(reg, world, state, schedule), owners: new Set(scheduleOwners(reg, world, state, schedule)) }));
   const fromDay = (s) => {
     try {
       return s.recurrence.from ? dayIndexOfText(cal, s.recurrence.from) : -Infinity;
@@ -7393,10 +7393,10 @@ function scheduleOverlaps(reg, world) {
     }
     return false;
   };
-  for (let i = 0;i < entries.length; i++) {
-    for (let j = i + 1;j < entries.length; j++) {
-      const a = entries[i];
-      const b = entries[j];
+  for (let i = 0;i < entries2.length; i++) {
+    for (let j = i + 1;j < entries2.length; j++) {
+      const a = entries2[i];
+      const b = entries2[j];
       if (!a || !b || a.schedule.target !== b.schedule.target || a.rank === null || a.rank !== b.rank)
         continue;
       const shared = [...a.owners].filter((id) => b.owners.has(id));
@@ -7817,23 +7817,23 @@ function account(e) {
       f.months_left = f.remaining_months;
     delete f.remaining_months;
   }
-  const traits = cls ? CLASS_TRAITS[cls] : null;
+  const traits2 = cls ? CLASS_TRAITS[cls] : null;
   if (typeof f.autopay === "string") {
     const m = AUTOPAY.exec(f.autopay);
     if (m) {
-      f.autopay = m[1]?.toLowerCase() ?? (traits?.installment ? "minimum" : "statement");
+      f.autopay = m[1]?.toLowerCase() ?? (traits2?.installment ? "minimum" : "statement");
       if (m[2])
         f.autopay_from = m[2];
     }
   }
-  if (traits?.asset && !traits.liability && f.apr_pct !== undefined && f.apy_pct === undefined) {
+  if (traits2?.asset && !traits2.liability && f.apr_pct !== undefined && f.apy_pct === undefined) {
     f.apy_pct = f.apr_pct;
     delete f.apr_pct;
   }
   return { ...e, fields: f };
 }
-function slug2(text) {
-  return text.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "bill";
+function slug2(text2) {
+  return text2.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "bill";
 }
 function freeId(doc, taken, base) {
   let id = base;
@@ -7922,17 +7922,17 @@ function jobOf(doc, person, taken) {
     job.shift_pattern = f.shift_pattern;
   return { id: freeId(doc, taken, `job_${person.id}`), kind: "job", name: `${person.name}'s work`, tier: "background", fields: job, relations: [] };
 }
-function holdingId(account, asset) {
-  return `${account}:${asset}`;
+function holdingId(account2, asset) {
+  return `${account2}:${asset}`;
 }
-function holdingOf(doc, account, assets) {
-  const units = account.fields.units;
-  const symbol = typeof account.fields.symbol === "string" && account.fields.symbol !== "" ? account.fields.symbol : "broad_us_equity_index";
+function holdingOf(doc, account2, assets) {
+  const units = account2.fields.units;
+  const symbol = typeof account2.fields.symbol === "string" && account2.fields.symbol !== "" ? account2.fields.symbol : "broad_us_equity_index";
   if (typeof units !== "number" || !(units > 0))
     return null;
   if (!hasOwn(assets, symbol))
     assets[symbol] = { label: symbol.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), class: "fund", price: 1e4, model: symbol };
-  return { id: holdingId(account.id, symbol), kind: "holding", name: account.name, tier: "background", fields: { account: account.id, asset: symbol, lots: [{ qty: units, cost: Math.round(units * 1e4), at: doc.start.at.slice(0, 10) }] }, relations: [] };
+  return { id: holdingId(account2.id, symbol), kind: "holding", name: account2.name, tier: "background", fields: { account: account2.id, asset: symbol, lots: [{ qty: units, cost: Math.round(units * 1e4), at: doc.start.at.slice(0, 10) }] }, relations: [] };
 }
 function migrateMoney(doc) {
   if (!doc.packs.economy || !isLegacy(doc))
@@ -8218,8 +8218,8 @@ function tableChoices(table) {
     return { key, label: typeof label === "string" && label.trim() !== "" ? label : key.replace(/_/g, " ") };
   });
 }
-function tableRowKey(table, text) {
-  const said = text.trim().toLowerCase();
+function tableRowKey(table, text2) {
+  const said = text2.trim().toLowerCase();
   const hit = tableChoices(table).find((c) => c.key.toLowerCase() === said || c.label.toLowerCase() === said);
   return hit ? hit.key : null;
 }
@@ -8455,7 +8455,7 @@ function applyCheck(reg, w, spec, scope) {
     return ready;
   const rolled = rollCheck(ready, scope.rng.fork(`actor:${actor}`));
   const out = { applied: [], rejected: [] };
-  const record = {
+  const record2 = {
     type: ENGINE_EVENTS.check,
     data: {
       check: def.id,
@@ -8469,10 +8469,10 @@ function applyCheck(reg, w, spec, scope) {
       ...actor !== w.world.pov ? { npc: true } : {}
     }
   };
-  const failed = w.apply(record);
+  const failed = w.apply(record2);
   if (failed)
     return failed;
-  out.applied.push(record);
+  out.applied.push(record2);
   const outcomes = isRecord(a.outcomes) ? a.outcomes : {};
   const result = applyEffects(reg, w, effectList(own(outcomes, rolled.outcome)), { bindings: rolling, vars: { ...scope.vars, roll: rollVars(ready, rolled) }, params: scope.params, rng: scope.rng.fork("outcome"), depth: depth + 1 });
   out.applied.push(...result.applied);
@@ -8506,13 +8506,13 @@ function levelUp(reg, w, entity, id, prog, scope) {
     out.applied.push(note);
   return out;
 }
-function levelUps(reg, w, events, scope) {
+function levelUps(reg, w, events2, scope) {
   const out = { applied: [], rejected: [] };
   const progressions = Object.entries(w.world.ruleset?.progression ?? {});
   if (progressions.length === 0)
     return out;
   const done = new Set;
-  for (const ev of events) {
+  for (const ev of events2) {
     if (ev.type !== "set" && ev.type !== "add")
       continue;
     for (const [id, prog] of progressions) {
@@ -8547,9 +8547,9 @@ function applyEffects(reg, w, specs, scope) {
       return;
     }
     const group = result.length > 1 ? `fx:${hashParts(rng.seed).slice(0, 10)}` : undefined;
-    const events = group ? result.map((ev) => ({ ...ev, group })) : result;
+    const events2 = group ? result.map((ev) => ({ ...ev, group })) : result;
     const mark = group ? w.mark() : null;
-    for (const ev of events) {
+    for (const ev of events2) {
       const failure = w.apply(ev);
       if (failure) {
         if (mark)
@@ -8558,8 +8558,8 @@ function applyEffects(reg, w, specs, scope) {
         return;
       }
     }
-    out.applied.push(...events);
-    const ups = levelUps(reg, w, events, { ...scope, rng });
+    out.applied.push(...events2);
+    const ups = levelUps(reg, w, events2, { ...scope, rng });
     out.applied.push(...ups.applied);
     out.rejected.push(...ups.rejected);
   });
@@ -8677,7 +8677,7 @@ function resolveAction(reg, w, req, rng, opts = {}) {
   if ("code" in p)
     return { ...base, failed: p };
   if (opts.runSeed !== undefined) {
-    const participants = [p.actor, ...Object.values(p.bindings)].filter((id, i, all) => all.indexOf(id) === i);
+    const participants = [p.actor, ...Object.values(p.bindings)].filter((id, i, all2) => all2.indexOf(id) === i);
     for (const id of participants)
       materializeAll(reg, w, id, opts.runSeed);
   }
@@ -8962,10 +8962,10 @@ function cascade(reg, w, roots, opts) {
     w.apply({ type: ENGINE_EVENTS.note, data: { text: `Rule cascade stopped at its cap of ${cap}.`, visibility: "secret" } });
   return firings;
 }
-function runRulesOnEvents(reg, w, events, opts) {
+function runRulesOnEvents(reg, w, events2, opts) {
   const rules = allRules(reg, w.world);
   const roots = [];
-  for (const e of events)
+  for (const e of events2)
     for (const r of rules)
       if (matchesEvent(w, r, e))
         roots.push({ rule: r, depth: 0, self: eventSubject(e), vars: { event: eventVars(e) } });
@@ -8979,8 +8979,8 @@ function currentStage(world, state, track) {
     return null;
   return own(state.tracks, track)?.stage ?? def.start;
 }
-function normalizeAnswer(text) {
-  return text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().replace(/^(the|a|an) /, "");
+function normalizeAnswer(text3) {
+  return text3.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim().replace(/^(the|a|an) /, "");
 }
 function checkAnswer(world, state, trackId, answer, decision) {
   const none = { correct: false, via: null, needsDecision: false, event: null };
@@ -9539,7 +9539,7 @@ function scopeView(world, scope, filter, opts) {
       routes.set(key, out);
     }
   }
-  let shown;
+  let shown2;
   if (grid && opts.level >= 2) {
     const cells = opts.cells;
     const unshown = (i) => cells !== undefined && (cells.blank.has(i) || cells.void.has(i));
@@ -9547,7 +9547,7 @@ function scopeView(world, scope, filter, opts) {
     for (const id of kids)
       if (own(grid.zones, id))
         areas[filter.shown(id)] = (own(grid.zones, id) ?? []).filter((i) => !unshown(i));
-    shown = {
+    shown2 = {
       width: grid.width,
       height: grid.height,
       ...grid.cellMeters !== undefined ? { cellMeters: grid.cellMeters } : {},
@@ -9564,7 +9564,7 @@ function scopeView(world, scope, filter, opts) {
     name: scope === null ? WORLD_SCOPE_NAME : shownName(world, filter, scope),
     trail: opts.trail,
     frame,
-    ...shown ? { grid: shown } : {},
+    ...shown2 ? { grid: shown2 } : {},
     places,
     routes: [...routes.values()]
   };
@@ -9761,7 +9761,7 @@ function edges(world, mode, closed) {
     }
   }
   const connector = mode === "walk" ? { minutes: SIBLING_WALK_MINUTES, distanceKm: 0.3 } : { minutes: 1, distanceKm: 0 };
-  const within = (place, ancestor) => {
+  const within3 = (place, ancestor) => {
     let cur = own(world.places, place)?.parent;
     for (let guard = 0;cur && guard < 64; guard++) {
       if (cur === ancestor)
@@ -9776,7 +9776,7 @@ function edges(world, mode, closed) {
       byParent.set(p.parent, [...byParent.get(p.parent) ?? [], p.id]);
   const spread = new Set;
   for (const parent of byParent.keys())
-    if (Object.values(world.routes).some((r) => within(r.from, parent) && within(r.to, parent)))
+    if (Object.values(world.routes).some((r) => within3(r.from, parent) && within3(r.to, parent)))
       spread.add(parent);
   const exitNode = (p) => spread.has(p) ? `${p}${EXIT}` : p;
   for (const [parent, kids] of byParent) {
@@ -9897,10 +9897,10 @@ function itemsOn(ctx, scope, grid, cells, sight, here) {
   }
   return out;
 }
-function cellsShown(ctx, grid, display, seen, unvisited) {
+function cellsShown(ctx, grid, display2, seen, unvisited) {
   const voided = hiddenCells(ctx, grid);
   const blank = new Set;
-  if (display !== "fog")
+  if (display2 !== "fog")
     return { blank, void: voided };
   const size = grid.width * grid.height;
   if (seen !== undefined) {
@@ -9918,11 +9918,11 @@ function cellsShown(ctx, grid, display, seen, unvisited) {
             blank.add(cell);
       }
   }
-  const shown = [];
+  const shown2 = [];
   for (let i = 0;i < size; i++)
     if (!blank.has(i) && !voided.has(i))
-      shown.push(i);
-  return { blank, void: voided, seen: addCells("", shown) };
+      shown2.push(i);
+  return { blank, void: voided, seen: addCells("", shown2) };
 }
 function standIn(world, n) {
   let id = `~${n}`;
@@ -9934,7 +9934,7 @@ function buildMapView(ctx, chosen = null) {
   const { world, state } = ctx;
   const level = ctx.levelOf(world.pov, "space");
   const settings = mapSettingsOf(world);
-  const display = chosen ?? settings.display;
+  const display2 = chosen ?? settings.display;
   const here = placeOfEntity(state, world.pov);
   const path = placePath(world, here);
   const inside = new Set(path);
@@ -9976,7 +9976,7 @@ function buildMapView(ctx, chosen = null) {
     }
     const seen = settings.grid.movement ? cellsSeen(state, id, grid.width) ?? "" : undefined;
     const unvisited = (children.get(id) ?? []).filter((p) => filter.drawn(p) && filter.known(p) && !filter.visited(p) && !inside.has(p));
-    const cells = cellsShown(ctx, grid, display, seen, unvisited);
+    const cells = cellsShown(ctx, grid, display2, seen, unvisited);
     const inSight = settings.grid.movement ? stand?.scope === id ? sight : new Set : null;
     scopes.push(scopeView(world, id, filter, { level, trail: trail(id), children, cells, items: itemsOn(ctx, id, grid, cells, inSight, here), ...pov && stand?.scope === id ? { pov } : {}, ...cells.seen !== undefined ? { seen: cells.seen } : {} }));
   }
@@ -9988,9 +9988,9 @@ function buildMapView(ctx, chosen = null) {
     for (const id of targets) {
       if (id === here)
         continue;
-      const plan = routeAt(ctx, here, id, "walk");
+      const plan2 = routeAt(ctx, here, id, "walk");
       const name = own(world.places, id)?.name ?? id;
-      travel.push({ to: id, label: `Walk to ${name}`, mode: "walk", minutes: plan?.minutes ?? 0, action: "go", params: { to: id }, ...plan ? {} : { disabled: "no walking route" } });
+      travel.push({ to: id, label: `Walk to ${name}`, mode: "walk", minutes: plan2?.minutes ?? 0, action: "go", params: { to: id }, ...plan2 ? {} : { disabled: "no walking route" } });
     }
     const vehicles = optionalQuery(ctx, "vehicles.travel_options");
     if (vehicles) {
@@ -9999,7 +9999,7 @@ function buildMapView(ctx, chosen = null) {
           travel.push(o);
     }
   }
-  return { level, here: here === null ? null : filter.shown(here), path: path.map(filter.shown), scope: shownScope === null || scopes.some((s) => s.id === shownScope) ? shownScope : null, display, movement: settings.grid.movement, scopes, travel };
+  return { level, here: here === null ? null : filter.shown(here), path: path.map(filter.shown), scope: shownScope === null || scopes.some((s) => s.id === shownScope) ? shownScope : null, display: display2, movement: settings.grid.movement, scopes, travel };
 }
 
 // node_modules/lumi-rp-engine/src/packs/space/core/index.ts
@@ -10116,15 +10116,15 @@ var travel = (ctx, entity, to, mode) => {
   if (!own(ctx.world.places, to))
     return { code: "missing_place", reason: `no place ${labelOf(ctx, to)}` };
   const from = placeOfEntity(ctx.state, entity);
-  const plan = from ? routeAt(ctx, from, to, mode) : nominalRoute(ctx, to, to, mode);
-  if (!plan)
+  const plan2 = from ? routeAt(ctx, from, to, mode) : nominalRoute(ctx, to, to, mode);
+  if (!plan2)
     return { code: "no_route", reason: `no ${mode} route to ${labelOf(ctx, to)}` };
-  const events = [];
+  const events2 = [];
   for (const r of e.relations)
     if (r.type === "in")
-      events.push({ type: "unlink", rel: "in", from: entity, to: r.to });
-  events.push({ type: "set", entity, field: "place", value: to });
-  return { plan, events };
+      events2.push({ type: "unlink", rel: "in", from: entity, to: r.to });
+  events2.push({ type: "set", entity, field: "place", value: to });
+  return { plan: plan2, events: events2 };
 };
 var spacePack = {
   id: "space",
@@ -10184,13 +10184,13 @@ var spacePack = {
         sliceRecord(state, "space", "routes")[strOf(e.data.route)] = e.data.open === true;
       },
       describe: (e, ctx, viewer) => {
-        const r = own(ctx.world.routes, strOf(e.data.route));
+        const r2 = own(ctx.world.routes, strOf(e.data.route));
         const verb = e.data.open === true ? "opens" : "closes";
-        if (!r)
+        if (!r2)
           return `A route ${verb}`;
-        const shown = (id) => viewer === undefined || canSeePlace(ctx.registry, ctx.world, ctx.state, viewer, id);
-        const end = (id) => shown(id) ? own(ctx.world.places, id)?.name ?? id : "somewhere";
-        return shown(r.from) || shown(r.to) ? `The way from ${end(r.from)} to ${end(r.to)} ${verb}` : `A way ${verb}`;
+        const shown2 = (id) => viewer === undefined || canSeePlace(ctx.registry, ctx.world, ctx.state, viewer, id);
+        const end = (id) => shown2(id) ? own(ctx.world.places, id)?.name ?? id : "somewhere";
+        return shown2(r2.from) || shown2(r2.to) ? `The way from ${end(r2.from)} to ${end(r2.to)} ${verb}` : `A way ${verb}`;
       }
     });
     r.effect({ type: "space.set_route", args: ["route", "open?"], resolve: (a) => [{ type: "space.route", data: { route: strOf(a.route), open: a.open !== false } }] });
@@ -10250,9 +10250,9 @@ var spacePack = {
           for (const id of Object.keys(ctx.world.places).sort()) {
             if (id === here || !canSeePlace(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id))
               continue;
-            const plan = routeAt(ctx, here, id, "walk");
-            if (plan && plan.legs.length === 1)
-              exits.push(`${own(ctx.world.places, id)?.name ?? id} ${plan.minutes} min on foot`);
+            const plan2 = routeAt(ctx, here, id, "walk");
+            if (plan2 && plan2.legs.length === 1)
+              exits.push(`${own(ctx.world.places, id)?.name ?? id} ${plan2.minutes} min on foot`);
           }
           if (exits.length > 0)
             lines.push(`Nearby: ${exits.slice(0, 6).join("; ")}.`);
@@ -10358,12 +10358,12 @@ function monthOf(world, clock) {
   const d = dateAt(calendarOf(world), clock);
   return `${String(d.year).padStart(4, "0")}-${String(d.month).padStart(2, "0")}`;
 }
-function addToBooks(state, business, month, entries) {
+function addToBooks(state, business, month, entries2) {
   const books = sliceRecord(state, "economy", "books");
   const cur = objOf(own(objOf(own(books, business)), month));
   const next = { ...cur };
   for (const k of BOOK_KEYS) {
-    const v = entries[k];
+    const v = entries2[k];
     if (typeof v === "number" && v !== 0)
       next[k] = numOf(cur[k]) + v;
   }
@@ -10385,9 +10385,9 @@ function payablesOf(state, business) {
   return { sales_tax: numOf(p.sales_tax), suppliers: numOf(p.suppliers) };
 }
 function addToPayables(state, business, delta) {
-  const all = sliceRecord(state, "economy", "payables");
+  const all2 = sliceRecord(state, "economy", "payables");
   const cur = payablesOf(state, business);
-  all[business] = { sales_tax: cur.sales_tax + (delta.sales_tax ?? 0), suppliers: cur.suppliers + (delta.suppliers ?? 0) };
+  all2[business] = { sales_tax: cur.sales_tax + (delta.sales_tax ?? 0), suppliers: cur.suppliers + (delta.suppliers ?? 0) };
 }
 function monthsBetween(world, from, to) {
   const out = [];
@@ -10402,8 +10402,8 @@ function monthsBetween(world, from, to) {
   }
   return out;
 }
-function totalsOf(state, account, month) {
-  const raw = objOf(own(objOf(own(objOf(sliceOf(state, "economy").totals), account)), month));
+function totalsOf(state, account2, month) {
+  const raw = objOf(own(objOf(own(objOf(sliceOf(state, "economy").totals), account2)), month));
   const out = {};
   for (const [category, v] of Object.entries(raw))
     out[category] = { in: numOf(objOf(v).in), out: numOf(objOf(v).out) };
@@ -10433,8 +10433,8 @@ function businessBooks(api, books, business, from, to) {
     const b = monthBook(books.state, business, month);
     for (const k of BOOK_KEYS)
       sum[k] += b[k];
-    for (const account of accounts) {
-      for (const [category, t] of Object.entries(totalsOf(books.state, account, month))) {
+    for (const account2 of accounts) {
+      for (const [category, t] of Object.entries(totalsOf(books.state, account2, month))) {
         if (BOOKED_CATEGORIES.includes(category) || category === "opening")
           continue;
         otherIn += t.in;
@@ -10505,11 +10505,11 @@ function seenIn(books, viewer, id) {
     return viewer === null || canSeePlace(books.registry, books.world, books.state, viewer, id);
   return own(books.world.tracks, id) ? false : undefined;
 }
-function wordsFor(books, viewer, words, unseen) {
-  const id = words.trim().replace(/ +/g, "_");
+function wordsFor(books, viewer, words2, unseen) {
+  const id = words2.trim().replace(/ +/g, "_");
   const seen = seenIn(books, viewer, id);
   if (seen === undefined)
-    return words.replace(/_/g, " ").trim();
+    return words2.replace(/_/g, " ").trim();
   const entity = own(books.state.entities, id);
   if (!seen)
     return entity ? "someone" : unseen;
@@ -10553,10 +10553,10 @@ function seenBy(books, viewer, id) {
     return false;
   if (e.kind !== "account" && e.kind !== "card")
     return true;
-  const account = e.kind === "card" ? strOf(e.fields.account) : id;
-  if (rightsOf(books.state, account, viewer) !== null)
+  const account2 = e.kind === "card" ? strOf(e.fields.account) : id;
+  if (rightsOf(books.state, account2, viewer) !== null)
     return true;
-  const holders = holdersOf(books.state, account).filter((h) => own(books.state.entities, h));
+  const holders = holdersOf(books.state, account2).filter((h) => own(books.state.entities, h));
   return holders.length === 0 || holders.some((h) => canSeeEntity(books.registry, books.world, books.state, viewer, h));
 }
 function hiddenFrom(books, viewer, id) {
@@ -10633,10 +10633,10 @@ function classDefaults(books, cls) {
   const mortgage = objOf(loans.mortgage);
   const minimum = objOf(objOf(card.minimum_payment).default);
   const lateFees = objOf(card.late_fee_cents);
-  const advance = objOf(card.cash_advance_fee);
+  const advance2 = objOf(card.cash_advance_fee);
   const cardMinimum = { pct: numOf(minimum.principal_pct, 1), floor: numOf(minimum.floor_cents, 3500), plus_interest: minimum.includes_interest_and_fees !== false };
   const noFees = { annual: 0, late_first: 0, late_repeat: 0, overdraft: 0, nsf: 0, atm: 0, cash_advance_pct: 0, cash_advance_min: 0, maintenance: 0, maintenance_waive: 0, card_replacement: 0 };
-  const creditFees = { ...noFees, late_first: numOf(lateFees.first, 3200), late_repeat: numOf(lateFees.repeat, 4300), nsf: typical(card.returned_payment_fee_cents, 3200), cash_advance_pct: numOf(advance.pct, 5), cash_advance_min: numOf(advance.minimum_cents, 1000) };
+  const creditFees = { ...noFees, late_first: numOf(lateFees.first, 3200), late_repeat: numOf(lateFees.repeat, 4300), nsf: typical(card.returned_payment_fee_cents, 3200), cash_advance_pct: numOf(advance2.pct, 5), cash_advance_min: numOf(advance2.minimum_cents, 1000) };
   const bankFees = {
     ...noFees,
     overdraft: typical(fees.overdraft, 2700),
@@ -10680,7 +10680,7 @@ function classDefaults(books, cls) {
     case "cd":
       return { ...base, apy_pct: typical(deposits.cd_12_month_apy_pct, 4), term_months: 12 };
     case "credit_card":
-      return { ...base, limit: typical(objOf(card.credit_limit_cents), 1e6), apr_pct: typical(card.apr_pct, 22), penalty_apr_pct: numOf(card.penalty_apr_pct, 29.99), cash_advance_apr_pct: numOf(advance.apr_pct_typical, 27), fees: creditFees };
+      return { ...base, limit: typical(objOf(card.credit_limit_cents), 1e6), apr_pct: typical(card.apr_pct, 22), penalty_apr_pct: numOf(card.penalty_apr_pct, 29.99), cash_advance_apr_pct: numOf(advance2.apr_pct_typical, 27), fees: creditFees };
     case "charge_card":
       return { ...base, minimum: { pct: 100, floor: 0, plus_interest: false }, fees: { ...creditFees, annual: numOf(objOf(card.annual_fee_cents).rewards_typical, 9500) } };
     case "line_of_credit":
@@ -10702,7 +10702,7 @@ function productOf(books, id) {
   const def = own(worldProducts(books.world), productId) ?? {};
   const base = classDefaults(books, cls);
   const f = e.fields;
-  const num = (field, fallback) => numOf(f[field], fallback);
+  const num4 = (field, fallback) => numOf(f[field], fallback);
   const fees = { ...base.fees, ...objOf(def.fees) };
   const minimum = { ...base.minimum, ...def.minimum ?? {} };
   if (typeof f.min_pct === "number")
@@ -10717,13 +10717,13 @@ function productOf(books, id) {
     class: cls,
     institution: strOf(f.institution, def.institution ?? ""),
     limit,
-    apr_pct: CLASS_TRAITS[cls].asset ? 0 : num("apr_pct", def.apr_pct ?? base.apr_pct),
-    apy_pct: CLASS_TRAITS[cls].asset ? num("apy_pct", typeof f.apr_pct === "number" ? f.apr_pct : def.apy_pct ?? base.apy_pct) : 0,
+    apr_pct: CLASS_TRAITS[cls].asset ? 0 : num4("apr_pct", def.apr_pct ?? base.apr_pct),
+    apy_pct: CLASS_TRAITS[cls].asset ? num4("apy_pct", typeof f.apr_pct === "number" ? f.apr_pct : def.apy_pct ?? base.apy_pct) : 0,
     interest: def.interest ?? base.interest,
     penalty_apr_pct: def.penalty_apr_pct ?? base.penalty_apr_pct,
     cash_advance_apr_pct: def.cash_advance_apr_pct ?? base.cash_advance_apr_pct,
-    due_days: num("due_days", def.due_days ?? base.due_days),
-    statement_day: num("statement_day", def.statement_day ?? base.statement_day),
+    due_days: num4("due_days", def.due_days ?? base.due_days),
+    statement_day: num4("statement_day", def.statement_day ?? base.statement_day),
     minimum,
     fees,
     rewards_pct: def.rewards_pct ?? base.rewards_pct,
@@ -10731,7 +10731,7 @@ function productOf(books, id) {
     daily_atm_limit: def.daily_atm_limit ?? base.daily_atm_limit,
     hold_days: def.hold_days ?? base.hold_days,
     overdraft: policy === "fee" || policy === "linked" ? policy : "decline",
-    overdraft_limit: num("overdraft_limit", def.overdraft_limit ?? base.overdraft_limit),
+    overdraft_limit: num4("overdraft_limit", def.overdraft_limit ?? base.overdraft_limit),
     term_months: typeof f.term_months === "number" ? f.term_months : def.term_months ?? base.term_months,
     secured: def.secured ?? base.secured
   };
@@ -10752,19 +10752,19 @@ function rightsOf(state, id, party) {
     return { spend: acc.spend || r.spend, worth: acc.worth || r.worth, sees: acc.sees || r.sees, manage: acc.manage || r.manage };
   }, { spend: false, worth: false, sees: false, manage: false });
 }
-function canSpend(state, account, party) {
-  return rightsOf(state, account, party)?.spend === true;
+function canSpend(state, account2, party) {
+  return rightsOf(state, account2, party)?.spend === true;
 }
 function managesParty(state, party, who) {
   return ownersOf(state, party).some((o) => o.party === who && ROLE_RIGHTS[o.role].manage);
 }
-function managesAccount(books, account, who) {
-  if (!classOf2(books, account))
+function managesAccount(books, account2, who) {
+  if (!classOf2(books, account2))
     return false;
-  return ownersOf(books.state, account).some((o) => ROLE_RIGHTS[o.role].manage && (o.party === who || managesParty(books.state, o.party, who)));
+  return ownersOf(books.state, account2).some((o) => ROLE_RIGHTS[o.role].manage && (o.party === who || managesParty(books.state, o.party, who)));
 }
-function debtorsOf(state, account) {
-  const owners = ownersOf(state, account);
+function debtorsOf(state, account2) {
+  const owners = ownersOf(state, account2);
   const owing = owners.filter((o) => ROLE_RIGHTS[o.role].worth);
   return [...new Set((owing.length > 0 ? owing : owners).map((o) => o.party))];
 }
@@ -10777,8 +10777,8 @@ function householdOf(ctx, party) {
 function shareOf(state, id, party) {
   return own(worthShares(ownersOf(state, id)), party) ?? 0;
 }
-function openerOf(state, account) {
-  return ownersOf(state, account)[0]?.party ?? null;
+function openerOf(state, account2) {
+  return ownersOf(state, account2)[0]?.party ?? null;
 }
 function accountsOf(books, party, right = "sees") {
   const out = [];
@@ -10794,38 +10794,38 @@ function accountsOf(books, party, right = "sees") {
 function hasLedger(books, party) {
   return accountsOf(books, party).length > 0;
 }
-function balance(state, account) {
-  return own(state.accounts, account) ?? 0;
+function balance(state, account2) {
+  return own(state.accounts, account2) ?? 0;
 }
-function statusOf(state, account) {
-  const set = strOf(own(objOf(sliceOf(state, "economy").status), account));
-  const field = strOf(own(state.entities, account)?.fields.status);
+function statusOf(state, account2) {
+  const set = strOf(own(objOf(sliceOf(state, "economy").status), account2));
+  const field = strOf(own(state.entities, account2)?.fields.status);
   const v = set || field;
   return v === "frozen" || v === "collections" || v === "charged_off" || v === "closed" || v === "paid_off" || v === "matured" ? v : "open";
 }
-function holdsOn(state, account) {
-  const raw = objOf(own(objOf(sliceOf(state, "economy").holds), account));
+function holdsOn(state, account2) {
+  const raw = objOf(own(objOf(sliceOf(state, "economy").holds), account2));
   const out = [];
   for (const [id, h] of Object.entries(raw)) {
     const o = objOf(h);
     const until = numOf(o.until);
     if (until > state.clock)
-      out.push({ id, account, cents: Math.round(numOf(o.cents)), until, kind: o.kind === "authorization" ? "authorization" : "deposit", memo: strOf(o.memo) });
+      out.push({ id, account: account2, cents: Math.round(numOf(o.cents)), until, kind: o.kind === "authorization" ? "authorization" : "deposit", memo: strOf(o.memo) });
   }
   return out.sort((a, b) => a.until - b.until || a.id.localeCompare(b.id));
 }
-function availableOf(books, account) {
-  const t = traitsOf(books, account);
+function availableOf(books, account2) {
+  const t = traitsOf(books, account2);
   if (!t)
     return 0;
-  const b = balance(books.state, account);
+  const b = balance(books.state, account2);
   if (t.liability) {
-    const p = productOf(books, account);
+    const p = productOf(books, account2);
     if (p?.class === "charge_card" && p.limit === null)
       return Number.MAX_SAFE_INTEGER;
     return (p?.limit ?? 0) + b;
   }
-  return b - holdsOn(books.state, account).reduce((a, h) => a + h.cents, 0);
+  return b - holdsOn(books.state, account2).reduce((a, h) => a + h.cents, 0);
 }
 function containersOf(state, id) {
   const out = [];
@@ -10839,17 +10839,17 @@ function containersOf(state, id) {
   }
   return out;
 }
-function cashOnHolder(state, account, holder) {
-  const chain = containersOf(state, account);
+function cashOnHolder(state, account2, holder) {
+  const chain = containersOf(state, account2);
   return chain.length === 0 || chain.includes(holder);
 }
 function isLost(state, id) {
   return [id, ...containersOf(state, id)].some((x) => own(state.entities, x)?.fields.lost === true);
 }
-function accountsWorth(books, party, shown) {
+function accountsWorth(books, party, shown2) {
   let total = 0;
   for (const id of accountsOf(books, party, "worth"))
-    total += (shown ? shown(id) : balance(books.state, id)) * shareOf(books.state, id, party) / 100;
+    total += (shown2 ? shown2(id) : balance(books.state, id)) * shareOf(books.state, id, party) / 100;
   return Math.round(total);
 }
 function anchorOf(state, entity) {
@@ -11189,8 +11189,8 @@ var ESTIMATED_TAX = {
   validate: (e, ctx) => own(ctx.state.entities, str3(e, "party")) && Array.isArray(e.data.periods) ? null : { code: "bad_event", reason: "estimated tax needs its payer and the periods it pays" },
   apply: (e, state, ctx) => {
     const party = str3(e, "party");
-    const all = sliceRecord(state, "economy", "estimated");
-    const paid = { ...objOf(own(all, party)) };
+    const all2 = sliceRecord(state, "economy", "estimated");
+    const paid = { ...objOf(own(all2, party)) };
     let total = 0;
     for (const raw of Array.isArray(e.data.periods) ? e.data.periods : []) {
       const p = objOf(raw);
@@ -11200,7 +11200,7 @@ var ESTIMATED_TAX = {
     }
     for (const old of Object.keys(paid).sort().slice(0, Math.max(0, Object.keys(paid).length - PERIODS_KEPT)))
       delete paid[old];
-    all[party] = paid;
+    all2[party] = paid;
     if (e.data.business === true)
       addToBooks(state, party, monthOf(ctx.world, state.clock), { business_tax: total });
   },
@@ -11276,8 +11276,8 @@ function registerTaxes(r) {
 // node_modules/lumi-rp-engine/src/packs/economy/core/employment.ts
 var JOB_KIND = "job";
 var HOURS_SOURCES = ["scheduled", "attended", "contract"];
-function monthDay(text) {
-  const m = /^(\d{1,2})-(\d{1,2})$/.exec(text.trim());
+function monthDay(text3) {
+  const m = /^(\d{1,2})-(\d{1,2})$/.exec(text3.trim());
   if (!m)
     return null;
   const month = Number(m[1]);
@@ -11494,8 +11494,8 @@ function anchorBefore(cal, s, anchor, fromDay) {
     return anchor;
   const interval = Math.max(1, Math.round(s.interval ?? 1));
   if (s.every === "day" || s.every === "week") {
-    const period = interval * (s.every === "week" ? 7 : 1);
-    return anchor - Math.ceil((anchor - fromDay) / period) * period;
+    const period2 = interval * (s.every === "week" ? 7 : 1);
+    return anchor - Math.ceil((anchor - fromDay) / period2) * period2;
   }
   const d = dateAt(cal, clockAt(cal, anchor, 0));
   const day = d.month === 2 && d.day === 29 ? 28 : d.day;
@@ -11619,8 +11619,8 @@ function payRecord(state, job) {
 function pct(cents, rate) {
   return Math.round(cents * rate / 100);
 }
-function ownsAccount(api, state, party, account) {
-  return api.ownersOf(state, account).some((o) => o.party === party);
+function ownsAccount(api, state, party, account2) {
+  return api.ownersOf(state, account2).some((o) => o.party === party);
 }
 function emptyCheck(job, from, to, work) {
   return { job: job.id, worker: job.worker, from, to, work, gross: 0, parts: { pay: 0, tips: 0, commission: 0 }, taxes: { federal: 0, socialSecurity: 0, medicare: 0, state: 0, local: 0 }, deductions: [], net: 0, routed: [], match: 0, employerFica: 0, ficaWages: 0, pretax: 0, lines: [] };
@@ -11631,8 +11631,8 @@ function paycheckFor(ctx, api, job, at, from) {
   const cal = calendarOf(ctx.world);
   const payDay = dateAt(cal, at).dayIndex;
   const cutoff = job.every === "per_job" ? at : clockAt(cal, payDay, 0);
-  const record = payRecord(ctx.state, job.id);
-  const paidThrough = typeof record.through === "number" ? record.through : null;
+  const record2 = payRecord(ctx.state, job.id);
+  const paidThrough = typeof record2.through === "number" ? record2.through : null;
   const periodic = job.basis === "salary" || job.basis === "stipend";
   const first = paidThrough === null ? firstPeriodDay(ctx, api, job) : null;
   const paydays = job.every === "per_job" ? [payDay - 1, payDay] : scheduledPaydays(ctx, api, job, paidThrough !== null ? dateAt(cal, paidThrough).dayIndex : first ?? payDay, payDay);
@@ -11663,7 +11663,7 @@ function paycheckFor(ctx, api, job, at, from) {
   else if (job.basis === "per_shift")
     pay = Math.round(job.rate * work.shifts);
   const tips = job.basis === "tips" ? 0 : Math.round(job.tipsPerHour * work.minutes / 60);
-  const commission = pct(numOf(record.sales), job.basis === "commission" && job.commissionPct === 0 ? job.rate : job.commissionPct);
+  const commission = pct(numOf(record2.sales), job.basis === "commission" && job.commissionPct === 0 ? job.rate : job.commissionPct);
   const gross = pay + tips + commission;
   if (gross <= 0)
     return emptyCheck(job, since, through, work);
@@ -11702,14 +11702,14 @@ function paycheckFor(ctx, api, job, at, from) {
   const match = matched.reduce((a, m) => a + m.cents, 0);
   const employerFica = brackets && job.business !== null && !job.contractor && !job.ficaExempt ? fica : 0;
   const lines = [];
-  const add = (account, amount) => {
+  const add = (account2, amount) => {
     if (amount === 0)
       return;
-    const line = lines.find((l) => l.account === account);
+    const line = lines.find((l) => l.account === account2);
     if (line)
       line.amount += amount;
     else
-      lines.push({ account, amount });
+      lines.push({ account: account2, amount });
   };
   add(from, -(gross + match + employerFica));
   for (const r of routed)
@@ -11870,17 +11870,17 @@ function today(ctx) {
   return dateAt(calendarOf(ctx.world), ctx.state.clock).dayIndex;
 }
 function payrollProblem(ctx, api, by, business, worker, splits, doing) {
-  const shown = (id) => shownLabel(ctx, ctx.world.pov, id);
+  const shown2 = (id) => shownLabel(ctx, ctx.world.pov, id);
   if (api.interestsOf(ctx, by).has(worker)) {
     if (api.shareOf(ctx.state, business, by) > 0)
       return null;
-    const what = doing === "hire" ? `put ${worker === by ? "themselves" : shown(worker)} on its payroll` : `set ${worker === by ? "their own" : `${shown(worker)}'s`} pay`;
-    return `${shown(by)} runs ${shown(business)} for others, so can't ${what}`;
+    const what = doing === "hire" ? `put ${worker === by ? "themselves" : shown2(worker)} on its payroll` : `set ${worker === by ? "their own" : `${shown2(worker)}'s`} pay`;
+    return `${shown2(by)} runs ${shown2(business)} for others, so can't ${what}`;
   }
   const deposit = api.depositAccount(ctx, worker);
   const lands = [...deposit ? [deposit] : [], ...splits.filter((s) => ownsAccount(api, ctx.state, worker, s.to)).map((s) => s.to)];
   const reached = lands.find((a) => api.landsInReach(ctx, by, a, business));
-  return reached === undefined ? null : `${shown(by)} runs ${shown(business)} for others, so can't pay ${shown(worker)} into ${shown(reached)}, which ${shown(by)} may spend`;
+  return reached === undefined ? null : `${shown2(by)} runs ${shown2(business)} for others, so can't pay ${shown2(worker)} into ${shown2(reached)}, which ${shown2(by)} may spend`;
 }
 function hire(api, args, ctx) {
   const business = strOf(args.business);
@@ -11955,10 +11955,10 @@ function jobView(ctx, api, job, viewer) {
   const now = ctx.state.clock;
   const flow = api.flows(ctx).find((f) => f.source === "job" && f.link === job.id);
   const next = flow && job.status !== "ended" ? api.occurrences(ctx, flow.schedule, now, now + 62 * MINUTES_PER_DAY, flow.start)[0] ?? null : null;
-  const record = payRecord(ctx.state, job.id);
-  const last = objOf(record.last);
-  const sheet = objOf(record.sheet);
-  const since = typeof record.through === "number" ? record.through : now - 7 * MINUTES_PER_DAY;
+  const record2 = payRecord(ctx.state, job.id);
+  const last = objOf(record2.last);
+  const sheet = objOf(record2.sheet);
+  const since = typeof record2.through === "number" ? record2.through : now - 7 * MINUTES_PER_DAY;
   const scheduled = hoursSource(ctx, job, now) === "contract" ? null : jobBlocks(ctx, job, since, now).reduce((a, b) => a + (b.end - b.start), 0);
   const money = (c) => api.money(ctx, c);
   const entity = own(ctx.state.entities, job.id);
@@ -12035,12 +12035,12 @@ function reject6(code, reason) {
 function str5(e, k) {
   return typeof e.data[k] === "string" ? e.data[k] : "";
 }
-function unit(events, extra) {
-  const all = [...events, ...extra];
-  if (all.length < 2)
-    return all;
-  const group = events.find((e) => e.group)?.group ?? `work:${hashParts(JSON.stringify(all)).slice(0, 10)}`;
-  return all.map((e) => ({ ...e, group }));
+function unit(events2, extra) {
+  const all2 = [...events2, ...extra];
+  if (all2.length < 2)
+    return all2;
+  const group = events2.find((e) => e.group)?.group ?? `work:${hashParts(JSON.stringify(all2)).slice(0, 10)}`;
+  return all2.map((e) => ({ ...e, group }));
 }
 function isBusiness(ctx, id) {
   const e = own(ctx.state.entities, id);
@@ -12241,19 +12241,19 @@ function invoiceFlow(ctx, api, inv) {
 function lateInvoices(slot, ctx, api) {
   const out = [];
   const cal = calendarOf(ctx.world);
-  const today = dateAt(cal, slot.end).dayIndex;
+  const today2 = dateAt(cal, slot.end).dayIndex;
   for (const inv of allInvoices(ctx)) {
     if (inv.left <= 0 || !isBusiness(ctx, inv.business) || ctx.levelOf(inv.business, "money") < 3)
       continue;
-    const daysLate = today - dateAt(cal, inv.due).dayIndex;
+    const daysLate = today2 - dateAt(cal, inv.due).dayIndex;
     if (daysLate < 1)
       continue;
     const owed = 1 + Math.floor((daysLate - 1) / LATE_FEE_EVERY);
-    const pct = numOf(own(ctx.state.entities, inv.business)?.fields.late_fee_pct);
-    const fees = pct > 0 ? owed : inv.fees;
+    const pct2 = numOf(own(ctx.state.entities, inv.business)?.fields.late_fee_pct);
+    const fees = pct2 > 0 ? owed : inv.fees;
     if (inv.state === "late" && fees <= inv.fees)
       continue;
-    const fee = pct > 0 ? Math.round(inv.cents * pct * (fees - inv.fees) / 100) : 0;
+    const fee = pct2 > 0 ? Math.round(inv.cents * pct2 * (fees - inv.fees) / 100) : 0;
     if (inv.state !== "late")
       out.push({ type: "set", entity: inv.id, field: "state", value: "late" });
     if (fees > inv.fees)
@@ -12367,14 +12367,14 @@ function ownerDraw(ctx, api, args) {
     return paid;
   return unit(paid, [{ type: "economy.payout", data: { business, what: "draw", cents } }]);
 }
-function undistributed(api, ctx, business, from, to, pct) {
+function undistributed(api, ctx, business, from, to, pct2) {
   const cal = calendarOf(ctx.world);
   const out = {};
   for (const month of monthsBetween(ctx.world, from, to)) {
     const [y = 0, m = 1] = month.split("-").map(Number);
     const start = clockAt(cal, dayIndexOf(cal, y, m, 1), 0);
     const b = businessBooks(api, ctx, business, start, start + 1);
-    const left = Math.round(Math.max(0, b.profit) * pct / 100) - b.distributions;
+    const left = Math.round(Math.max(0, b.profit) * pct2 / 100) - b.distributions;
     if (left > 0)
       out[month] = left;
   }
@@ -12426,8 +12426,8 @@ function distribute(ctx, api, args) {
   if (by !== "" && !managesParty(ctx.state, business, by))
     return reject6("not_owner", `${labelOf(ctx, by)} doesn't run ${labelOf(ctx, business)}`);
   const since = numOf(own(objOf(sliceOf(ctx.state, "economy").distributed), business), monthStart(ctx, ctx.state.clock));
-  const pct = numOf(own(ctx.state.entities, business)?.fields.distribution_pct, 100);
-  const months = typeof args.cents === "number" && args.cents > 0 ? { [monthOf(ctx.world, ctx.state.clock)]: Math.round(args.cents) } : undistributed(api, ctx, business, since, ctx.state.clock + 1, pct);
+  const pct2 = numOf(own(ctx.state.entities, business)?.fields.distribution_pct, 100);
+  const months = typeof args.cents === "number" && args.cents > 0 ? { [monthOf(ctx.world, ctx.state.clock)]: Math.round(args.cents) } : undistributed(api, ctx, business, since, ctx.state.clock + 1, pct2);
   if (Object.keys(months).length === 0)
     return reject6("bad_amount", `${labelOf(ctx, business)} has no profit to distribute`);
   const d = distribution(ctx, api, business, months);
@@ -12449,7 +12449,7 @@ function distributionPeriod(ctx, every, at) {
   const cal = calendarOf(ctx.world);
   const d = dateAt(cal, at);
   const months = every === "year" ? 12 : every === "quarter" ? 3 : 1;
-  const firstOfMonth = (y, m) => clockAt(cal, dayIndexOf(cal, y, m, 1), 0);
+  const firstOfMonth = (y2, m2) => clockAt(cal, dayIndexOf(cal, y2, m2, 1), 0);
   let y = d.year;
   let m = d.month - months;
   while (m < 1) {
@@ -12460,9 +12460,9 @@ function distributionPeriod(ctx, every, at) {
 }
 function distributionFlow(ctx, api, business) {
   const f = own(ctx.state.entities, business)?.fields;
-  const pct = numOf(f?.distribution_pct);
+  const pct2 = numOf(f?.distribution_pct);
   const from = operatingAccount(api, ctx, business);
-  if (!f || pct <= 0 || !from)
+  if (!f || pct2 <= 0 || !from)
     return null;
   const every = strOf(f.distribution_every, "quarter");
   const schedule = every === "month" ? { every: "month", days: [10], roll: "after" } : every === "year" ? { every: "year", months: [1], days: [10], roll: "after" } : { every: "year", months: [1, 4, 7, 10], days: [10], roll: "after" };
@@ -12598,8 +12598,8 @@ function registerBusiness(r) {
     const f = own(ctx.state.entities, business)?.fields;
     if (!f)
       return null;
-    const period = distributionPeriod(ctx, strOf(f.distribution_every, "quarter"), at);
-    const d = distribution(ctx, api, business, undistributed(api, ctx, business, period.from, period.to, numOf(f.distribution_pct)));
+    const period2 = distributionPeriod(ctx, strOf(f.distribution_every, "quarter"), at);
+    const d = distribution(ctx, api, business, undistributed(api, ctx, business, period2.from, period2.to, numOf(f.distribution_pct)));
     return d ? { cents: d.paid, lines: d.lines, memo: "Profit distribution", kind: "income", category: "distribution", extra: d.extra } : null;
   });
   core.process({ id: "economy.invoices", domain: "money", minLevel: 3, step: (slot, ctx) => lateInvoices(slot, ctx, api) });
@@ -12692,9 +12692,9 @@ function normal(rng) {
   const u2 = rng.next();
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
-function correlated(factor, own, rho) {
+function correlated(factor, own2, rho) {
   const r = Math.min(1, Math.max(0, rho));
-  return r * factor + Math.sqrt(1 - r * r) * own;
+  return r * factor + Math.sqrt(1 - r * r) * own2;
 }
 function gbmStep(price, driftPct, volPct, dt, z) {
   const mu = driftPct / 100;
@@ -12881,7 +12881,7 @@ function readAssetDef(v) {
   if (typeof cls !== "string" || !ASSET_CLASSES.includes(cls))
     return null;
   const def = { label: strOf(o.label), class: cls };
-  const text = (k) => {
+  const text3 = (k) => {
     if (typeof o[k] === "string" && o[k] !== "")
       def[k] = o[k];
   };
@@ -12891,7 +12891,7 @@ function readAssetDef(v) {
       def[k] = n;
   };
   for (const k of ["symbol", "model", "underlying", "expiry", "maturity", "entity"])
-    text(k);
+    text3(k);
   for (const k of ["price", "annual_return_pct", "annual_volatility_pct", "yield_pct", "strike", "multiplier", "pays_per_year", "correlation", "face", "coupon_pct"])
     number(k);
   if (o.right === "call" || o.right === "put")
@@ -13053,9 +13053,9 @@ function marketStep(ctx, api, slot, rng) {
     if (a.bond) {
       if (at.at >= a.bond.maturity)
         continue;
-      const z = correlated(factor(a.market), normal(rng(`asset:${id}`)), a.rho);
+      const z2 = correlated(factor(a.market), normal(rng(`asset:${id}`)), a.rho);
       const y = bondYield(ctx, a);
-      const next = Math.max(0, y + YIELD_REVERSION * (a.bond.baseYield - y) * dt - YIELD_SWING * Math.sqrt(dt) * z);
+      const next = Math.max(0, y + YIELD_REVERSION * (a.bond.baseYield - y) * dt - YIELD_SWING * Math.sqrt(dt) * z2);
       out.push({ type: "economy.quote", data: { asset: id, yield: mark(next) } });
       continue;
     }
@@ -13208,7 +13208,7 @@ function registerMarkets(r) {
 // node_modules/lumi-rp-engine/src/packs/economy/core/records.ts
 var REALISED_KEPT = 24;
 function byShare(shares, cents) {
-  return Object.entries(shares).filter(([, pct]) => pct > 0).sort(([a], [b]) => a.localeCompare(b)).map(([party, pct]) => ({ party, cents: Math.round(cents * pct / 100) }));
+  return Object.entries(shares).filter(([, pct2]) => pct2 > 0).sort(([a], [b]) => a.localeCompare(b)).map(([party, pct2]) => ({ party, cents: Math.round(cents * pct2 / 100) }));
 }
 function yearOf(world, clock) {
   return String(dateAt(calendarOf(world), clock).year);
@@ -13270,13 +13270,13 @@ function basisRecord(state, entity, party) {
 function setBasisRecord(state, entity, party, value) {
   if (!safeKey(entity) || !safeKey(party))
     return;
-  const all = holdingsRecord(state, "basis");
-  const mine = objOf(own(all, entity));
+  const all2 = holdingsRecord(state, "basis");
+  const mine = objOf(own(all2, entity));
   if (value === null)
     delete mine[party];
   else
     mine[party] = { basis: value.basis, ...value.since !== null ? { since: value.since } : {} };
-  all[entity] = mine;
+  all2[entity] = mine;
 }
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/gains.ts
@@ -13289,8 +13289,8 @@ function basisOf(api, ctx, entity, party) {
   if (e?.kind !== "property")
     return { basis: 0, since: null };
   const authored = own(ctx.world.entities, entity)?.fields.value;
-  const whole = numOf(e.fields.purchase_price, typeof authored === "number" ? authored : numOf(e.fields.value));
-  return { basis: Math.round(whole * api.shareOf(ctx.state, entity, party) / 100), since: clockOfDate(ctx.world, e.fields.purchased) };
+  const whole4 = numOf(e.fields.purchase_price, typeof authored === "number" ? authored : numOf(e.fields.value));
+  return { basis: Math.round(whole4 * api.shareOf(ctx.state, entity, party) / 100), since: clockOfDate(ctx.world, e.fields.purchased) };
 }
 function isHome(state, property, party) {
   const home = own(state.entities, party)?.fields.home;
@@ -13306,23 +13306,23 @@ function disposeEvent(api) {
     validate: (e, ctx) => {
       if (!own(ctx.state.entities, str7(e, "entity")) || !own(ctx.state.entities, str7(e, "party")))
         return reject7("missing_entity", "a disposal names what was sold and who sold it");
-      const pct = e.data.pct;
+      const pct2 = e.data.pct;
       const proceeds = e.data.proceeds;
-      if (typeof pct !== "number" || !(pct > 0 && pct <= 100))
+      if (typeof pct2 !== "number" || !(pct2 > 0 && pct2 <= 100))
         return reject7("bad_event", "a disposal is of a part of a share");
       return typeof proceeds === "number" && Number.isSafeInteger(proceeds) && proceeds >= 0 ? null : reject7("bad_event", "a disposal's proceeds are a whole amount");
     },
     apply: (e, state, ctx) => {
       const entity = str7(e, "entity");
       const party = str7(e, "party");
-      const pct = numOf(e.data.pct);
+      const pct2 = numOf(e.data.pct);
       const proceeds = numOf(e.data.proceeds);
       const b = basisOf(api, { world: ctx.world, state }, entity, party);
-      const part = Math.round(b.basis * pct / 100);
+      const part = Math.round(b.basis * pct2 / 100);
       const held = b.since === null ? Infinity : state.clock - b.since;
       const home = own(state.entities, entity)?.kind === "property" && isHome(state, entity, party) && held >= 2 * YEAR_MINUTES;
-      recordGain(state, ctx.world, party, { term: held >= YEAR_MINUTES ? "long" : "short", gain: proceeds - part, proceeds, basis: part, label: strOf(e.data.label, `Sold ${labelOf(ctx, entity)}`), qty: pct / 100, ...home ? { home: true } : {} });
-      setBasisRecord(state, entity, party, pct >= 100 ? null : { basis: b.basis - part, since: b.since });
+      recordGain(state, ctx.world, party, { term: held >= YEAR_MINUTES ? "long" : "short", gain: proceeds - part, proceeds, basis: part, label: strOf(e.data.label, `Sold ${labelOf(ctx, entity)}`), qty: pct2 / 100, ...home ? { home: true } : {} });
+      setBasisRecord(state, entity, party, pct2 >= 100 ? null : { basis: b.basis - part, since: b.since });
     },
     describe: (e, ctx, viewer) => viewer ? "" : `${labelOf(ctx, str7(e, "party"))} sold ${numOf(e.data.pct)}% of their share of ${labelOf(ctx, str7(e, "entity"))}`
   };
@@ -13366,17 +13366,17 @@ function taxTables(ctx) {
   const brackets = byFiling(fed, "brackets_", "");
   const readBrackets = (v) => Array.isArray(v) ? v.map((raw) => objOf(raw)).filter((b) => Object.keys(b).length > 0).map((b) => ({ from: numOf(b.from_cents), to: typeof b.to_cents === "number" ? b.to_cents : null, pct: numOf(b.rate_pct) })) : [];
   const singleBrackets = readBrackets(brackets.single);
-  const record = (read) => Object.fromEntries(FILING_STATUSES.map((f) => [f, read(f)]));
+  const record2 = (read) => Object.fromEntries(FILING_STATUSES.map((f) => [f, read(f)]));
   return {
     ltcgPct: [bands[0] ?? 0, bands[1] ?? 15, bands[2] ?? 20],
-    ltcgThresholds: single ? record((f) => pair(thresholds[f]) ?? single) : null,
+    ltcgThresholds: single ? record2((f) => pair(thresholds[f]) ?? single) : null,
     niitPct: numOf(niit.pct),
-    niitThreshold: record((f) => numOf(niitBy[f], numOf(niitBy.single, Infinity))),
+    niitThreshold: record2((f) => numOf(niitBy[f], numOf(niitBy.single, Infinity))),
     lossLimit: numOf(fed.capital_loss_limit_cents, 300000),
-    homeExclusion: record((f) => numOf(own(exclusion, f), numOf(exclusion.single))),
-    brackets: record((f) => {
-      const own = readBrackets(brackets[f]);
-      return own.length > 0 ? own : singleBrackets;
+    homeExclusion: record2((f) => numOf(own(exclusion, f), numOf(exclusion.single))),
+    brackets: record2((f) => {
+      const own2 = readBrackets(brackets[f]);
+      return own2.length > 0 ? own2 : singleBrackets;
     })
   };
 }
@@ -13500,8 +13500,8 @@ function registerGains(r) {
   };
   r.amount(TAX_PROVIDER, provider);
 }
-function disposal(entity, party, pct, proceeds, label) {
-  return { type: "economy.dispose", data: { entity, party, pct: Math.min(100, Math.max(0, pct)), proceeds: Math.max(0, Math.round(proceeds)), label } };
+function disposal(entity, party, pct2, proceeds, label) {
+  return { type: "economy.dispose", data: { entity, party, pct: Math.min(100, Math.max(0, pct2)), proceeds: Math.max(0, Math.round(proceeds)), label } };
 }
 function acquisition(entity, party, cents) {
   return { type: "economy.acquire", data: { entity, party, cents: Math.max(0, Math.round(cents)) } };
@@ -13511,22 +13511,22 @@ function acquisition(entity, party, cents) {
 var LEGACY_UNIT_PRICE = 1e4;
 var LEGACY_SYMBOL = "broad_us_equity_index";
 function accountOfHolding(state, holding) {
-  const account = strOf(own(state.entities, holding)?.fields.account);
-  return account !== "" && own(state.entities, account) ? account : null;
+  const account2 = strOf(own(state.entities, holding)?.fields.account);
+  return account2 !== "" && own(state.entities, account2) ? account2 : null;
 }
 function holdingOwners(api, state, holding) {
-  const account = accountOfHolding(state, holding);
-  return api.ownersOf(state, account ?? holding);
+  const account2 = accountOfHolding(state, holding);
+  return api.ownersOf(state, account2 ?? holding);
 }
 function holdingIds(state) {
   return Object.keys(state.entities).filter((id) => own(state.entities, id)?.kind === "holding").sort();
 }
-function legacyHolding(state, account) {
-  const units = own(state.entities, account)?.fields.units;
+function legacyHolding(state, account2) {
+  const units = own(state.entities, account2)?.fields.units;
   if (typeof units !== "number" || units === 0)
     return null;
-  const symbol = strOf(own(state.entities, account)?.fields.symbol, LEGACY_SYMBOL);
-  return holdingIds(state).find((id) => own(state.entities, id)?.fields.account === account && own(state.entities, id)?.fields.asset === symbol) ?? null;
+  const symbol = strOf(own(state.entities, account2)?.fields.symbol, LEGACY_SYMBOL);
+  return holdingIds(state).find((id) => own(state.entities, id)?.fields.account === account2 && own(state.entities, id)?.fields.asset === symbol) ?? null;
 }
 function readLots(world, raw) {
   if (!Array.isArray(raw))
@@ -13548,10 +13548,10 @@ function lotsOf(books, holding) {
   if (!e || e.kind !== "holding")
     return [];
   const lots = readLots(books.world, e.fields.lots);
-  const account = accountOfHolding(books.state, holding);
-  if (!account || legacyHolding(books.state, account) !== holding)
+  const account2 = accountOfHolding(books.state, holding);
+  if (!account2 || legacyHolding(books.state, account2) !== holding)
     return lots;
-  const units = numOf(own(books.state.entities, account)?.fields.units);
+  const units = numOf(own(books.state.entities, account2)?.fields.units);
   if (units > 0)
     return [...lots, { qty: roundQty(units), cost: Math.round(units * LEGACY_UNIT_PRICE), at: 0 }];
   return takeFifo(lots, Math.min(-units, qtyOf(lots)))?.left ?? [];
@@ -13563,24 +13563,24 @@ function holdingValue(books, holding) {
   const a = assetOf(books, strOf(own(books.state.entities, holding)?.fields.asset));
   return a ? Math.round(qtyOf(lotsOf(books, holding)) * priceOf2(books, a)) : 0;
 }
-function findHolding(state, asset, account, party) {
+function findHolding(state, asset, account2, party) {
   return holdingIds(state).find((id) => {
     const f = own(state.entities, id)?.fields;
     if (!f || f.asset !== asset)
       return false;
-    return account ? f.account === account : strOf(f.account) === "" && ownersIn(f).some((o) => o.party === party);
+    return account2 ? f.account === account2 : strOf(f.account) === "" && ownersIn(f).some((o) => o.party === party);
   }) ?? null;
 }
 function canTrade(api, ctx, party, holding) {
-  const account = accountOfHolding(ctx.state, holding);
-  if (account)
-    return api.accountsOf(ctx, party, "spend").includes(account);
+  const account2 = accountOfHolding(ctx.state, holding);
+  if (account2)
+    return api.accountsOf(ctx, party, "spend").includes(account2);
   return ownersIn(own(ctx.state.entities, holding)?.fields ?? {}).some((o) => o.party === party && ROLE_RIGHTS[o.role].spend);
 }
 function seesHolding(api, ctx, party, holding) {
-  const account = accountOfHolding(ctx.state, holding);
-  if (account)
-    return api.accountsOf(ctx, party, "sees").includes(account);
+  const account2 = accountOfHolding(ctx.state, holding);
+  if (account2)
+    return api.accountsOf(ctx, party, "sees").includes(account2);
   return ownersIn(own(ctx.state.entities, holding)?.fields ?? {}).some((o) => o.party === party && ROLE_RIGHTS[o.role].sees);
 }
 function holdingShare(api, state, holding, party) {
@@ -13600,8 +13600,8 @@ function shownRoute(api, ctx, viewer, to, reinvest) {
   return api.accountsOf(ctx, viewer, "sees").includes(to) ? { to, reinvest: false } : { to: null, reinvest: false, elsewhere: true };
 }
 function sheltered(api, books, holding) {
-  const account = accountOfHolding(books.state, holding);
-  return account !== null && api.classOf(books, account) === "retirement";
+  const account2 = accountOfHolding(books.state, holding);
+  return account2 !== null && api.classOf(books, account2) === "retirement";
 }
 function realise(api, state, world, holding, taken, proceeds, label) {
   if (sheltered(api, { world, state }, holding))
@@ -13625,9 +13625,9 @@ function realise(api, state, world, holding, taken, proceeds, label) {
     if (part.qty <= 0)
       continue;
     for (const { party } of byShare(shares, 1)) {
-      const pct = shares[party] ?? 0;
-      const scale = (n) => Math.round(n * pct / 100);
-      recordGain(state, world, party, { term, gain: scale(part.proceeds - part.basis), proceeds: scale(part.proceeds), basis: scale(part.basis), label, qty: roundQty(part.qty * pct / 100) });
+      const pct2 = shares[party] ?? 0;
+      const scale = (n) => Math.round(n * pct2 / 100);
+      recordGain(state, world, party, { term, gain: scale(part.proceeds - part.basis), proceeds: scale(part.proceeds), basis: scale(part.basis), label, qty: roundQty(part.qty * pct2 / 100) });
     }
   }
 }
@@ -13640,11 +13640,11 @@ function applyLots(api, state, world, tables, holding, qty, cents, label, realis
     return;
   const books = { world, state, tables };
   let lots = lotsOf(books, holding);
-  const account = accountOfHolding(state, holding);
-  if (account && legacyHolding(state, account) === holding) {
-    const a = own(state.entities, account);
+  const account2 = accountOfHolding(state, holding);
+  if (account2 && legacyHolding(state, account2) === holding) {
+    const a = own(state.entities, account2);
     if (a)
-      state.entities[account] = { ...a, fields: { ...a.fields, units: 0 } };
+      state.entities[account2] = { ...a, fields: { ...a.fields, units: 0 } };
   }
   if (qty > 0)
     lots.push({ qty: roundQty(qty), cost: cents, at: state.clock });
@@ -13681,14 +13681,14 @@ function lotsEvent(api) {
   };
 }
 function lotsChange(state, holding, qty, cents, kind, label) {
-  const account = accountOfHolding(state, holding);
-  const legacy = account && legacyHolding(state, account) === holding ? account : null;
+  const account2 = accountOfHolding(state, holding);
+  const legacy = account2 && legacyHolding(state, account2) === holding ? account2 : null;
   return { type: "economy.lots", data: { holding, qty: roundQty(qty), cents, kind, label, ...legacy ? { legacy } : {} } };
 }
-function unit2(events) {
-  if (events.length < 2)
-    return [...events];
-  const bare = events.map(({ group: _group, ...rest }) => rest);
+function unit2(events2) {
+  if (events2.length < 2)
+    return [...events2];
+  const bare = events2.map(({ group: _group, ...rest }) => rest);
   const group = `pay:${hashParts(JSON.stringify(bare)).slice(0, 10)}`;
   return bare.map((e) => ({ ...e, group }));
 }
@@ -13711,12 +13711,12 @@ function marketOf(api, asset) {
   return api.outside(`market:${asset}`);
 }
 function proceedsAccount(api, ctx, party, holding, to) {
-  const account = accountOfHolding(ctx.state, holding);
-  if (account && api.traitsOf(ctx, account)?.locked && to && to !== account)
-    return reject7("locked", `${labelOf(ctx, account)} keeps what its holdings pay; move it out from the account itself`);
-  if (to && to !== account)
+  const account2 = accountOfHolding(ctx.state, holding);
+  if (account2 && api.traitsOf(ctx, account2)?.locked && to && to !== account2)
+    return reject7("locked", `${labelOf(ctx, account2)} keeps what its holdings pay; move it out from the account itself`);
+  if (to && to !== account2)
     return api.mayUse(ctx, party, to, "into") ?? to;
-  return to ?? account ?? api.depositAccount(ctx, party) ?? reject7("no_account", `${labelOf(ctx, party)} has no account the money could go to`);
+  return to ?? account2 ?? api.depositAccount(ctx, party) ?? reject7("no_account", `${labelOf(ctx, party)} has no account the money could go to`);
 }
 function trade(api, ctx, t) {
   const { party } = t;
@@ -13724,7 +13724,7 @@ function trade(api, ctx, t) {
     return reject7("missing_entity", `no ${labelOf(ctx, party)}`);
   if (!api.feature(ctx, party, "investments"))
     return reject7("level", "investments aren't followed at this money level");
-  const events = [];
+  const events2 = [];
   let holding = t.holding && own(ctx.state.entities, t.holding)?.kind === "holding" ? t.holding : null;
   if (t.holding && !holding)
     return reject7("missing_holding", `no holding ${labelOf(ctx, t.holding)}`);
@@ -13739,7 +13739,7 @@ function trade(api, ctx, t) {
     assetId = optionId(assetId, t.option.right, t.option.strike, t.option.expiry);
     asset = assetFromDef(ctx, assetId, def);
     if (!assetDefOf(ctx, assetId))
-      events.push({ type: "economy.mint", data: { asset: assetId, def } });
+      events2.push({ type: "economy.mint", data: { asset: assetId, def } });
   }
   if (!asset)
     return reject7("missing_asset", `no asset ${assetId || "named"}`);
@@ -13747,16 +13747,16 @@ function trade(api, ctx, t) {
     return reject7("level", "options aren't followed at this money level");
   if (asset.class === "property" || asset.class === "business_stake")
     return reject7("not_traded", `${asset.label} changes hands as a property or a stake, not a trade`);
-  const account = holding ? accountOfHolding(ctx.state, holding) : t.account && own(ctx.state.entities, t.account) ? t.account : null;
-  if (t.account && !account)
+  const account2 = holding ? accountOfHolding(ctx.state, holding) : t.account && own(ctx.state.entities, t.account) ? t.account : null;
+  if (t.account && !account2)
     return reject7("missing_account", `no account ${labelOf(ctx, t.account)}`);
-  if (account && !holding) {
-    if (!api.traitsOf(ctx, account)?.investment)
-      return reject7("not_investment", `${labelOf(ctx, account)} doesn't hold investments`);
-    if (!api.accountsOf(ctx, party, "spend").includes(account))
-      return reject7("not_yours", `${labelOf(ctx, account)} isn't ${labelOf(ctx, party)}'s to trade in`);
+  if (account2 && !holding) {
+    if (!api.traitsOf(ctx, account2)?.investment)
+      return reject7("not_investment", `${labelOf(ctx, account2)} doesn't hold investments`);
+    if (!api.accountsOf(ctx, party, "spend").includes(account2))
+      return reject7("not_yours", `${labelOf(ctx, account2)} isn't ${labelOf(ctx, party)}'s to trade in`);
   }
-  holding ??= findHolding(ctx.state, assetId, account, party);
+  holding ??= findHolding(ctx.state, assetId, account2, party);
   if (holding && !canTrade(api, ctx, party, holding))
     return reject7("not_yours", `${labelOf(ctx, holding)} isn't ${labelOf(ctx, party)}'s to trade`);
   if (asset.option && ctx.state.clock >= asset.option.expiry)
@@ -13766,43 +13766,43 @@ function trade(api, ctx, t) {
   const price = priceOf2(ctx, asset);
   if (!(price > 0))
     return reject7("no_price", `${asset.label} has no price to trade at`);
-  const whole = asset.option !== null;
+  const whole4 = asset.option !== null;
   const held = holding ? qtyOf(lotsOf(ctx, holding)) : 0;
   const money = (c) => formatMoney(c, ctx.world.currency);
   if (t.side === "buy") {
     const raw = typeof t.qty === "number" && t.qty > 0 ? t.qty : typeof t.amount === "number" && t.amount > 0 ? t.amount / price : 0;
-    const qty = whole ? Math.floor(raw + 0.000000001) : roundQty(raw);
-    if (!(qty > QTY_EPSILON))
-      return reject7("bad_amount", whole ? `${money(Math.round(t.amount ?? 0))} buys no whole contract at ${money(Math.round(price))}` : "say how much to buy");
-    const cents = Math.round(qty * price);
-    if (cents <= 0)
+    const qty2 = whole4 ? Math.floor(raw + 0.000000001) : roundQty(raw);
+    if (!(qty2 > QTY_EPSILON))
+      return reject7("bad_amount", whole4 ? `${money(Math.round(t.amount ?? 0))} buys no whole contract at ${money(Math.round(price))}` : "say how much to buy");
+    const cents2 = Math.round(qty2 * price);
+    if (cents2 <= 0)
       return reject7("bad_amount", "say how much to buy");
-    const source = t.from ?? account ?? api.depositAccount(ctx, party);
+    const source = t.from ?? account2 ?? api.depositAccount(ctx, party);
     if (!source)
       return reject7("no_account", `${labelOf(ctx, party)} has no account to pay from`);
-    const unusable = source === account ? null : api.mayUse(ctx, party, source, "from");
+    const unusable = source === account2 ? null : api.mayUse(ctx, party, source, "from");
     if (unusable)
       return unusable;
     const spawned = !holding;
     if (!holding) {
-      holding = newHoldingId(ctx.state, `${account ?? party}:${assetId}`);
-      events.push({ type: "spawn", entity: { id: holding, kind: "holding", name: asset.symbol ? `${asset.symbol}${account ? ` in ${labelOf(ctx, account)}` : ""}` : asset.label, tier: "background", fields: { asset: assetId, lots: [], ...account ? { account } : { owners: [{ party, role: "owner" }] } }, relations: [] } });
+      holding = newHoldingId(ctx.state, `${account2 ?? party}:${assetId}`);
+      events2.push({ type: "spawn", entity: { id: holding, kind: "holding", name: asset.symbol ? `${asset.symbol}${account2 ? ` in ${labelOf(ctx, account2)}` : ""}` : asset.label, tier: "background", fields: { asset: assetId, lots: [], ...account2 ? { account: account2 } : { owners: [{ party, role: "owner" }] } }, relations: [] } });
     }
-    const label = `Bought ${unitsText(qty)} ${asset.symbol ?? asset.label}`;
-    const lines = [
-      { account: source, amount: -cents },
-      { account: marketOf(api, assetId), amount: cents }
+    const label2 = `Bought ${unitsText(qty2)} ${asset.symbol ?? asset.label}`;
+    const lines2 = [
+      { account: source, amount: -cents2 },
+      { account: marketOf(api, assetId), amount: cents2 }
     ];
-    const posted = api.post(ctx, lines, { memo: label, kind: "purchase", category: "investment" });
-    if (isRejection2(posted))
-      return posted;
-    const lots = spawned ? { type: "economy.lots", data: { holding, qty, cents, kind: "buy", label } } : lotsChange(ctx.state, holding, qty, cents, "buy", label);
-    return unit2([...events, ...posted, lots]);
+    const posted2 = api.post(ctx, lines2, { memo: label2, kind: "purchase", category: "investment" });
+    if (isRejection2(posted2))
+      return posted2;
+    const lots = spawned ? { type: "economy.lots", data: { holding, qty: qty2, cents: cents2, kind: "buy", label: label2 } } : lotsChange(ctx.state, holding, qty2, cents2, "buy", label2);
+    return unit2([...events2, ...posted2, lots]);
   }
   if (!holding || held <= QTY_EPSILON)
     return reject7("nothing_held", `${labelOf(ctx, party)} holds no ${asset.label}`);
   const wanted = typeof t.qty === "number" && t.qty > 0 ? t.qty : typeof t.amount === "number" && t.amount > 0 ? t.amount / price : held;
-  const qty = whole ? Math.min(held, Math.floor(wanted + 0.000000001)) : Math.min(held, roundQty(wanted));
+  const qty = whole4 ? Math.min(held, Math.floor(wanted + 0.000000001)) : Math.min(held, roundQty(wanted));
   if (!(qty > QTY_EPSILON))
     return reject7("bad_amount", "say how much to sell");
   if (typeof t.qty === "number" && t.qty > held + QTY_EPSILON)
@@ -13828,10 +13828,10 @@ function setRoute(api, ctx, party, holding, to) {
     return reject7("not_yours", `${labelOf(ctx, holding)} isn't ${labelOf(ctx, party)}'s to manage`);
   const route = to.trim();
   if (route !== "" && route !== "reinvest") {
-    const account = accountOfHolding(ctx.state, holding);
-    if (account && api.traitsOf(ctx, account)?.locked && route !== account)
-      return reject7("locked", `${labelOf(ctx, account)} keeps what its holdings pay`);
-    const unusable = route === account ? null : api.mayUse(ctx, party, route, "into");
+    const account2 = accountOfHolding(ctx.state, holding);
+    if (account2 && api.traitsOf(ctx, account2)?.locked && route !== account2)
+      return reject7("locked", `${labelOf(ctx, account2)} keeps what its holdings pay`);
+    const unusable = route === account2 ? null : api.mayUse(ctx, party, route, "into");
     if (unusable)
       return unusable;
   }
@@ -13893,7 +13893,7 @@ function tradeArgs(a, ctx) {
   const amount = n("amount");
   const holding = s("holding");
   const asset = s("asset");
-  const account = s("account");
+  const account2 = s("account");
   const from = s("from");
   const to = s("to");
   return {
@@ -13901,7 +13901,7 @@ function tradeArgs(a, ctx) {
     party: s("party") ?? ctx.world.pov,
     ...holding ? { holding } : {},
     ...asset ? { asset } : {},
-    ...account ? { account } : {},
+    ...account2 ? { account: account2 } : {},
     ...qty !== undefined ? { qty } : {},
     ...amount !== undefined ? { amount } : {},
     ...from ? { from } : {},
@@ -13952,10 +13952,10 @@ function registerHoldings(r) {
         const asset = strOf(e.fields.asset);
         if (!own(assets, asset))
           issues.push({ severity: "error", code: "economy.holdings", message: `Holding ${e.name} names asset "${asset}", which the economy's assets don't list.`, path: `entities.${e.id}.fields.asset` });
-        const account = strOf(e.fields.account);
-        if (account !== "" && own(world.entities, account)?.kind !== "account")
-          issues.push({ severity: "error", code: "economy.holdings", message: `Holding ${e.name} sits in ${account}, which isn't an account.`, path: `entities.${e.id}.fields.account` });
-        if (account === "" && ownersIn(e.fields).length === 0)
+        const account2 = strOf(e.fields.account);
+        if (account2 !== "" && own(world.entities, account2)?.kind !== "account")
+          issues.push({ severity: "error", code: "economy.holdings", message: `Holding ${e.name} sits in ${account2}, which isn't an account.`, path: `entities.${e.id}.fields.account` });
+        if (account2 === "" && ownersIn(e.fields).length === 0)
           issues.push({ severity: "error", code: "economy.holdings", message: `Holding ${e.name} sits in no account and has no owners.`, path: `entities.${e.id}.fields.owners` });
         if (e.fields.lots !== undefined && !Array.isArray(e.fields.lots))
           issues.push({ severity: "error", code: "economy.holdings", message: `Holding ${e.name}'s lots are a list of {qty, cost, at}.`, path: `entities.${e.id}.fields.lots` });
@@ -13970,8 +13970,8 @@ function registerHoldings(r) {
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/income.ts
 var INCOME_PROVIDER = "holding_income";
-function payout(api, ctx, owners, cents, source, to, account) {
-  const into = to ?? account;
+function payout(api, ctx, owners, cents, source, to, account2) {
+  const into = to ?? account2;
   if (into)
     return { lines: [{ account: source, amount: -cents }, { account: into, amount: cents }], paid: cents };
   const parts = byShare(worthShares(owners), cents);
@@ -14009,7 +14009,7 @@ function incomeFlow(api, ctx, holding) {
   if (!owners.some((o) => api.feature(ctx, o.party, "investments")))
     return null;
   const route = routeOf(ctx.state, holding);
-  const account = accountOfHolding(ctx.state, holding);
+  const account2 = accountOfHolding(ctx.state, holding);
   const cal = calendarOf(ctx.world);
   const name = a.symbol ?? a.label;
   const interest = a.bond !== null || a.class === "bond";
@@ -14020,7 +14020,7 @@ function incomeFlow(api, ctx, holding) {
     label: `${name} ${interest ? "interest" : "dividend"}`,
     kind: "distribution",
     from: a.label,
-    to: route.to ?? account ?? (owners[0] ? owners[0].party : ""),
+    to: route.to ?? account2 ?? (owners[0] ? owners[0].party : ""),
     amount: { provider: INCOME_PROVIDER, args: { holding } },
     schedule: months.length >= cal.system.months ? { every: "month", days: [due ? due.day : 15], roll: "after" } : { every: "year", months, days: [due ? due.day : 15], roll: "after" },
     ...a.bond ? { end: dateText3(ctx.world, a.bond.maturity - 1440) } : {},
@@ -14063,9 +14063,9 @@ function holdingIncome(api, ctx, holding, at, last = false) {
       quiet: true
     };
   }
-  const account = accountOfHolding(ctx.state, holding);
-  const to = account && api.traitsOf(ctx, account)?.locked ? account : route.to;
-  const paid = payout(api, ctx, holdingOwners(api, ctx.state, holding), cents, issuer, to, account);
+  const account2 = accountOfHolding(ctx.state, holding);
+  const to = account2 && api.traitsOf(ctx, account2)?.locked ? account2 : route.to;
+  const paid = payout(api, ctx, holdingOwners(api, ctx.state, holding), cents, issuer, to, account2);
   if (paid.paid <= 0)
     return null;
   return { cents: paid.paid, lines: paid.lines, memo: `${name} ${kind}`, kind: "income", category, extra: [{ type: "economy.income", data: { source: holding, cents: paid.paid, kind } }], quiet: true };
@@ -14199,7 +14199,7 @@ function exercise(api, ctx, x) {
     return reject7("missing_asset", `no asset ${a.option.underlying}`);
   const units = qty * a.option.multiplier;
   const strike = Math.round(units * a.option.strike);
-  const account = accountOfHolding(ctx.state, x.holding);
+  const account2 = accountOfHolding(ctx.state, x.holding);
   const money = (c) => formatMoney(c, ctx.world.currency);
   const label = `Exercised ${qty} ${a.label}`;
   if (a.option.settlement === "cash") {
@@ -14209,26 +14209,26 @@ function exercise(api, ctx, x) {
     const to = x.to !== undefined ? proceedsAccount(api, ctx, x.party, x.holding, x.to) : undefined;
     if (to !== undefined && typeof to !== "string")
       return to;
-    const posted = settle(api, ctx, x.holding, a, qty, cash, label, to);
-    return isRejection3(posted) ? posted : unit2(posted);
+    const posted2 = settle(api, ctx, x.holding, a, qty, cash, label, to);
+    return isRejection3(posted2) ? posted2 : unit2(posted2);
   }
-  const into = findHolding(ctx.state, under.id, account, x.party);
-  const events = [];
+  const into = findHolding(ctx.state, under.id, account2, x.party);
+  const events2 = [];
   const market = marketOf(api, under.id);
   let lines;
   let target = into;
   if (a.option.right === "call") {
-    const from = x.from ?? account ?? api.depositAccount(ctx, x.party);
+    const from = x.from ?? account2 ?? api.depositAccount(ctx, x.party);
     if (!from)
       return reject7("no_account", `${labelOf(ctx, x.party)} has no account to pay the strike from`);
-    const unusable = from === account ? null : api.mayUse(ctx, x.party, from, "from");
+    const unusable = from === account2 ? null : api.mayUse(ctx, x.party, from, "from");
     if (unusable)
       return unusable;
     if (!target) {
-      target = `${account ?? x.party}:${under.id}`;
+      target = `${account2 ?? x.party}:${under.id}`;
       for (let i = 2;own(ctx.state.entities, target); i++)
-        target = `${account ?? x.party}:${under.id}:${i}`;
-      events.push({ type: "spawn", entity: { id: target, kind: "holding", name: under.symbol ?? under.label, tier: "background", fields: { asset: under.id, lots: [], ...account ? { account } : { owners: [{ party: x.party, role: "owner" }] } }, relations: [] } });
+        target = `${account2 ?? x.party}:${under.id}:${i}`;
+      events2.push({ type: "spawn", entity: { id: target, kind: "holding", name: under.symbol ?? under.label, tier: "background", fields: { asset: under.id, lots: [], ...account2 ? { account: account2 } : { owners: [{ party: x.party, role: "owner" }] } }, relations: [] } });
     }
     lines = [
       { account: from, amount: -strike },
@@ -14236,7 +14236,7 @@ function exercise(api, ctx, x) {
     ];
   } else {
     if (!target || qtyOf(lotsOf(ctx, target)) + QTY_EPSILON < units)
-      return reject7("nothing_to_deliver", `exercising ${qty} ${a.label} delivers ${unitsText(units)} ${under.symbol ?? under.label}, which ${labelOf(ctx, x.party)} doesn't hold${account ? ` in ${labelOf(ctx, account)}` : ""}`);
+      return reject7("nothing_to_deliver", `exercising ${qty} ${a.label} delivers ${unitsText(units)} ${under.symbol ?? under.label}, which ${labelOf(ctx, x.party)} doesn't hold${account2 ? ` in ${labelOf(ctx, account2)}` : ""}`);
     const to = proceedsAccount(api, ctx, x.party, x.holding, x.to);
     if (typeof to !== "string")
       return to;
@@ -14248,12 +14248,12 @@ function exercise(api, ctx, x) {
   const posted = api.post(ctx, lines, { memo: `${label}: ${money(strike)} for ${unitsText(units)} ${under.symbol ?? under.label}`, kind: a.option.right === "call" ? "purchase" : "sale", category: "investment" });
   if (isRejection3(posted))
     return posted;
-  return unit2([...events, ...posted, { type: "economy.exercise", data: { option: x.holding, into: target, qty, units, cash: strike, right: a.option.right, label } }]);
+  return unit2([...events2, ...posted, { type: "economy.exercise", data: { option: x.holding, into: target, qty, units, cash: strike, right: a.option.right, label } }]);
 }
 function settle(api, ctx, holding, a, qty, cash, label, to) {
   const source = marketOf(api, a.option?.underlying ?? a.id);
-  const account = accountOfHolding(ctx.state, holding);
-  const paid = payout(api, ctx, holdingOwners(api, ctx.state, holding), cash, source, to ?? null, account);
+  const account2 = accountOfHolding(ctx.state, holding);
+  const paid = payout(api, ctx, holdingOwners(api, ctx.state, holding), cash, source, to ?? null, account2);
   if (paid.paid <= 0)
     return reject7("no_account", `nobody holding ${a.label} has an account the cash could go to`);
   const posted = api.post(ctx, paid.lines, { memo: label, kind: "sale", category: "investment" });
@@ -14276,7 +14276,7 @@ function settlements(api, ctx, slot) {
     if (qty <= QTY_EPSILON)
       continue;
     const owners = holdingOwners(api, ctx.state, holding);
-    const notes = (text) => owners.flatMap((o) => api.note(ctx, o.party, "bill", text));
+    const notes = (text3) => owners.flatMap((o) => api.note(ctx, o.party, "bill", text3));
     if (a.bond) {
       const cash = Math.round(qty * a.bond.face);
       const label = `${a.label} matured`;
@@ -14343,12 +14343,12 @@ function monthKey(ctx, at) {
   const d = dateAt(calendarOf(ctx.world), at);
   return `${String(d.year).padStart(4, "0")}-${String(d.month).padStart(2, "0")}`;
 }
-function journalOf(state, account) {
-  const raw = own(objOf(sliceOf(state, "economy").journal), account);
+function journalOf(state, account2) {
+  const raw = own(objOf(sliceOf(state, "economy").journal), account2);
   return Array.isArray(raw) ? raw.map((x) => objOf(x)) : [];
 }
-function cycleOf2(state, account) {
-  const raw = objOf(own(objOf(sliceOf(state, "economy").cycles), account));
+function cycleOf2(state, account2) {
+  const raw = objOf(own(objOf(sliceOf(state, "economy").cycles), account2));
   if (Object.keys(raw).length === 0)
     return null;
   return {
@@ -14385,18 +14385,18 @@ function flowRunOf(state, flow) {
     ...raw.ended === true ? { ended: true } : {}
   };
 }
-function isOpened(state, account, opener) {
-  if (own(objOf(sliceOf(state, "economy").opened), account) === true)
+function isOpened(state, account2, opener) {
+  if (own(objOf(sliceOf(state, "economy").opened), account2) === true)
     return true;
   return opener !== null && Object.prototype.hasOwnProperty.call(state.materialized, `${opener}:money`);
 }
-function accrualOf(state, account) {
-  const raw = objOf(own(objOf(sliceOf(state, "economy").adb), account));
+function accrualOf(state, account2) {
+  const raw = objOf(own(objOf(sliceOf(state, "economy").adb), account2));
   return typeof raw.from === "number" ? { from: raw.from, at: numOf(raw.at, raw.from), sum: numOf(raw.sum), spent: numOf(raw.spent), advanced: numOf(raw.advanced), advancedAt: numOf(raw.advanced_at) } : null;
 }
-function averageBalance(state, account, now) {
-  const a = accrualOf(state, account);
-  const b = balance(state, account);
+function averageBalance(state, account2, now) {
+  const a = accrualOf(state, account2);
+  const b = balance(state, account2);
   if (!a || now <= a.from)
     return b;
   return (a.sum + b * Math.max(0, now - a.at)) / (now - a.from);
@@ -14414,10 +14414,10 @@ function partyOfSide(state, side) {
   const bare = side.startsWith(EXTERNAL_ACCOUNT_PREFIX) ? side.slice(EXTERNAL_ACCOUNT_PREFIX.length) : "";
   return bare !== "" && own(state.entities, bare) ? bare : side;
 }
-function fileLine(state, ctx, account, amount, at, data, other, seq) {
+function fileLine(state, ctx, account2, amount, at, data, other, seq) {
   const journal = sliceRecord(state, "economy", "journal");
   const status = data.status === "pending" ? "pending" : "posted";
-  const entry = { id: `j${seq}`, at, account, cents: amount, memo: strOf(data.memo), status };
+  const entry = { id: `j${seq}`, at, account: account2, cents: amount, memo: strOf(data.memo), status };
   for (const k of ["kind", "category", "card", "flow"])
     if (typeof data[k] === "string" && data[k] !== "")
       entry[k] = data[k];
@@ -14425,9 +14425,9 @@ function fileLine(state, ctx, account, amount, at, data, other, seq) {
     entry.counterparty = other;
   if (status === "pending" && typeof data.settles === "number")
     entry.settles = data.settles;
-  journal[account] = pushCapped(journal[account], entry, JOURNAL_CAP);
+  journal[account2] = pushCapped(journal[account2], entry, JOURNAL_CAP);
   const totals = sliceRecord(state, "economy", "totals");
-  const months = objOf(totals[account]);
+  const months = objOf(totals[account2]);
   const key = monthKey(ctx, at);
   const month = objOf(months[key]);
   const category = strOf(data.category) || "other";
@@ -14436,27 +14436,27 @@ function fileLine(state, ctx, account, amount, at, data, other, seq) {
   months[key] = month;
   for (const old of Object.keys(months).sort().slice(0, -MONTHS_KEPT2))
     delete months[old];
-  totals[account] = months;
+  totals[account2] = months;
 }
-function accrue(state, account, amount, at, use) {
+function accrue(state, account2, amount, at, use) {
   const adb = sliceRecord(state, "economy", "adb");
-  const cur = objOf(adb[account]);
-  const before = balance(state, account) - amount;
+  const cur = objOf(adb[account2]);
+  const before = balance(state, account2) - amount;
   const spent = use === "purchase" ? -amount : 0;
   const drawn = use === "advance" ? -amount : 0;
   const since = typeof cur.from === "number" ? cur.from : at;
   const advanced = numOf(cur.advanced) + drawn;
   const advances = advanced !== 0 ? { advanced, advanced_at: numOf(cur.advanced_at) + drawn * (at - since) } : {};
   if (typeof cur.from !== "number") {
-    adb[account] = { from: at, at, sum: 0, spent, ...advances };
+    adb[account2] = { from: at, at, sum: 0, spent, ...advances };
     return;
   }
   const last = numOf(cur.at, cur.from);
   const dt = Math.max(0, at - last);
-  adb[account] = { from: cur.from, at: Math.max(last, at), sum: numOf(cur.sum) + before * dt, spent: numOf(cur.spent) + spent, ...advances };
+  adb[account2] = { from: cur.from, at: Math.max(last, at), sum: numOf(cur.sum) + before * dt, spent: numOf(cur.spent) + spent, ...advances };
 }
-function isCreditAccount(ctx, account) {
-  const c = classOf2(ctx, account);
+function isCreditAccount(ctx, account2) {
+  const c = classOf2(ctx, account2);
   return c !== null && isCredit(c);
 }
 var EVENTS2 = [
@@ -14479,20 +14479,20 @@ var EVENTS2 = [
       let seq = numOf(s.seq);
       const totals = new Map;
       for (const l of lines) {
-        const account = strOf(l.account);
-        if (!own(state.entities, account))
+        const account2 = strOf(l.account);
+        if (!own(state.entities, account2))
           continue;
-        totals.set(account, (totals.get(account) ?? 0) + Math.round(numOf(l.amount)));
+        totals.set(account2, (totals.get(account2) ?? 0) + Math.round(numOf(l.amount)));
       }
       const sided = !UNSIDED_KINDS.has(strOf(e.data.kind));
       const payee = sided ? strOf(e.data.counterparty) : "";
       const paidMost = [...totals].reduce((top, l) => l[1] < 0 && (top === undefined || l[1] < top[1]) ? l : top, undefined)?.[0];
       const payer = sided ? strOf(e.data.payer) || (paidMost ?? payee) : "";
-      for (const [account, amount] of totals) {
+      for (const [account2, amount] of totals) {
         seq += 1;
-        fileLine(state, ctx, account, amount, at, e.data, partyOfSide(state, amount < 0 ? payee : payer), seq);
-        const use = !isCreditAccount(ctx, account) ? null : e.data.kind === "purchase" ? "purchase" : e.data.category === "cash_advance" && e.data.kind !== "fee" && amount < 0 ? "advance" : null;
-        accrue(state, account, amount, at, use);
+        fileLine(state, ctx, account2, amount, at, e.data, partyOfSide(state, amount < 0 ? payee : payer), seq);
+        const use = !isCreditAccount(ctx, account2) ? null : e.data.kind === "purchase" ? "purchase" : e.data.category === "cash_advance" && e.data.kind !== "fee" && amount < 0 ? "advance" : null;
+        accrue(state, account2, amount, at, use);
       }
       mutableSlice(state, "economy").seq = seq;
     },
@@ -14523,7 +14523,7 @@ var EVENTS2 = [
     type: FINANCE_EVENTS.statement,
     validate: (e, ctx) => isCreditAccount(ctx, str11(e, "account")) ? null : reject8("bad_event", "statements are for credit accounts"),
     apply: (e, state) => {
-      const account = str11(e, "account");
+      const account2 = str11(e, "account");
       const at = typeof e.data.at === "number" ? e.data.at : state.clock;
       const d = e.data;
       const cycle = { closing: numOf(d.closing), interest: numOf(d.interest), fees: numOf(d.fees), minimum: numOf(d.minimum), due: numOf(d.due), paid: 0, at, apr: numOf(d.apr), stage: strOf(d.stage, "current"), grace: d.grace !== false, past_due: numOf(d.past_due), lates: numOf(d.lates), penalty: d.penalty === true };
@@ -14531,12 +14531,12 @@ var EVENTS2 = [
         if (typeof d[k] === "number")
           cycle[k] = d[k];
       const cycles = sliceRecord(state, "economy", "cycles");
-      if (cycles[account] !== undefined) {
+      if (cycles[account2] !== undefined) {
         const past = sliceRecord(state, "economy", "statements");
-        past[account] = pushCapped(past[account], cycles[account], STATEMENTS_KEPT);
+        past[account2] = pushCapped(past[account2], cycles[account2], STATEMENTS_KEPT);
       }
-      cycles[account] = cycle;
-      sliceRecord(state, "economy", "adb")[account] = { from: at, at, sum: 0, spent: 0 };
+      cycles[account2] = cycle;
+      sliceRecord(state, "economy", "adb")[account2] = { from: at, at, sum: 0, spent: 0 };
     },
     describe: (e, ctx) => `Statement: ${formatMoney(numOf(e.data.closing), ctx.world.currency)}, minimum ${formatMoney(numOf(e.data.minimum), ctx.world.currency)}`
   },
@@ -14545,10 +14545,10 @@ var EVENTS2 = [
     validate: (e, ctx) => isCreditAccount(ctx, str11(e, "account")) ? null : reject8("bad_event", "statement payments are for credit accounts"),
     apply: (e, state) => {
       const cycles = sliceRecord(state, "economy", "cycles");
-      const account = str11(e, "account");
-      const cur = objOf(cycles[account]);
+      const account2 = str11(e, "account");
+      const cur = objOf(cycles[account2]);
       if (Object.keys(cur).length > 0)
-        cycles[account] = { ...cur, paid: numOf(cur.paid) + numOf(e.data.cents) };
+        cycles[account2] = { ...cur, paid: numOf(cur.paid) + numOf(e.data.cents) };
     },
     describe: (e, ctx) => `Payment ${formatMoney(numOf(e.data.cents), ctx.world.currency)}`
   },
@@ -14557,13 +14557,13 @@ var EVENTS2 = [
     validate: (e, ctx) => isCreditAccount(ctx, str11(e, "account")) && DELINQUENCY_STAGES.includes(str11(e, "stage")) ? null : reject8("bad_event", "a delinquency stage needs a credit account and a stage"),
     apply: (e, state) => {
       const cycles = sliceRecord(state, "economy", "cycles");
-      const account = str11(e, "account");
-      const cur = objOf(cycles[account]);
+      const account2 = str11(e, "account");
+      const cur = objOf(cycles[account2]);
       const next = { ...cur, stage: str11(e, "stage"), past_due: numOf(e.data.past_due), lates: numOf(e.data.lates), penalty: e.data.penalty === true };
       for (const k of ["streak", "ontime", "late30", "late60", "late90"])
         if (typeof e.data[k] === "number")
           next[k] = e.data[k];
-      cycles[account] = next;
+      cycles[account2] = next;
     },
     describe: (e) => `Payment status: ${str11(e, "stage")}`,
     coarsen: { key: (e) => str11(e, "account"), merge: (_a, b) => b }
@@ -14595,20 +14595,20 @@ var EVENTS2 = [
   {
     type: FINANCE_EVENTS.hold,
     validate: (e, ctx) => {
-      const account = str11(e, "account");
-      if (!own(ctx.state.entities, account) || str11(e, "id") === "")
+      const account2 = str11(e, "account");
+      if (!own(ctx.state.entities, account2) || str11(e, "id") === "")
         return reject8("bad_event", "a hold needs an account and an id");
       if (e.data.release === true)
         return null;
       const cents = numOf(e.data.cents);
       if (!(cents > 0) || typeof e.data.until !== "number")
         return reject8("bad_event", "a hold needs an amount and an end");
-      return e.data.kind === "authorization" && availableOf(ctx, account) < cents ? reject8("declined", `${own(ctx.state.entities, account)?.name ?? account} can't cover ${formatMoney(cents, ctx.world.currency)}`) : null;
+      return e.data.kind === "authorization" && availableOf(ctx, account2) < cents ? reject8("declined", `${own(ctx.state.entities, account2)?.name ?? account2} can't cover ${formatMoney(cents, ctx.world.currency)}`) : null;
     },
     apply: (e, state) => {
       const holds = sliceRecord(state, "economy", "holds");
-      const account = str11(e, "account");
-      const mine = objOf(holds[account]);
+      const account2 = str11(e, "account");
+      const mine = objOf(holds[account2]);
       for (const [id, h] of Object.entries(mine))
         if (numOf(objOf(h).until) <= state.clock)
           delete mine[id];
@@ -14616,7 +14616,7 @@ var EVENTS2 = [
         delete mine[str11(e, "id")];
       else
         mine[str11(e, "id")] = { cents: Math.round(numOf(e.data.cents)), until: numOf(e.data.until), kind: e.data.kind === "authorization" ? "authorization" : "deposit", memo: str11(e, "memo") };
-      holds[account] = mine;
+      holds[account2] = mine;
     },
     describe: (e, ctx) => e.data.release === true ? "Hold released" : `Hold of ${formatMoney(numOf(e.data.cents), ctx.world.currency)}`
   },
@@ -14625,10 +14625,10 @@ var EVENTS2 = [
     validate: (e, ctx) => own(ctx.state.entities, str11(e, "account")) && typeof e.data.upto === "number" ? null : reject8("bad_event", "settling needs an account and a time"),
     apply: (e, state) => {
       const journal = sliceRecord(state, "economy", "journal");
-      const account = str11(e, "account");
+      const account2 = str11(e, "account");
       const upto = numOf(e.data.upto);
-      const list = Array.isArray(journal[account]) ? journal[account] : [];
-      journal[account] = list.map((x) => {
+      const list = Array.isArray(journal[account2]) ? journal[account2] : [];
+      journal[account2] = list.map((x) => {
         const o = objOf(x);
         if (o.status !== "pending" || numOf(o.settles) > upto)
           return x;
@@ -14802,9 +14802,9 @@ function insurancePerMonth(ctx, id) {
     return Math.max(0, Math.round(authored));
   const row = mortgageRow(ctx);
   const band = objOf(row.homeowners_insurance_cents_per_month);
-  const typical = numOf(band.typical, 20000);
+  const typical2 = numOf(band.typical, 20000);
   const median = numOf(row.median_existing_home_price_cents, 41000000);
-  const scaled = typical * propertyValue(ctx.state, id) / Math.max(1, median);
+  const scaled = typical2 * propertyValue(ctx.state, id) / Math.max(1, median);
   return Math.round(Math.min(numOf(band.max, Infinity), Math.max(numOf(band.min, 0), scaled)));
 }
 function costOf(ctx, id, cost) {
@@ -15029,7 +15029,7 @@ function buyProperty(api, ctx, x) {
   const unusableFrom = api.mayUse(ctx, x.party, from, "from");
   if (unusableFrom)
     return unusableFrom;
-  const events = [];
+  const events2 = [];
   let mortgage = null;
   if (financed > 0) {
     mortgage = `${x.property}:mortgage`;
@@ -15038,7 +15038,7 @@ function buyProperty(api, ctx, x) {
     const opened = api.applyCredit(ctx, x.party, { product: "mortgage", cents: financed, term_months: term, secured_by: x.property, into: api.outside(`closing:${x.property}`), id: mortgage, name: `Mortgage, ${e.name}` });
     if (isRejection4(opened))
       return opened;
-    events.push(...opened);
+    events2.push(...opened);
   }
   const lines = [{ account: from, amount: -down }];
   if (financed > 0)
@@ -15066,14 +15066,14 @@ function buyProperty(api, ctx, x) {
   const posted = api.post(ctx, lines.filter((l) => l.amount !== 0), { memo: `Bought ${e.name} for ${money(price)}`, kind: "purchase", category: "property" });
   if (isRejection4(posted))
     return posted;
-  const today = dateText3(ctx.world, ctx.state.clock);
+  const today2 = dateText3(ctx.world, ctx.state.clock);
   return unit2([
-    ...events,
+    ...events2,
     ...posted,
     ...disposals,
     { type: "set", entity: x.property, field: "owners", value: [{ party: x.party, role: "owner", share: 100 }] },
     { type: "set", entity: x.property, field: "purchase_price", value: price },
-    { type: "set", entity: x.property, field: "purchased", value: today },
+    { type: "set", entity: x.property, field: "purchased", value: today2 },
     { type: "set", entity: x.property, field: "mortgage", value: mortgage },
     ...asking !== undefined ? [{ type: "set", entity: x.property, field: "asking_price", value: null }] : [],
     ...strOf(e.fields.rent_to) !== "" ? [{ type: "set", entity: x.property, field: "rent_to", value: null }] : [],
@@ -15150,17 +15150,17 @@ function sellProperty(api, ctx, x) {
   const memo = `Sold ${share < 100 ? `a ${Math.round(share)}% share of ` : ""}${e.name} for ${money(price)}`;
   const loans = securedLoans(api, ctx.state, x.property).filter((l) => api.ownersOf(ctx.state, l.loan).some((o) => o.party === x.party) && l.owed > 0);
   const owed = loans.reduce((a, l) => a + l.owed, 0);
-  const events = [];
+  const events2 = [];
   if (x.buyer) {
     const paid = api.pay(ctx, { from: x.buyer, to: x.party, cents: price, memo, deposit: to, kind: "purchase", category: "property" });
     if (isRejection4(paid))
       return paid;
-    events.push(...paid);
+    events2.push(...paid);
     if (owed > 0) {
       const payoff = api.post(ctx, [{ account: to, amount: -owed }, ...loans.map((l) => ({ account: l.loan, amount: l.owed }))], { memo: `${e.name}: mortgage paid off`, kind: "payment", category: "property", unchecked: true });
       if (isRejection4(payoff))
         return payoff;
-      events.push(...payoff);
+      events2.push(...payoff);
     }
   } else {
     const lines = [{ account: api.outside(`buyer:${x.property}`), amount: -price }, ...loans.map((l) => ({ account: l.loan, amount: l.owed }))];
@@ -15169,7 +15169,7 @@ function sellProperty(api, ctx, x) {
     const posted = api.post(ctx, lines, { memo, kind: "sale", category: "property" });
     if (isRejection4(posted))
       return posted;
-    events.push(...posted);
+    events2.push(...posted);
   }
   const shares = worthShares(owners);
   const written = [];
@@ -15183,7 +15183,7 @@ function sellProperty(api, ctx, x) {
   const others = owners.filter((o) => o.party !== x.party);
   const sold = written.length === 0 || others.length === 0 && x.buyer !== undefined;
   return unit2([
-    ...events,
+    ...events2,
     disposal(x.property, x.party, 100, price, memo),
     { type: "set", entity: x.property, field: "owners", value: written },
     ...x.buyer ? [acquisition(x.property, x.buyer, price)] : [],
@@ -15576,8 +15576,8 @@ function sellStake(api, ctx, x) {
     return reject7("bad_amount", "a price is a whole amount");
   if (x.buyer !== undefined && (!own(ctx.state.entities, x.buyer) || x.buyer === x.party || x.buyer === x.business))
     return reject7("missing_entity", `no buyer ${labelOf(ctx, x.buyer)}`);
-  const whole = Math.abs(share - held) < 0.000000001;
-  if (x.buyer === undefined && !(whole && held >= 100 - 0.000000001))
+  const whole4 = Math.abs(share - held) < 0.000000001;
+  if (x.buyer === undefined && !(whole4 && held >= 100 - 0.000000001))
     return reject7("needs_buyer", `selling part of ${labelOf(ctx, x.business)} needs a buyer in the world`);
   const worth = businessValue(api, ctx, x.business);
   if (x.buyer === undefined && price > worth)
@@ -15589,24 +15589,24 @@ function sellStake(api, ctx, x) {
   if (unusable)
     return unusable;
   const memo = `Sold ${Math.round(share * 100) / 100}% of ${labelOf(ctx, x.business)} for ${formatMoney(price, ctx.world.currency)}`;
-  const events = [];
+  const events2 = [];
   if (price > 0) {
     const paid = x.buyer ? api.pay(ctx, { from: x.buyer, to: x.party, cents: price, memo, deposit: to, kind: "purchase", category: "investment" }) : api.post(ctx, [{ account: api.outside(`buyer:${x.business}`), amount: -price }, { account: to, amount: price }], { memo, kind: "sale", category: "investment" });
     if (!Array.isArray(paid))
       return paid;
-    events.push(...paid);
+    events2.push(...paid);
   }
   const next = [];
   for (const o of owners) {
-    const pct = (shares[o.party] ?? 0) - (o.party === x.party ? share : 0) + (o.party === x.buyer ? share : 0);
-    if (o.party === x.party && pct <= 0.000000001)
+    const pct2 = (shares[o.party] ?? 0) - (o.party === x.party ? share : 0) + (o.party === x.buyer ? share : 0);
+    if (o.party === x.party && pct2 <= 0.000000001)
       continue;
-    next.push({ party: o.party, role: o.role, share: Math.round(pct * 1e4) / 1e4 });
+    next.push({ party: o.party, role: o.role, share: Math.round(pct2 * 1e4) / 1e4 });
   }
   if (x.buyer && !next.some((o) => o.party === x.buyer))
     next.push({ party: x.buyer, role: "owner", share: Math.round(share * 1e4) / 1e4 });
   return unit2([
-    ...events,
+    ...events2,
     disposal(x.business, x.party, share / held * 100, price, memo),
     { type: "set", entity: x.business, field: "owners", value: next },
     ...x.buyer ? [acquisition(x.business, x.buyer, price)] : []
@@ -15811,8 +15811,8 @@ function creditAccounts(ctx, person) {
     return c !== null && isCredit(c);
   });
 }
-function ageMonths(ctx, account) {
-  const opened = strOf(own(ctx.state.entities, account)?.fields.opened);
+function ageMonths(ctx, account2) {
+  const opened = strOf(own(ctx.state.entities, account2)?.fields.opened);
   let at = 0;
   if (opened !== "") {
     try {
@@ -15825,11 +15825,11 @@ function ageMonths(ctx, account) {
 }
 function scoreFactors(ctx, person) {
   const accounts = creditAccounts(ctx, person);
-  const entries = creditEntriesOf(ctx, person);
-  if (accounts.length === 0 && entries.length === 0)
+  const entries2 = creditEntriesOf(ctx, person);
+  if (accounts.length === 0 && entries2.length === 0)
     return null;
   const now = ctx.state.clock;
-  const recent = entries.filter((e) => now - numOf(e.at) <= 24 * MONTH);
+  const recent = entries2.filter((e) => now - numOf(e.at) <= 24 * MONTH);
   let payment = 1;
   for (const e of recent) {
     if (e.kind === "late")
@@ -15861,7 +15861,7 @@ function scoreFactors(ctx, person) {
   const ages = accounts.map((id) => ageMonths(ctx, id));
   const age = ages.length > 0 ? Math.min(1, ages.reduce((a, b) => a + b, 0) / ages.length / 120) : 0;
   const mix = revolving && installment ? 1 : revolving || installment ? 0.6 : 0.3;
-  const inquiries = entries.filter((e) => e.kind === "inquiry" && now - numOf(e.at) <= 12 * MONTH).length;
+  const inquiries = entries2.filter((e) => e.kind === "inquiry" && now - numOf(e.at) <= 12 * MONTH).length;
   return { payment: Math.max(0, payment), utilisation, age, mix, recent: Math.max(0.4, 1 - 0.1 * inquiries) };
 }
 function scoreOf(f) {
@@ -15915,8 +15915,8 @@ function decide(ctx, person, app, reports) {
   if (!cls || !isCredit(cls))
     return reject8("not_credit", `${app.product.replace(/_/g, " ")} isn't a kind of credit`);
   const score = reports ? currentScore(ctx, person) : null;
-  const entries = reports ? creditEntriesOf(ctx, person) : [];
-  const chargedOff = entries.some((e) => e.kind === "charged_off" && ctx.state.clock - numOf(e.at) <= 24 * MONTH);
+  const entries2 = reports ? creditEntriesOf(ctx, person) : [];
+  const chargedOff = entries2.some((e) => e.kind === "charged_off" && ctx.state.clock - numOf(e.at) <= 24 * MONTH);
   const secured = app.secured_by !== undefined && own(ctx.state.entities, app.secured_by) !== undefined;
   const label = def?.label ?? CLASS_TRAITS[cls].label;
   const tier = creditTierOf(score ?? 650);
@@ -15926,8 +15926,8 @@ function decide(ctx, person, app, reports) {
   const productLimit = typeof def?.limit === "number" ? def.limit : null;
   const apr = reports ? def?.apr_pct ?? aprFor(ctx, cls, score) : null;
   if (CLASS_TRAITS[cls].revolving) {
-    const most = productLimit ?? limitFor(ctx, cls, score) ?? 0;
-    return { approved: true, reason: "", apr, limit: Math.min(app.cents ?? most, most), cls, label };
+    const most2 = productLimit ?? limitFor(ctx, cls, score) ?? 0;
+    return { approved: true, reason: "", apr, limit: Math.min(app.cents ?? most2, most2), cls, label };
   }
   const most = productLimit ?? loanCeiling(ctx, score, secured ? app.secured_by : undefined);
   if ((app.cents ?? 0) > most)
@@ -15940,7 +15940,7 @@ function creditReport(ctx, person) {
   const factors = scoreFactors(ctx, person);
   const score = typeof raw.score === "number" ? raw.score : factors ? scoreOf(factors) : null;
   const accounts = creditAccounts(ctx, person);
-  const entries = creditEntriesOf(ctx, person);
+  const entries2 = creditEntriesOf(ctx, person);
   let limit = 0;
   let owed = 0;
   let ontime = 0;
@@ -15975,8 +15975,8 @@ function creditReport(ctx, person) {
     ageMonths: ages.length > 0 ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length) : 0,
     onTimePct: ontime + late > 0 ? Math.round(ontime * 1000 / (ontime + late)) / 10 : 100,
     accounts: rows,
-    inquiries: entries.filter((e) => e.kind === "inquiry").map((e) => ({ at: when(numOf(e.at)), note: strOf(e.note) })),
-    marks: entries.filter((e) => e.kind === "collections" || e.kind === "charged_off" || e.kind === "late").map((e) => ({ at: when(numOf(e.at)), kind: e.kind, note: e.kind === "late" ? `${labelOf(ctx, strOf(e.account))}: ${numOf(e.days)} days late` : `${labelOf(ctx, strOf(e.account))}: ${e.kind.replace(/_/g, " ")}` })),
+    inquiries: entries2.filter((e) => e.kind === "inquiry").map((e) => ({ at: when(numOf(e.at)), note: strOf(e.note) })),
+    marks: entries2.filter((e) => e.kind === "collections" || e.kind === "charged_off" || e.kind === "late").map((e) => ({ at: when(numOf(e.at)), kind: e.kind, note: e.kind === "late" ? `${labelOf(ctx, strOf(e.account))}: ${numOf(e.days)} days late` : `${labelOf(ctx, strOf(e.account))}: ${e.kind.replace(/_/g, " ")}` })),
     offers
   };
 }
@@ -15996,8 +15996,8 @@ function scoreInstants(ctx, from, to) {
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/pay.ts
 var PAY_METHODS = ["auto", "cash", "card", "credit", "debit", "charge", "checking", "savings", "account"];
-function payMethodOf(text) {
-  const t = text.trim().toLowerCase();
+function payMethodOf(text3) {
+  const t = text3.trim().toLowerCase();
   const exact = PAY_METHODS.find((m) => m === t);
   if (exact)
     return exact === "card" ? "credit" : exact === "checking" ? "debit" : exact;
@@ -16022,20 +16022,20 @@ function toggles(world) {
 function featureFor(ctx, party, feature) {
   return featureOn(ctx.levelOf(party, "money"), feature, toggles(ctx.world));
 }
-function accountLevel(ctx, account) {
-  const owners = ownersOf(ctx.state, account).filter((o) => own(ctx.state.entities, o.party));
-  const spenders = owners.filter((o) => rightsOf(ctx.state, account, o.party)?.spend);
+function accountLevel(ctx, account2) {
+  const owners = ownersOf(ctx.state, account2).filter((o) => own(ctx.state.entities, o.party));
+  const spenders = owners.filter((o) => rightsOf(ctx.state, account2, o.party)?.spend);
   return Math.max(0, ...(spenders.length > 0 ? spenders : owners).map((o) => ctx.levelOf(o.party, "money")));
 }
-function accountFeature(ctx, account, feature) {
-  return featureOn(accountLevel(ctx, account), feature, toggles(ctx.world));
+function accountFeature(ctx, account2, feature) {
+  return featureOn(accountLevel(ctx, account2), feature, toggles(ctx.world));
 }
 function isParty(ctx, id) {
   const kind = own(ctx.state.entities, id)?.kind ?? "";
   return kind !== "" && ["person", "business", "trust", "household"].some((k) => kindIs(ctx.registry, ctx.world, kind, k));
 }
-function cardsOn(state, account) {
-  return Object.keys(state.entities).filter((id) => own(state.entities, id)?.kind === "card" && own(state.entities, id)?.fields.account === account).sort();
+function cardsOn(state, account2) {
+  return Object.keys(state.entities).filter((id) => own(state.entities, id)?.kind === "card" && own(state.entities, id)?.fields.account === account2).sort();
 }
 function cardProblem(ctx, card, holder) {
   const e = own(ctx.state.entities, card);
@@ -16050,9 +16050,9 @@ function cardProblem(ctx, card, holder) {
   const item = strOf(e.fields.item);
   if (item !== "" && own(ctx.state.entities, item) && isLost(ctx.state, item))
     return `${name} is lost`;
-  const account = strOf(e.fields.account);
-  if (statusOf(ctx.state, account) !== "open")
-    return `${own(ctx.state.entities, account)?.name ?? account} is ${statusOf(ctx.state, account).replace(/_/g, " ")}`;
+  const account2 = strOf(e.fields.account);
+  if (statusOf(ctx.state, account2) !== "open")
+    return `${own(ctx.state.entities, account2)?.name ?? account2} is ${statusOf(ctx.state, account2).replace(/_/g, " ")}`;
   return null;
 }
 function spendable(ctx, party) {
@@ -16061,10 +16061,10 @@ function spendable(ctx, party) {
 function cardSources(ctx, payer, accounts, via, till, problems) {
   const out = [];
   const cards = featureFor(ctx, payer, "cards");
-  for (const account of accounts) {
-    const instruments = cardsOn(ctx.state, account);
+  for (const account2 of accounts) {
+    const instruments = cardsOn(ctx.state, account2);
     if (!till || !cards || instruments.length === 0) {
-      out.push({ account, via });
+      out.push({ account: account2, via });
       continue;
     }
     for (const card of instruments) {
@@ -16074,7 +16074,7 @@ function cardSources(ctx, payer, accounts, via, till, problems) {
       if (problem)
         problems.push(problem);
       else
-        out.push({ account, card, via });
+        out.push({ account: account2, card, via });
     }
   }
   return out;
@@ -16087,7 +16087,7 @@ function sourcesFor(ctx, payer, use, till, problems) {
   });
   switch (use) {
     case "cash":
-      return till ? where((t) => t.cash).filter((id) => cashOnHolder(ctx.state, id, payer)).map((account) => ({ account, via: "cash" })) : [];
+      return till ? where((t) => t.cash).filter((id) => cashOnHolder(ctx.state, id, payer)).map((account2) => ({ account: account2, via: "cash" })) : [];
     case "debit":
     case "checking":
       return cardSources(ctx, payer, where((t) => t.transactional), till ? "debit" : "account", till, problems);
@@ -16097,7 +16097,7 @@ function sourcesFor(ctx, payer, use, till, problems) {
     case "charge":
       return cardSources(ctx, payer, where((_t, c) => c === "charge_card"), "charge", till, problems);
     case "savings":
-      return where((_t, c) => c === "savings" || c === "money_market" || c === "trust").map((account) => ({ account, via: "savings" }));
+      return where((_t, c) => c === "savings" || c === "money_market" || c === "trust").map((account2) => ({ account: account2, via: "savings" }));
     default: {
       const e = own(ctx.state.entities, use);
       if (e?.kind === "card") {
@@ -16106,25 +16106,25 @@ function sourcesFor(ctx, payer, use, till, problems) {
           problems.push(problem);
           return [];
         }
-        const account = strOf(e.fields.account);
-        return mine.includes(account) ? [{ account, card: use, via: e.fields.network === "debit" ? "debit" : e.fields.network === "charge" ? "charge" : "credit" }] : [];
+        const account2 = strOf(e.fields.account);
+        return mine.includes(account2) ? [{ account: account2, card: use, via: e.fields.network === "debit" ? "debit" : e.fields.network === "charge" ? "charge" : "credit" }] : [];
       }
       return mine.includes(use) ? [{ account: use, via: classOf2(ctx, use) === "cash" ? "cash" : "account" }] : [];
     }
   }
 }
-function overdraftRoom(ctx, account) {
-  const t = traitsOf(ctx, account);
-  if (!t?.transactional || !accountFeature(ctx, account, "overdraft"))
+function overdraftRoom(ctx, account2) {
+  const t = traitsOf(ctx, account2);
+  if (!t?.transactional || !accountFeature(ctx, account2, "overdraft"))
     return 0;
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   if (!p)
     return 0;
   if (p.overdraft === "fee")
     return Math.max(0, p.overdraft_limit);
   if (p.overdraft === "linked") {
-    const link = strOf(own(ctx.state.entities, account)?.fields.overdraft_link);
-    const holders = holdersOf(ctx.state, account);
+    const link = strOf(own(ctx.state.entities, account2)?.fields.overdraft_link);
+    const holders = holdersOf(ctx.state, account2);
     return link !== "" && holders.some((h) => canSpend(ctx.state, link, h)) ? Math.max(0, availableOf(ctx, link)) : 0;
   }
   return 0;
@@ -16133,10 +16133,10 @@ function cardRoom(ctx, card, what) {
   const e = own(ctx.state.entities, card);
   if (!e)
     return Infinity;
-  const account = strOf(e.fields.account);
-  if (!accountFeature(ctx, account, "daily_limits"))
+  const account2 = strOf(e.fields.account);
+  if (!accountFeature(ctx, account2, "daily_limits"))
     return Infinity;
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   const field = what === "purchase" ? "daily_purchase_limit" : "daily_atm_limit";
   const limit = typeof e.fields[field] === "number" ? e.fields[field] : p?.[field] ?? null;
   if (limit === null)
@@ -16153,9 +16153,9 @@ function covers(ctx, s, cents, overdraft) {
 function defaultTiers2(ctx, who) {
   const e = own(ctx.state.entities, who);
   const band = hasLedger(ctx, who) ? wealthBand(shownWorth(ctx, who)) : strOf(e?.fields.wealth, "modest");
-  const traits = (Array.isArray(e?.fields.traits) ? e.fields.traits : []).map((t) => String(t).toLowerCase()).join(" ");
-  const careful = /\b(frugal|thrifty|careful|cautious|old-fashioned|old fashioned|prudent|stingy|saver)\b/.test(traits);
-  const loose = /\b(impulsive|reckless|spendthrift|flashy|extravagant|generous|lavish)\b/.test(traits);
+  const traits2 = (Array.isArray(e?.fields.traits) ? e.fields.traits : []).map((t) => String(t).toLowerCase()).join(" ");
+  const careful = /\b(frugal|thrifty|careful|cautious|old-fashioned|old fashioned|prudent|stingy|saver)\b/.test(traits2);
+  const loose = /\b(impulsive|reckless|spendthrift|flashy|extravagant|generous|lavish)\b/.test(traits2);
   if (kindIs(ctx.registry, ctx.world, e?.kind ?? "", "business"))
     return [{ use: "debit" }, { use: "credit" }];
   if (loose)
@@ -16246,7 +16246,7 @@ function chooseSource(ctx, payer, cents, opts) {
   if (hit)
     return hit;
   if (level < 2) {
-    const fallback = candidates[0] ?? spendable(ctx, payer).filter((id) => id !== opts.except).map((account) => ({ account, via: "account" }))[0];
+    const fallback = candidates[0] ?? spendable(ctx, payer).filter((id) => id !== opts.except).map((account2) => ({ account: account2, via: "account" }))[0];
     if (fallback)
       return fallback;
   }
@@ -16331,11 +16331,11 @@ function txn(lines, meta) {
 function posting(lines, meta) {
   return [{ type: "post", lines, memo: meta.memo }, txn(lines, meta)];
 }
-function asUnit(events) {
-  if (events.length < 2)
-    return events;
-  const group = `pay:${hashParts(JSON.stringify(events)).slice(0, 10)}`;
-  return events.map((e) => ({ ...e, group }));
+function asUnit(events2) {
+  if (events2.length < 2)
+    return events2;
+  const group = `pay:${hashParts(JSON.stringify(events2)).slice(0, 10)}`;
+  return events2.map((e) => ({ ...e, group }));
 }
 function merged(lines) {
   const out = [];
@@ -16350,31 +16350,31 @@ function merged(lines) {
   }
   return out.filter((l) => l.amount !== 0);
 }
-function overdraftFeesToday(ctx, account) {
+function overdraftFeesToday(ctx, account2) {
   const cal = calendarOf(ctx.world);
-  const today = dateAt(cal, ctx.state.clock).dayIndex;
-  return journalOf(ctx.state, account).filter((j) => j.kind === "fee" && j.category === "overdraft" && dateAt(cal, j.at).dayIndex === today).length;
+  const today2 = dateAt(cal, ctx.state.clock).dayIndex;
+  return journalOf(ctx.state, account2).filter((j) => j.kind === "fee" && j.category === "overdraft" && dateAt(cal, j.at).dayIndex === today2).length;
 }
-function overdraftEvents(ctx, account, total, at) {
-  const short = total - availableOf(ctx, account);
-  if (short <= 0 || overdraftRoom(ctx, account) <= 0)
+function overdraftEvents(ctx, account2, total, at) {
+  const short = total - availableOf(ctx, account2);
+  if (short <= 0 || overdraftRoom(ctx, account2) <= 0)
     return { before: [], after: [] };
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   if (!p)
     return { before: [], after: [] };
   if (p.overdraft === "linked") {
-    const link = strOf(own(ctx.state.entities, account)?.fields.overdraft_link);
-    const lines = [
+    const link = strOf(own(ctx.state.entities, account2)?.fields.overdraft_link);
+    const lines2 = [
       { account: link, amount: -short },
-      { account, amount: short }
+      { account: account2, amount: short }
     ];
-    return { before: posting(lines, { memo: `Overdraft transfer from ${labelOf(ctx, link)}`, kind: "transfer", category: "transfer", at }), after: [] };
+    return { before: posting(lines2, { memo: `Overdraft transfer from ${labelOf(ctx, link)}`, kind: "transfer", category: "transfer", at }), after: [] };
   }
-  const fee = accountFeature(ctx, account, "fees") && overdraftFeesToday(ctx, account) < 3 ? p.fees.overdraft : 0;
+  const fee = accountFeature(ctx, account2, "fees") && overdraftFeesToday(ctx, account2) < 3 ? p.fees.overdraft : 0;
   if (fee <= 0)
     return { before: [], after: [] };
   const lines = [
-    { account, amount: -fee },
+    { account: account2, amount: -fee },
     { account: bankSide(p.institution), amount: fee }
   ];
   return { before: [], after: posting(lines, { memo: "Overdraft fee", kind: "fee", category: "overdraft", at }) };
@@ -16447,27 +16447,27 @@ function charge(hooks, ctx, payer, rawCents, memo, opts = {}) {
 function moverOf(ctx, from, to) {
   return holdersOf(ctx.state, from).find((p) => canSpend(ctx.state, from, p) && rightsOf(ctx.state, to, p) !== null) ?? null;
 }
-function mayUse(ctx, party, account, side) {
-  const t = traitsOf(ctx, account);
-  if (own(ctx.state.entities, account)?.kind !== "account" || !t)
-    return reject8("missing_account", `there's no account ${labelOf(ctx, account)}`);
-  const status = statusOf(ctx.state, account);
+function mayUse(ctx, party, account2, side) {
+  const t = traitsOf(ctx, account2);
+  if (own(ctx.state.entities, account2)?.kind !== "account" || !t)
+    return reject8("missing_account", `there's no account ${labelOf(ctx, account2)}`);
+  const status = statusOf(ctx.state, account2);
   if (side === "from") {
     if (status !== "open")
-      return reject8("declined", `${labelOf(ctx, account)} is ${status.replace(/_/g, " ")}`);
-    if (!canSpend(ctx.state, account, party))
-      return reject8("not_owner", `${labelOf(ctx, party)} can't spend from ${labelOf(ctx, account)}`);
-    return t.locked ? reject8("locked", `${labelOf(ctx, account)} can't be drawn on here`) : null;
+      return reject8("declined", `${labelOf(ctx, account2)} is ${status.replace(/_/g, " ")}`);
+    if (!canSpend(ctx.state, account2, party))
+      return reject8("not_owner", `${labelOf(ctx, party)} can't spend from ${labelOf(ctx, account2)}`);
+    return t.locked ? reject8("locked", `${labelOf(ctx, account2)} can't be drawn on here`) : null;
   }
   if (status === "closed")
-    return reject8("declined", `${labelOf(ctx, account)} is closed`);
-  if (rightsOf(ctx.state, account, party) === null)
-    return reject8("not_owner", `${labelOf(ctx, account)} isn't ${labelOf(ctx, party)}'s`);
-  return classOf2(ctx, account) === "cd" ? reject8("locked", `${labelOf(ctx, account)} takes nothing in after it opens`) : null;
+    return reject8("declined", `${labelOf(ctx, account2)} is closed`);
+  if (rightsOf(ctx.state, account2, party) === null)
+    return reject8("not_owner", `${labelOf(ctx, account2)} isn't ${labelOf(ctx, party)}'s`);
+  return classOf2(ctx, account2) === "cd" ? reject8("locked", `${labelOf(ctx, account2)} takes nothing in after it opens`) : null;
 }
-function cashAdvanceFee(ctx, account, cents) {
-  const p = productOf(ctx, account);
-  if (!p || !traitsOf(ctx, account)?.revolving || !accountFeature(ctx, account, "fees"))
+function cashAdvanceFee(ctx, account2, cents) {
+  const p = productOf(ctx, account2);
+  if (!p || !traitsOf(ctx, account2)?.revolving || !accountFeature(ctx, account2, "fees"))
     return 0;
   return p.fees.cash_advance_pct > 0 || p.fees.cash_advance_min > 0 ? Math.max(p.fees.cash_advance_min, Math.round(cents * p.fees.cash_advance_pct / 100)) : 0;
 }
@@ -16500,8 +16500,8 @@ function move(ctx, from, to, cents, memo, opts = {}) {
       c = owed;
     }
   }
-  const advance = fromTraits.revolving && !toTraits.liability;
-  const fee = advance ? cashAdvanceFee(ctx, from, c) : 0;
+  const advance2 = fromTraits.revolving && !toTraits.liability;
+  const fee = advance2 ? cashAdvanceFee(ctx, from, c) : 0;
   if (!opts.unchecked && ctx.levelOf(party, "money") >= 2 && availableOf(ctx, from) < c + fee)
     return reject8("declined", `${labelOf(ctx, from)} doesn't have ${formatMoney(c + fee, ctx.world.currency)}`);
   const lines = [
@@ -16513,7 +16513,7 @@ function move(ctx, from, to, cents, memo, opts = {}) {
   const out = [...charged, { type: "post", lines, memo }];
   if (toTraits.liability)
     out.push({ type: FINANCE_EVENTS.cardPaid, data: { account: to, cents: c } });
-  out.push(txn(lines, { memo, kind: toTraits.liability ? "payment" : "transfer", category: advance ? "cash_advance" : "transfer", ...opts.flow ? { flow: opts.flow } : {}, ...opts.at !== undefined ? { at: opts.at } : {} }));
+  out.push(txn(lines, { memo, kind: toTraits.liability ? "payment" : "transfer", category: advance2 ? "cash_advance" : "transfer", ...opts.flow ? { flow: opts.flow } : {}, ...opts.at !== undefined ? { at: opts.at } : {} }));
   return asUnit(out);
 }
 function transferParty(ctx, id, side) {
@@ -16543,8 +16543,8 @@ function transfer(hooks, ctx, from, to, cents, memo, method = "auto") {
   const sameSide = payer.holder === payee.holder || payee.account !== undefined && canSpend(ctx.state, payee.account, payer.holder) && rightsOf(ctx.state, payee.account, payer.holder)?.worth === true;
   if (!sameSide) {
     const deposit = payee.account ?? cash;
-    const source = payer.account ?? (method === "cash" ? cashAccount(ctx, payer.holder) ?? undefined : undefined);
-    const fromCash = method === "cash" && source !== undefined && availableOf(ctx, source) >= Math.round(cents) ? source : payer.account;
+    const source2 = payer.account ?? (method === "cash" ? cashAccount(ctx, payer.holder) ?? undefined : undefined);
+    const fromCash = method === "cash" && source2 !== undefined && availableOf(ctx, source2) >= Math.round(cents) ? source2 : payer.account;
     return charge(hooks, ctx, payer.holder, cents, memo, { payee: payee.holder, method: paying, kind: "transfer", ...fromCash ? { source: fromCash } : {}, ...deposit ? { deposit } : {}, overdraft: false });
   }
   if (!payer.account && !payee.account)
@@ -16640,9 +16640,9 @@ function setCash(ctx, holder, cents) {
   lines.push({ account: CORRECTION_ACCOUNT, amount: -lines.reduce((a, l) => a + l.amount, 0) });
   return asUnit(posting(lines, { memo: "Correction", kind: "adjustment", category: "correction" }));
 }
-function reprice(ctx, events, cents) {
-  const posts = events.filter((e) => e.type === "post");
-  const purchase = events.find((e) => e.type === FINANCE_EVENTS.txn && ("data" in e) && e.data.kind === "purchase");
+function reprice(ctx, events2, cents) {
+  const posts = events2.filter((e) => e.type === "post");
+  const purchase = events2.find((e) => e.type === FINANCE_EVENTS.txn && ("data" in e) && e.data.kind === "purchase");
   const was = purchase && "data" in purchase ? purchase.data : undefined;
   const memo = was !== undefined ? strOf(was.memo) : undefined;
   const post = (memo !== undefined ? posts.find((p) => p.memo === memo) : undefined) ?? (posts.length === 1 && posts[0]?.lines.length === 2 ? posts[0] : undefined);
@@ -16665,12 +16665,12 @@ function reprice(ctx, events, cents) {
   const buyer = strOf(was?.payer);
   return asUnit(posting(lines, { memo: note, kind: diff > 0 ? "purchase" : "refund", counterparty: diff > 0 ? seller : buyer, payer: diff > 0 ? buyer : seller }));
 }
-function signal(cls, text, who, at) {
-  return { type: ENGINE_EVENTS.signal, data: { class: cls, text, entity: who, visibility: "known_by", at } };
+function signal(cls, text3, who, at) {
+  return { type: ENGINE_EVENTS.signal, data: { class: cls, text: text3, entity: who, visibility: "known_by", at } };
 }
-function noted(ctx, events) {
+function noted(ctx, events2) {
   const pov = ctx.world.pov;
-  return events.flatMap((e) => {
+  return events2.flatMap((e) => {
     if (!("data" in e))
       return [e];
     if (e.type === FINANCE_EVENTS.txn)
@@ -16707,18 +16707,18 @@ class Run {
     const dot = e.type.indexOf(".");
     const pack = dot > 0 ? e.type.slice(0, dot) : null;
     if (pack !== null && !this.copied.has(pack)) {
-      const slice = own(this.state.packs, pack);
-      if (slice)
-        this.state.packs[pack] = structuredClone(slice);
+      const slice2 = own(this.state.packs, pack);
+      if (slice2)
+        this.state.packs[pack] = structuredClone(slice2);
       this.copied.add(pack);
     }
   }
-  fits(unit) {
-    if (unit.length === 1)
-      return unit[0] !== undefined && validateEvent(this.ctx.registry, unit[0], this.ctx) === null;
+  fits(unit3) {
+    if (unit3.length === 1)
+      return unit3[0] !== undefined && validateEvent(this.ctx.registry, unit3[0], this.ctx) === null;
     const trial = { ...this.state, accounts: { ...this.state.accounts } };
     const ctx = this.ctx.registry.context(this.ctx.world, trial);
-    for (const e of unit) {
+    for (const e of unit3) {
       if (validateEvent(this.ctx.registry, e, ctx))
         return false;
       if (e.type === "post")
@@ -16727,14 +16727,14 @@ class Run {
     }
     return true;
   }
-  emit(events) {
-    const list = noted(this.ctx, [...events]);
+  emit(events2) {
+    const list = noted(this.ctx, [...events2]);
     const applied = [];
     for (const [from, to] of eventUnits(list)) {
-      const unit = list.slice(from, to);
-      if (!this.fits(unit))
+      const unit3 = list.slice(from, to);
+      if (!this.fits(unit3))
         continue;
-      for (const e of unit) {
+      for (const e of unit3) {
         this.touch(e);
         applyEvent(this.ctx.registry, e, this.state, this.ctx);
         applied.push(e);
@@ -16759,11 +16759,11 @@ function businessDay(cal, day, roll) {
     d += roll === "before" ? -1 : 1;
   return d;
 }
-function safeDay(cal, text) {
-  if (!text)
+function safeDay(cal, text3) {
+  if (!text3)
     return null;
   try {
-    return dayIndexOfText(cal, text.slice(0, 10));
+    return dayIndexOfText(cal, text3.slice(0, 10));
   } catch {
     return null;
   }
@@ -16953,8 +16953,8 @@ function livingCost(ctx, band) {
   const basket = def ? priceOf(ctx, { catalog: def.basket, place: null }) : null;
   return def && basket ? Math.round(basket.cents * def.times) : null;
 }
-function dueDayOf(ctx, account) {
-  const f = own(ctx.state.entities, account)?.fields;
+function dueDayOf(ctx, account2) {
+  const f = own(ctx.state.entities, account2)?.fields;
   return typeof f?.due_day === "number" ? f.due_day : null;
 }
 function foundationFlows(ctx) {
@@ -17006,9 +17006,9 @@ function foundationFlows(ctx) {
     return f && f.status !== "ended" && (f.kind === "premium" || f.category === "insurance") ? [f] : [];
   });
   const insured = new Set(cover.flatMap((f) => f.link && !isGone(s, f.link) ? [f.link] : []));
-  const payers = new Set(cover.filter((f) => !f.link).flatMap((f) => own(s.entities, f.from)?.kind === "account" ? holdersOf(s, f.from) : [f.from]));
+  const payers2 = new Set(cover.filter((f) => !f.link).flatMap((f) => own(s.entities, f.from)?.kind === "account" ? holdersOf(s, f.from) : [f.from]));
   for (const p of optionalQuery(ctx, "vehicles.insurance")?.(ctx) ?? []) {
-    if (insured.has(p.vehicle) || payers.has(p.owner) || p.cents <= 0)
+    if (insured.has(p.vehicle) || payers2.has(p.owner) || p.cents <= 0)
       continue;
     out.push({ id: `insurance:${p.vehicle}`, label: p.label, kind: "premium", from: p.owner, to: "insurer", amount: { fixed: p.cents }, schedule: { every: "month", days: [1] }, shortfall: "skip", category: "insurance", link: p.vehicle, status: "active", method: "account", source: "vehicle" });
   }
@@ -17025,13 +17025,13 @@ function planPayments(ctx) {
     const e = own(s.entities, who);
     if (!e || who === ctx.world.pov || isGone(s, who) || !kindIs(ctx.registry, ctx.world, e.kind, "person") || !isParty(ctx, who))
       continue;
-    for (const plan of plans(ctx, who)) {
-      const to = plan.with[0];
-      if (plan.status !== "open" || plan.kind !== "pay" && plan.kind !== "lend" || !plan.cents || !to || !isParty(ctx, to))
+    for (const plan2 of plans(ctx, who)) {
+      const to = plan2.with[0];
+      if (plan2.status !== "open" || plan2.kind !== "pay" && plan2.kind !== "lend" || !plan2.cents || !to || !isParty(ctx, to))
         continue;
-      const lend = plan.kind === "lend";
-      const at = Math.max(plan.when.from, plan.made + 1);
-      out.push({ entity: who, plan, at, flow: { id: `plan:${who}:${plan.id}`, label: lend ? "Loan" : "Payment", kind: "other", from: who, to, amount: { fixed: plan.cents }, schedule: { once: at }, shortfall: "skip", category: lend ? "loan" : "payment", status: "active", source: "minds" } });
+      const lend = plan2.kind === "lend";
+      const at = Math.max(plan2.when.from, plan2.made + 1);
+      out.push({ entity: who, plan: plan2, at, flow: { id: `plan:${who}:${plan2.id}`, label: lend ? "Loan" : "Payment", kind: "other", from: who, to, amount: { fixed: plan2.cents }, schedule: { once: at }, shortfall: "skip", category: lend ? "loan" : "payment", status: "active", source: "minds" } });
     }
   }
   return out;
@@ -17106,9 +17106,9 @@ function occurrenceAmount(hooks, ctx, flow, at, rng, deferred) {
     const of = a.of ?? ("account" in side ? side.account : "");
     cents = of !== "" ? Math.round(Math.max(0, balance(ctx.state, of)) * a.percent / 100) : null;
   } else if ("due" in a) {
-    const account = flow.to;
-    const owed = -balance(ctx.state, account);
-    const cycle = cycleOf2(ctx.state, account);
+    const account2 = flow.to;
+    const owed = -balance(ctx.state, account2);
+    const cycle = cycleOf2(ctx.state, account2);
     if (owed <= 0)
       return null;
     if (a.due === "balance")
@@ -17196,15 +17196,15 @@ function payFrom(hooks, ctx, flow, fromId, cents, at, overdraft, made) {
     if (traitsOf(ctx, land.account)?.liability)
       extra.push({ type: FINANCE_EVENTS.cardPaid, data: { account: land.account, cents: t.cents } });
   }
-  const merged = [];
+  const merged2 = [];
   for (const l of lines) {
-    const same = merged.find((x) => x.account === l.account);
+    const same = merged2.find((x) => x.account === l.account);
     if (same)
       same.amount += l.amount;
     else
-      merged.push({ ...l });
+      merged2.push({ ...l });
   }
-  const finalLines = merged.filter((l) => l.amount !== 0);
+  const finalLines = merged2.filter((l) => l.amount !== 0);
   if (finalLines.length < 2)
     return reject8("bad_flow", `${flow.label} pays itself`);
   const od = "account" in from && overdraft ? overdraftEvents(ctx, from.account, cents, at) : { before: [], after: [] };
@@ -17262,8 +17262,8 @@ function runOccurrence(hooks, run, flow, at, rng, retry) {
   const waiting = !retry && before.retry ? before.retry : undefined;
   const pending = waiting ? { retry: waiting } : {};
   if ("code" in amount) {
-    const next = { done: before.done, missed: before.missed + 1, ...pending, ...before.deferred ? { deferred: before.deferred } : {}, ended: ended(before.done, before.missed + 1) };
-    run.emit([runEvent(flow, at, "declined", 0, next)]);
+    const next2 = { done: before.done, missed: before.missed + 1, ...pending, ...before.deferred ? { deferred: before.deferred } : {}, ended: ended(before.done, before.missed + 1) };
+    run.emit([runEvent(flow, at, "declined", 0, next2)]);
     return { outcome: "declined", reason: amount.reason };
   }
   const cents = amount.cents;
@@ -17281,8 +17281,8 @@ function runOccurrence(hooks, run, flow, at, rng, retry) {
   if (!("code" in attempt)) {
     const applied = run.emit(attempt.events);
     if (applied.length > 0 || attempt.events.length === 0) {
-      const next = { done: before.done + 1, missed: before.missed, ...pending, ...own_lines && before.deferred ? { deferred: before.deferred } : {}, ended: ended(before.done + 1, before.missed) };
-      run.emit([runEvent(flow, at, "paid", attempt.paid, next)]);
+      const next2 = { done: before.done + 1, missed: before.missed, ...pending, ...own_lines && before.deferred ? { deferred: before.deferred } : {}, ended: ended(before.done + 1, before.missed) };
+      run.emit([runEvent(flow, at, "paid", attempt.paid, next2)]);
       if (who && flow.kind !== "living" && amount.posting?.quiet !== true && attempt.paid > 0)
         run.emit([signal("bill", `${flow.label}: ${money(attempt.paid)} ${flowIsIncome(ctx, flow, who) ? "received" : "paid"}.`, who, at)]);
       return { outcome: "paid", reason: null };
@@ -17297,8 +17297,8 @@ function runOccurrence(hooks, run, flow, at, rng, retry) {
       const part = Math.min(have, cents - 1);
       const paid = part > 0 && !own_lines ? computed(part) : null;
       if (paid && !("code" in paid) && run.emit(paid.events).length > 0) {
-        const next = { done: before.done + 1, missed: before.missed, ...pending, ended: ended(before.done + 1, before.missed) };
-        run.emit([runEvent(flow, at, "partial", part, next, cents - part)]);
+        const next2 = { done: before.done + 1, missed: before.missed, ...pending, ended: ended(before.done + 1, before.missed) };
+        run.emit([runEvent(flow, at, "partial", part, next2, cents - part)]);
         if (who)
           run.emit([signal("decline", `${flow.label}: only ${money(part)} of ${money(cents)} paid.`, who, at)]);
         return { outcome: "partial", reason };
@@ -17309,8 +17309,8 @@ function runOccurrence(hooks, run, flow, at, rng, retry) {
       const left = retry && before.retry ? before.retry.left : Math.max(0, Math.round(flow.retries ?? 2));
       if (left > 0) {
         const again = waiting ? { at: waiting.at, left: Math.max(waiting.left, left - 1), cents: waiting.cents + cents } : { at: at + Math.max(1, Math.round(flow.retry_days ?? 3)) * 1440, left: left - 1, cents };
-        const next = { done: before.done, missed: before.missed, retry: again, ...before.deferred ? { deferred: 0 } : {} };
-        run.emit([...nsf, runEvent(flow, at, "retry", 0, next, cents)]);
+        const next2 = { done: before.done, missed: before.missed, retry: again, ...before.deferred ? { deferred: 0 } : {} };
+        run.emit([...nsf, runEvent(flow, at, "retry", 0, next2, cents)]);
         if (who)
           run.emit([signal("decline", `${flow.label} (${money(cents)}) didn't go through; it will be tried again.`, who, at)]);
         return { outcome: "retry", reason };
@@ -17322,8 +17322,8 @@ function runOccurrence(hooks, run, flow, at, rng, retry) {
       if (fallback && !own_lines) {
         const paid = payFrom(hooks, ctx, flow, fallback, cents, at, false, amount.posting);
         if (!("code" in paid) && run.emit(paid.events).length > 0) {
-          const next = { done: before.done + 1, missed: before.missed, ...pending, ended: ended(before.done + 1, before.missed) };
-          run.emit([runEvent(flow, at, "fallback", cents, next)]);
+          const next2 = { done: before.done + 1, missed: before.missed, ...pending, ended: ended(before.done + 1, before.missed) };
+          run.emit([runEvent(flow, at, "fallback", cents, next2)]);
           if (who)
             run.emit([signal("bill", `${flow.label}: ${money(cents)} paid from ${labelOf(ctx, fallback)}.`, who, at)]);
           return { outcome: "fallback", reason: null };
@@ -17332,8 +17332,8 @@ function runOccurrence(hooks, run, flow, at, rng, retry) {
       break;
     }
     case "defer": {
-      const next = { done: before.done, missed: before.missed + 1, ...pending, deferred: cents + (own_lines ? before.deferred ?? 0 : 0), ended: ended(before.done, before.missed + 1) };
-      run.emit([runEvent(flow, at, "deferred", 0, next, cents)]);
+      const next2 = { done: before.done, missed: before.missed + 1, ...pending, deferred: cents + (own_lines ? before.deferred ?? 0 : 0), ended: ended(before.done, before.missed + 1) };
+      run.emit([runEvent(flow, at, "deferred", 0, next2, cents)]);
       if (who)
         run.emit([signal("decline", `${flow.label} (${money(cents)}) couldn't be paid; it carries to next time.`, who, at)]);
       return { outcome: "deferred", reason };
@@ -17354,10 +17354,10 @@ function flowIsIncome(ctx, flow, who) {
 }
 function fallsBackOn(ctx, from, fallback) {
   const side = sideOf(ctx, from);
-  const payers = "account" in side ? holdersOf(ctx.state, side.account).filter((h) => canSpend(ctx.state, side.account, h)) : ("party" in side) ? [side.party] : [];
-  if (payers.includes(fallback))
+  const payers2 = "account" in side ? holdersOf(ctx.state, side.account).filter((h) => canSpend(ctx.state, side.account, h)) : ("party" in side) ? [side.party] : [];
+  if (payers2.includes(fallback))
     return true;
-  return own(ctx.state.entities, fallback)?.kind === "account" && payers.some((p) => canSpend(ctx.state, fallback, p));
+  return own(ctx.state.entities, fallback)?.kind === "account" && payers2.some((p) => canSpend(ctx.state, fallback, p));
 }
 function fallbackOf(ctx, flow) {
   return flow.fallback && fallsBackOn(ctx, flow.from, flow.fallback) ? flow.fallback : null;
@@ -17383,7 +17383,7 @@ function sharedAttempt(hooks, ctx, flow, cents, at, overdraft) {
   if (total <= 0)
     return reject8("bad_flow", `${flow.label} has no shares`);
   const trial = new Run(ctx);
-  const events = [];
+  const events2 = [];
   let left = cents;
   for (const [i, s] of shares.entries()) {
     const part = i === shares.length - 1 ? left : Math.round(cents * s.pct / total);
@@ -17396,9 +17396,9 @@ function sharedAttempt(hooks, ctx, flow, cents, at, overdraft) {
       return reject8("declined", `${labelOf(ctx, s.party)}'s share: ${paid.reason}`);
     if (trial.emit(asUnit(paid.events)).length === 0)
       return reject8("declined", `${labelOf(ctx, s.party)}'s share can't be covered`);
-    events.push(...paid.events);
+    events2.push(...paid.events);
   }
-  return { events: asUnit(events), paid: cents };
+  return { events: asUnit(events2), paid: cents };
 }
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/actions.ts
@@ -17424,24 +17424,24 @@ function cashNeedsAMachine(ctx, who) {
     return typeof bank === "string" && bank !== "";
   }));
 }
-function debitCard(ctx, who, account) {
-  return cardsOn(ctx.state, account).find((c) => strOf(own(ctx.state.entities, c)?.fields.holder) === who && cardProblem(ctx, c, who) === null) ?? null;
+function debitCard(ctx, who, account2) {
+  return cardsOn(ctx.state, account2).find((c) => strOf(own(ctx.state.entities, c)?.fields.holder) === who && cardProblem(ctx, c, who) === null) ?? null;
 }
-function withdraw(ctx, who, account, raw) {
+function withdraw(ctx, who, account2, raw) {
   const cents = Math.round(raw);
   if (!(cents > 0))
     return reject8("bad_amount", "the amount must be positive");
-  if (!canSpend(ctx.state, account, who) || !traitsOf(ctx, account)?.pays || traitsOf(ctx, account)?.cash)
-    return reject8("not_owner", `${labelOf(ctx, who)} can't draw cash from ${labelOf(ctx, account)}`);
-  if (statusOf(ctx.state, account) !== "open")
-    return reject8("declined", `${labelOf(ctx, account)} is ${statusOf(ctx.state, account).replace(/_/g, " ")}`);
+  if (!canSpend(ctx.state, account2, who) || !traitsOf(ctx, account2)?.pays || traitsOf(ctx, account2)?.cash)
+    return reject8("not_owner", `${labelOf(ctx, who)} can't draw cash from ${labelOf(ctx, account2)}`);
+  if (statusOf(ctx.state, account2) !== "open")
+    return reject8("declined", `${labelOf(ctx, account2)} is ${statusOf(ctx.state, account2).replace(/_/g, " ")}`);
   const wallet = cashAccount(ctx, who);
   if (!wallet)
     return reject8("no_wallet", `${labelOf(ctx, who)} has nowhere to carry cash`);
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   if (!p)
     return reject8("missing_account", "no such account");
-  const t = traitsOf(ctx, account);
+  const t = traitsOf(ctx, account2);
   const atTop = cashNeedsAMachine(ctx, who);
   const machine = [];
   const advanceLines = [];
@@ -17455,15 +17455,15 @@ function withdraw(ctx, who, account, raw) {
     if (branch && branch.feature.bank === p.institution)
       where = `at ${own(ctx.world.places, branch.place)?.name ?? "the branch"}`;
     else if (atm) {
-      card = debitCard(ctx, who, account);
+      card = debitCard(ctx, who, account2);
       if (!card)
-        return reject8("no_card", cardsOn(ctx.state, account).length > 0 ? `none of ${labelOf(ctx, who)}'s cards on ${labelOf(ctx, account)} works` : `${labelOf(ctx, account)} has no card for a cash machine`);
+        return reject8("no_card", cardsOn(ctx.state, account2).length > 0 ? `none of ${labelOf(ctx, who)}'s cards on ${labelOf(ctx, account2)} works` : `${labelOf(ctx, account2)} has no card for a cash machine`);
       if (typeof atm.feature.limit === "number" && cents > atm.feature.limit)
         return reject8("over_limit", `the machine gives at most ${money(ctx, atm.feature.limit)} at a time`);
       if (cardRoom(ctx, card, "atm") < cents)
         return reject8("over_limit", `${labelOf(ctx, card)} has ${money(ctx, cardRoom(ctx, card, "atm"))} left of its daily cash limit`);
       where = `at ${own(ctx.world.places, atm.place)?.name ?? "a cash machine"}`;
-      if (accountFeature(ctx, account, "fees") && atm.feature.bank !== p.institution) {
+      if (accountFeature(ctx, account2, "fees") && atm.feature.bank !== p.institution) {
         const surcharge = Math.max(0, Math.round(numOf(atm.feature.fee)));
         if (surcharge > 0)
           machine.push({ account: external(`atm:${atm.feature.bank}`), amount: surcharge });
@@ -17479,38 +17479,38 @@ function withdraw(ctx, who, account, raw) {
     } else
       return reject8("no_atm", `there's no cash machine or ${p.institution || "bank"} branch here`);
   }
-  const advance = cashAdvanceFee(ctx, account, cents);
-  if (advance > 0) {
-    advanceLines.push({ account: bankSide(p.institution), amount: advance });
-    fees += advance;
+  const advance2 = cashAdvanceFee(ctx, account2, cents);
+  if (advance2 > 0) {
+    advanceLines.push({ account: bankSide(p.institution), amount: advance2 });
+    fees += advance2;
   }
   const total = cents + fees;
-  if (availableOf(ctx, account) < total)
-    return reject8("declined", `${labelOf(ctx, account)} can't cover ${money(ctx, total)}`);
-  const charge = (lines, memo, category) => {
-    const cents = lines.reduce((a, l) => a + l.amount, 0);
-    return cents > 0 ? posting([{ account, amount: -cents }, ...lines], { memo, kind: "fee", category }) : [];
+  if (availableOf(ctx, account2) < total)
+    return reject8("declined", `${labelOf(ctx, account2)} can't cover ${money(ctx, total)}`);
+  const charge2 = (lines, memo2, category) => {
+    const cents2 = lines.reduce((a, l) => a + l.amount, 0);
+    return cents2 > 0 ? posting([{ account: account2, amount: -cents2 }, ...lines], { memo: memo2, kind: "fee", category }) : [];
   };
   const memo = `Cash withdrawal${where ? ` ${where}` : ""}${fees > 0 ? ` (${money(ctx, fees)} in fees)` : ""}`;
-  return asUnit([...charge(machine, "Cash machine fees", "atm"), ...charge(advanceLines, "Cash advance fee", "cash_advance"), ...posting([{ account, amount: -cents }, { account: wallet, amount: cents }], { memo, kind: "withdrawal", category: t?.revolving ? "cash_advance" : "transfer", ...card ? { card } : {} }), ...extra]);
+  return asUnit([...charge2(machine, "Cash machine fees", "atm"), ...charge2(advanceLines, "Cash advance fee", "cash_advance"), ...posting([{ account: account2, amount: -cents }, { account: wallet, amount: cents }], { memo, kind: "withdrawal", category: t?.revolving ? "cash_advance" : "transfer", ...card ? { card } : {} }), ...extra]);
 }
-function deposit(ctx, who, account, raw) {
+function deposit(ctx, who, account2, raw) {
   const cents = Math.round(raw);
   if (!(cents > 0))
     return reject8("bad_amount", "the amount must be positive");
-  const unusable = mayUse(ctx, who, account, "into");
+  const unusable = mayUse(ctx, who, account2, "into");
   if (unusable)
     return unusable;
-  if (traitsOf(ctx, account)?.cash || traitsOf(ctx, account)?.locked)
-    return reject8("not_owner", `${labelOf(ctx, who)} can't pay cash into ${labelOf(ctx, account)}`);
+  if (traitsOf(ctx, account2)?.cash || traitsOf(ctx, account2)?.locked)
+    return reject8("not_owner", `${labelOf(ctx, who)} can't pay cash into ${labelOf(ctx, account2)}`);
   const wallet = cashAccount(ctx, who);
   if (!wallet || availableOf(ctx, wallet) < cents)
     return reject8("declined", `${labelOf(ctx, who)} doesn't have ${money(ctx, cents)} in cash`);
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   if (!p)
     return reject8("missing_account", "no such account");
-  if (traitsOf(ctx, account)?.liability && cents > -balance(ctx.state, account))
-    return reject8("overpay", `${labelOf(ctx, account)} owes only ${money(ctx, Math.max(0, -balance(ctx.state, account)))}`);
+  if (traitsOf(ctx, account2)?.liability && cents > -balance(ctx.state, account2))
+    return reject8("overpay", `${labelOf(ctx, account2)} owes only ${money(ctx, Math.max(0, -balance(ctx.state, account2)))}`);
   let held = false;
   let where = "";
   if (cashNeedsAMachine(ctx, who)) {
@@ -17520,20 +17520,20 @@ function deposit(ctx, who, account, raw) {
       where = ` at ${own(ctx.world.places, branch.place)?.name ?? "the branch"}`;
     else if (atm && atm.feature.deposits === true && atm.feature.bank === p.institution) {
       where = ` at ${own(ctx.world.places, atm.place)?.name ?? "a cash machine"}`;
-      held = accountFeature(ctx, account, "holds") && p.hold_days > 0;
+      held = accountFeature(ctx, account2, "holds") && p.hold_days > 0;
     } else
       return reject8("no_atm", `there's no ${p.institution || "bank"} branch or deposit machine here`);
   }
   const lines = [
     { account: wallet, amount: -cents },
-    { account, amount: cents }
+    { account: account2, amount: cents }
   ];
-  const events = posting(lines, { memo: `Cash deposit${where}`, kind: "deposit", category: "transfer" });
-  if (traitsOf(ctx, account)?.liability)
-    events.push({ type: FINANCE_EVENTS.cardPaid, data: { account, cents } });
+  const events2 = posting(lines, { memo: `Cash deposit${where}`, kind: "deposit", category: "transfer" });
+  if (traitsOf(ctx, account2)?.liability)
+    events2.push({ type: FINANCE_EVENTS.cardPaid, data: { account: account2, cents } });
   if (held)
-    events.push({ type: FINANCE_EVENTS.hold, data: { id: `dep:${hashParts(account, ctx.state.clock, cents).slice(0, 10)}`, account, cents, until: ctx.state.clock + p.hold_days * 1440, kind: "deposit", memo: "Cash deposit" } });
-  return asUnit(events);
+    events2.push({ type: FINANCE_EVENTS.hold, data: { id: `dep:${hashParts(account2, ctx.state.clock, cents).slice(0, 10)}`, account: account2, cents, until: ctx.state.clock + p.hold_days * 1440, kind: "deposit", memo: "Cash deposit" } });
+  return asUnit(events2);
 }
 function setCardState(ctx, who, card, state) {
   const e = own(ctx.state.entities, card);
@@ -17580,42 +17580,42 @@ function replaceCard(ctx, who, card) {
         out.push({ type: "set", entity: id, field: "item", value: item.entity.id });
     }
   }
-  const account = strOf(e.fields.account);
-  const p = productOf(ctx, account);
-  if (p && p.fees.card_replacement > 0 && accountFeature(ctx, account, "fees"))
-    out.push(...posting([{ account, amount: -p.fees.card_replacement }, { account: bankSide(p.institution), amount: p.fees.card_replacement }], { memo: `${e.name} replacement`, kind: "fee", category: "card_replacement" }));
+  const account2 = strOf(e.fields.account);
+  const p = productOf(ctx, account2);
+  if (p && p.fees.card_replacement > 0 && accountFeature(ctx, account2, "fees"))
+    out.push(...posting([{ account: account2, amount: -p.fees.card_replacement }, { account: bankSide(p.institution), amount: p.fees.card_replacement }], { memo: `${e.name} replacement`, kind: "fee", category: "card_replacement" }));
   return asUnit(out);
 }
 function said(ctx, id) {
   return shownLabel(ctx, ctx.world.pov, id);
 }
-function autopaySourceProblem(ctx, who, account, from) {
+function autopaySourceProblem(ctx, who, account2, from) {
   const t = traitsOf(ctx, from);
   if (!canSpend(ctx.state, from, who) && !managesAccount(ctx, from, who) || !t?.pays || t.liability)
     return reject8("bad_account", `${said(ctx, who)} can't pay from ${said(ctx, from)}`);
-  const debtors = debtorsOf(ctx.state, account);
+  const debtors = debtorsOf(ctx.state, account2);
   if (!debtors.some((d) => canSpend(ctx.state, from, d) || rightsOf(ctx.state, from, d)?.worth === true))
-    return reject8("bad_account", `${said(ctx, account)} is paid from ${said(ctx, debtors[0] ?? who)}'s own money, not from ${said(ctx, from)}`);
+    return reject8("bad_account", `${said(ctx, account2)} is paid from ${said(ctx, debtors[0] ?? who)}'s own money, not from ${said(ctx, from)}`);
   return null;
 }
-function setAutopay(ctx, who, account, mode, from, cents) {
-  const cls = classOf2(ctx, account);
+function setAutopay(ctx, who, account2, mode, from, cents) {
+  const cls = classOf2(ctx, account2);
   if (!cls || !isCredit(cls))
-    return reject8("not_credit", `${labelOf(ctx, account)} isn't a card or a loan`);
-  if (!managesAccount(ctx, account, who))
-    return reject8("not_owner", `${labelOf(ctx, account)} isn't ${labelOf(ctx, who)}'s to change`);
+    return reject8("not_credit", `${labelOf(ctx, account2)} isn't a card or a loan`);
+  if (!managesAccount(ctx, account2, who))
+    return reject8("not_owner", `${labelOf(ctx, account2)} isn't ${labelOf(ctx, who)}'s to change`);
   if (!AUTOPAY_MODES.includes(mode))
     return reject8("bad_mode", `autopay can't be ${mode}`);
-  const source = from === "" ? null : autopaySourceProblem(ctx, who, account, from);
+  const source = from === "" ? null : autopaySourceProblem(ctx, who, account2, from);
   if (source)
     return source;
   if (mode === "fixed" && !(cents > 0))
     return reject8("bad_amount", "fixed autopay needs an amount");
-  const out = [{ type: "set", entity: account, field: "autopay", value: mode }];
+  const out = [{ type: "set", entity: account2, field: "autopay", value: mode }];
   if (from !== "")
-    out.push({ type: "set", entity: account, field: "autopay_from", value: from });
+    out.push({ type: "set", entity: account2, field: "autopay_from", value: from });
   if (mode === "fixed")
-    out.push({ type: "set", entity: account, field: "autopay_cents", value: Math.round(cents) });
+    out.push({ type: "set", entity: account2, field: "autopay_cents", value: Math.round(cents) });
   return out;
 }
 var FLOW_PARAM_FIELDS = { label: "", kind: "flow_kind", from: "from", to: "to", amount: "amount_cents", every: "every", interval: "interval", at: "at", start: "start", end: "end", count: "count", shortfall: "shortfall", retry_days: "retry_days", retries: "retries", fallback: "fallback", roll: "roll", category: "category" };
@@ -17691,13 +17691,13 @@ function interestsOf(ctx, who) {
   return out;
 }
 function whoseMoney(ctx, side) {
-  const all = new Set;
+  const all2 = new Set;
   const last = new Set;
   let next = isParty(ctx, side) ? [side] : worthHolders(ctx, side);
   for (let depth = 0;depth < WORTH_DEPTH && next.length > 0; depth++) {
     const deeper = [];
-    for (const p of next.filter((q) => !all.has(q))) {
-      all.add(p);
+    for (const p of next.filter((q) => !all2.has(q))) {
+      all2.add(p);
       const holders = worthHolders(ctx, p);
       if (holders.length === 0 || depth === WORTH_DEPTH - 1)
         last.add(p);
@@ -17706,35 +17706,35 @@ function whoseMoney(ctx, side) {
     }
     next = deeper;
   }
-  return { all, last };
+  return { all: all2, last };
 }
 function personal(ctx, id) {
   const kind = own(ctx.state.entities, id)?.kind ?? "";
   return kind !== "" && (kindIs(ctx.registry, ctx.world, kind, "person") || kindIs(ctx.registry, ctx.world, kind, "household"));
 }
 function moneyOf(ctx, who, from) {
-  const { all, last } = whoseMoney(ctx, from);
+  const { all: all2, last } = whoseMoney(ctx, from);
   return {
-    forHolder: new Set([...all].filter((p) => p !== who)),
+    forHolder: new Set([...all2].filter((p) => p !== who)),
     people: new Set([...last].filter((p) => p !== who)),
     wholly: last.size > 0 && [...last].every((p) => p === who)
   };
 }
-function inReach(ctx, who, account, people) {
-  if (!canSpend(ctx.state, account, who))
+function inReach(ctx, who, account2, people) {
+  if (!canSpend(ctx.state, account2, who))
     return false;
-  const holders = worthHolders(ctx, account);
+  const holders = worthHolders(ctx, account2);
   return !(holders.length > 0 && holders.every((h) => people.has(h)));
 }
-function landsInReach(ctx, who, account, from) {
-  const money = moneyOf(ctx, who, from);
-  return !money.wholly && inReach(ctx, who, account, money.people);
+function landsInReach(ctx, who, account2, from) {
+  const money2 = moneyOf(ctx, who, from);
+  return !money2.wholly && inReach(ctx, who, account2, money2.people);
 }
 function paysFor(ctx, who, to, from, opts = {}) {
   const interests = opts.interests ?? interestsOf(ctx, who);
-  const money = moneyOf(ctx, who, from);
-  const mine = (party) => interests.has(party) && !money.forHolder.has(party) && (!money.wholly || personal(ctx, party));
-  const theirs = (account) => !money.wholly && inReach(ctx, who, account, money.people) || worthHolders(ctx, account).some(mine);
+  const money2 = moneyOf(ctx, who, from);
+  const mine = (party) => interests.has(party) && !money2.forHolder.has(party) && (!money2.wholly || personal(ctx, party));
+  const theirs = (account2) => !money2.wholly && inReach(ctx, who, account2, money2.people) || worthHolders(ctx, account2).some(mine);
   const id = to.startsWith(EXTERNAL_ACCOUNT_PREFIX) ? to.slice(EXTERNAL_ACCOUNT_PREFIX.length) : to;
   const e = own(ctx.state.entities, id);
   if (e?.kind === "account")
@@ -17936,30 +17936,30 @@ function setPayPrefs(ctx, who, tiers) {
     return reject8("bad_tiers", "payment preferences are a list of ways to pay");
   return [{ type: "set", entity: who, field: "pay_prefs", value: list }];
 }
-function closeAccount(ctx, account) {
-  const e = own(ctx.state.entities, account);
+function closeAccount(ctx, account2) {
+  const e = own(ctx.state.entities, account2);
   if (e?.kind !== "account")
-    return reject8("not_account", `${labelOf(ctx, account)} isn't an account`);
-  if (balance(ctx.state, account) !== 0)
-    return reject8("not_empty", `${labelOf(ctx, account)} still has ${money(ctx, balance(ctx.state, account))} on it`);
+    return reject8("not_account", `${labelOf(ctx, account2)} isn't an account`);
+  if (balance(ctx.state, account2) !== 0)
+    return reject8("not_empty", `${labelOf(ctx, account2)} still has ${money(ctx, balance(ctx.state, account2))} on it`);
   const opening = Math.round(numOf(e.fields.opening));
-  if (opening !== 0 && !isOpened(ctx.state, account, openerOf(ctx.state, account)))
-    return reject8("not_empty", `${labelOf(ctx, account)} opens with ${money(ctx, opening)} still to post`);
-  return [{ type: FINANCE_EVENTS.status, data: { account, status: "closed" } }, ...cardsOn(ctx.state, account).map((c) => ({ type: "set", entity: c, field: "state", value: "cancelled" }))];
+  if (opening !== 0 && !isOpened(ctx.state, account2, openerOf(ctx.state, account2)))
+    return reject8("not_empty", `${labelOf(ctx, account2)} opens with ${money(ctx, opening)} still to post`);
+  return [{ type: FINANCE_EVENTS.status, data: { account: account2, status: "closed" } }, ...cardsOn(ctx.state, account2).map((c) => ({ type: "set", entity: c, field: "state", value: "cancelled" }))];
 }
-function setStatus(ctx, account, status) {
-  if (own(ctx.state.entities, account)?.kind !== "account")
-    return reject8("not_account", `${labelOf(ctx, account)} isn't an account`);
+function setStatus(ctx, account2, status) {
+  if (own(ctx.state.entities, account2)?.kind !== "account")
+    return reject8("not_account", `${labelOf(ctx, account2)} isn't an account`);
   if (!ACCOUNT_STATUSES.includes(status))
     return reject8("bad_status", `an account can't be ${status}`);
-  if (statusOf(ctx.state, account) === status)
+  if (statusOf(ctx.state, account2) === status)
     return [];
-  return status === "closed" ? closeAccount(ctx, account) : [{ type: FINANCE_EVENTS.status, data: { account, status } }];
+  return status === "closed" ? closeAccount(ctx, account2) : [{ type: FINANCE_EVENTS.status, data: { account: account2, status } }];
 }
-function releaseHold(ctx, account, hold) {
-  if (!own(ctx.state.entities, account))
-    return reject8("not_account", `${labelOf(ctx, account)} isn't an account`);
-  return [{ type: FINANCE_EVENTS.hold, data: { id: hold, account, release: true } }];
+function releaseHold(ctx, account2, hold) {
+  if (!own(ctx.state.entities, account2))
+    return reject8("not_account", `${labelOf(ctx, account2)} isn't an account`);
+  return [{ type: FINANCE_EVENTS.hold, data: { id: hold, account: account2, release: true } }];
 }
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/kinds.ts
@@ -18188,8 +18188,8 @@ function stem(word) {
   }
   return [...parts, s].join("-");
 }
-function tokens(text) {
-  return text.toLowerCase().replace(/['\u2019]/g, "").match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) ?? [];
+function tokens(text3) {
+  return text3.toLowerCase().replace(/['\u2019]/g, "").match(/[a-z0-9]+(?:-[a-z0-9]+)*/g) ?? [];
 }
 function wordsOf(list) {
   const out = [];
@@ -18205,8 +18205,8 @@ function wordsOf(list) {
   }
   return out;
 }
-function itemName(text) {
-  const lower = text.toLowerCase();
+function itemName(text3) {
+  const lower = text3.toLowerCase();
   const cut = lower.search(/[,(]/);
   const base = tokens(cut < 0 ? lower : lower.slice(0, cut));
   const qualifier = cut < 0 ? [] : tokens(lower.slice(cut + 1));
@@ -18242,9 +18242,9 @@ function catalogName(id, name) {
     if (word.includes("-"))
       heads.add(stem(word.split("-").at(-1) ?? word));
   }
-  const words = new Set([...wordsOf(tokens(lower)), ...wordsOf(id.split("_"))]);
+  const words2 = new Set([...wordsOf(tokens(lower)), ...wordsOf(id.split("_"))]);
   const qualifiers = new Set(named.flat().filter((w) => !/^\d/.test(w)).map((w) => stem(w)).filter((w) => !heads.has(w)));
-  return { heads, main: stem(last.at(-1) ?? ""), qualifiers, words };
+  return { heads, main: stem(last.at(-1) ?? ""), qualifiers, words: words2 };
 }
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/cycle.ts
@@ -18252,14 +18252,14 @@ var STATEMENT_MINUTE = 9 * 60 - 30;
 var DUE_MINUTE = 23 * 60 + 59;
 var INTEREST_MINUTE = 30;
 var LOAN_BILL_MINUTE = 1;
-function feature(ctx, account, f) {
-  return featureOn(accountLevel(ctx, account), f, toggles(ctx.world));
+function feature(ctx, account2, f) {
+  return featureOn(accountLevel(ctx, account2), f, toggles(ctx.world));
 }
-function creditHolders(ctx, account) {
-  return holdersOf(ctx.state, account).filter((h) => own(ctx.state.entities, h) && isParty(ctx, h) && ownerRoleCarriesCredit(ctx, account, h));
+function creditHolders(ctx, account2) {
+  return holdersOf(ctx.state, account2).filter((h) => own(ctx.state.entities, h) && isParty(ctx, h) && ownerRoleCarriesCredit(ctx, account2, h));
 }
-function ownerRoleCarriesCredit(ctx, account, party) {
-  const e = own(ctx.state.entities, account);
+function ownerRoleCarriesCredit(ctx, account2, party) {
+  const e = own(ctx.state.entities, account2);
   const list = Array.isArray(e?.fields.owners) ? e.fields.owners : null;
   if (!list)
     return true;
@@ -18345,36 +18345,36 @@ function cycleTasks(ctx, from, to) {
 function money2(ctx, cents) {
   return formatMoney(cents, ctx.world.currency);
 }
-function tell(run, account, cls, text, at) {
-  const holders = holdersOf(run.ctx.state, account).filter((h) => own(run.ctx.state.entities, h) && isParty(run.ctx, h));
-  run.emit(holders.map((h) => signal(cls, text, h, at)));
+function tell(run, account2, cls, text3, at) {
+  const holders = holdersOf(run.ctx.state, account2).filter((h) => own(run.ctx.state.entities, h) && isParty(run.ctx, h));
+  run.emit(holders.map((h) => signal(cls, text3, h, at)));
 }
-function bankLines(account, institution, cents) {
+function bankLines(account2, institution, cents) {
   return [
-    { account, amount: -cents },
+    { account: account2, amount: -cents },
     { account: bankSide(institution), amount: cents }
   ];
 }
-function annualFeeDue(ctx, account, at) {
-  const opened = strOf(own(ctx.state.entities, account)?.fields.opened);
+function annualFeeDue(ctx, account2, at) {
+  const opened = strOf(own(ctx.state.entities, account2)?.fields.opened);
   const month = /^\d{4}-(\d{2})/.exec(opened)?.[1];
   return dateAt(calendarOf(ctx.world), at).month === (month ? Number(month) : 1);
 }
-function closeRevolving(run, account, at) {
+function closeRevolving(run, account2, at) {
   const ctx = run.ctx;
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   if (!p)
     return;
-  const prev = cycleOf2(ctx.state, account);
-  const name = labelOf(ctx, account);
+  const prev = cycleOf2(ctx.state, account2);
+  const name = labelOf(ctx, account2);
   const grace = !prev || prev.closing <= 0 || prev.paid >= prev.closing;
   const apr = prev?.penalty && p.penalty_apr_pct > 0 ? p.penalty_apr_pct : p.apr_pct;
   let interest = 0;
-  const daily = feature(ctx, account, "average_daily") && p.interest === "average_daily" && prev !== null;
-  if (!grace && feature(ctx, account, "interest") && apr > 0) {
+  const daily = feature(ctx, account2, "average_daily") && p.interest === "average_daily" && prev !== null;
+  if (!grace && feature(ctx, account2, "interest") && apr > 0) {
     if (daily && prev) {
-      const owedOnAverage = Math.max(0, -averageBalance(ctx.state, account, at));
-      const days = Math.max(1, (at - (accrualOf(ctx.state, account)?.from ?? prev.at)) / 1440);
+      const owedOnAverage = Math.max(0, -averageBalance(ctx.state, account2, at));
+      const days = Math.max(1, (at - (accrualOf(ctx.state, account2)?.from ?? prev.at)) / 1440);
       interest = Math.round(owedOnAverage * apr * days / 100 / 365);
     } else {
       const carried = Math.max(0, (prev?.closing ?? 0) - (prev?.paid ?? 0));
@@ -18382,36 +18382,36 @@ function closeRevolving(run, account, at) {
     }
   }
   if (interest > 0)
-    run.emit(asUnit(posting(bankLines(account, p.institution, interest), { memo: `${name} interest`, kind: "interest", category: "interest", at })));
-  const acc = accrualOf(ctx.state, account);
+    run.emit(asUnit(posting(bankLines(account2, p.institution, interest), { memo: `${name} interest`, kind: "interest", category: "interest", at })));
+  const acc = accrualOf(ctx.state, account2);
   const held = acc ? acc.advanced * (at - acc.from) - acc.advancedAt : 0;
   const advanceApr = p.cash_advance_apr_pct - (!grace && daily && apr > 0 ? apr : 0);
-  const advanceInterest = feature(ctx, account, "interest") && advanceApr > 0 && held > 0 ? Math.round(held * advanceApr / 100 / (365 * 1440)) : 0;
-  if (advanceInterest > 0 && run.emit(asUnit(posting(bankLines(account, p.institution, advanceInterest), { memo: `${name} cash advance interest`, kind: "interest", category: "interest", at }))).length > 0)
+  const advanceInterest = feature(ctx, account2, "interest") && advanceApr > 0 && held > 0 ? Math.round(held * advanceApr / 100 / (365 * 1440)) : 0;
+  if (advanceInterest > 0 && run.emit(asUnit(posting(bankLines(account2, p.institution, advanceInterest), { memo: `${name} cash advance interest`, kind: "interest", category: "interest", at }))).length > 0)
     interest += advanceInterest;
   let fees = 0;
-  if (feature(ctx, account, "fees") && p.fees.annual > 0 && annualFeeDue(ctx, account, at)) {
-    if (run.emit(asUnit(posting(bankLines(account, p.institution, p.fees.annual), { memo: `${name} annual fee`, kind: "fee", category: "annual_fee", at }))).length > 0)
+  if (feature(ctx, account2, "fees") && p.fees.annual > 0 && annualFeeDue(ctx, account2, at)) {
+    if (run.emit(asUnit(posting(bankLines(account2, p.institution, p.fees.annual), { memo: `${name} annual fee`, kind: "fee", category: "annual_fee", at }))).length > 0)
       fees += p.fees.annual;
   }
-  const spent = accrualOf(ctx.state, account)?.spent ?? 0;
+  const spent = accrualOf(ctx.state, account2)?.spent ?? 0;
   if (p.rewards_pct > 0 && spent > 0) {
     const rewards = Math.round(spent * p.rewards_pct / 100);
     if (rewards > 0)
-      run.emit(asUnit(posting([{ account: bankSide(p.institution), amount: -rewards }, { account, amount: rewards }], { memo: `${name} rewards`, kind: "rewards", category: "rewards", at })));
+      run.emit(asUnit(posting([{ account: bankSide(p.institution), amount: -rewards }, { account: account2, amount: rewards }], { memo: `${name} rewards`, kind: "rewards", category: "rewards", at })));
   }
-  const owed = Math.max(0, -balance(ctx.state, account));
+  const owed = Math.max(0, -balance(ctx.state, account2));
   const principal = Math.max(0, owed - interest - fees);
   const pastDue = carriedPastDue(prev);
   const regular = owed <= 0 ? 0 : Math.min(owed, Math.max(p.minimum.floor, Math.ceil(principal * p.minimum.pct / 100 + (p.minimum.plus_interest ? interest + fees : 0))));
   const minimum = Math.min(owed, regular + pastDue);
   const cal = calendarOf(ctx.world);
   const day = dateAt(cal, at).dayIndex;
-  const dueDom = numOf(own(ctx.state.entities, account)?.fields.due_day, NaN);
+  const dueDom = numOf(own(ctx.state.entities, account2)?.fields.due_day, NaN);
   const due = clockAt(cal, Number.isFinite(dueDom) ? nextMonthDay(cal, day, dueDom) : day + p.due_days, DUE_MINUTE);
-  run.emit([{ type: FINANCE_EVENTS.statement, data: { account, closing: owed, interest, fees, minimum, due, apr, stage: prev?.stage ?? "current", grace, past_due: pastDue, lates: prev?.lates ?? 0, penalty: prev?.penalty === true, at, streak: prev?.streak ?? 0, ontime: prev?.ontime ?? 0, late30: prev?.late30 ?? 0, late60: prev?.late60 ?? 0, late90: prev?.late90 ?? 0 } }]);
+  run.emit([{ type: FINANCE_EVENTS.statement, data: { account: account2, closing: owed, interest, fees, minimum, due, apr, stage: prev?.stage ?? "current", grace, past_due: pastDue, lates: prev?.lates ?? 0, penalty: prev?.penalty === true, at, streak: prev?.streak ?? 0, ontime: prev?.ontime ?? 0, late30: prev?.late30 ?? 0, late60: prev?.late60 ?? 0, late90: prev?.late90 ?? 0 } }]);
   if (owed > 0)
-    tell(run, account, "bill", `${name} statement: ${money2(ctx, owed)}${interest > 0 ? ` incl. ${money2(ctx, interest)} interest` : ""}; minimum ${money2(ctx, minimum)} due ${dateLabel(ctx, due)}.`, at);
+    tell(run, account2, "bill", `${name} statement: ${money2(ctx, owed)}${interest > 0 ? ` incl. ${money2(ctx, interest)} interest` : ""}; minimum ${money2(ctx, minimum)} due ${dateLabel(ctx, due)}.`, at);
 }
 function dateLabel(ctx, at) {
   const cal = calendarOf(ctx.world);
@@ -18426,106 +18426,106 @@ function amortized(owed, rate, months) {
     return owed;
   return rate > 0 ? owed * rate / (1 - Math.pow(1 + rate, -months)) : owed / months;
 }
-function billInstallment(run, account, at) {
+function billInstallment(run, account2, at) {
   const ctx = run.ctx;
-  const p = productOf(ctx, account);
-  const e = own(ctx.state.entities, account);
+  const p = productOf(ctx, account2);
+  const e = own(ctx.state.entities, account2);
   if (!p || !e)
     return;
-  const prev = cycleOf2(ctx.state, account);
-  const owed = Math.max(0, -balance(ctx.state, account));
+  const prev = cycleOf2(ctx.state, account2);
+  const owed = Math.max(0, -balance(ctx.state, account2));
   if (owed <= 0) {
-    run.emit([{ type: FINANCE_EVENTS.status, data: { account, status: "paid_off" } }, ...creditEntries(ctx, account, "paid_off", at)]);
+    run.emit([{ type: FINANCE_EVENTS.status, data: { account: account2, status: "paid_off" } }, ...creditEntries(ctx, account2, "paid_off", at)]);
     return;
   }
   const authoredMonths = numOf(e.fields.months_left, numOf(e.fields.remaining_months, p.term_months ?? 0));
   const months = Math.max(1, Math.round(prev?.months_left !== undefined ? prev.months_left : authoredMonths > 0 ? authoredMonths : 1));
   const apr = prev?.penalty && p.penalty_apr_pct > 0 ? p.penalty_apr_pct : p.apr_pct;
-  const rate = feature(ctx, account, "interest") ? apr / 100 / 12 : 0;
+  const rate = feature(ctx, account2, "interest") ? apr / 100 / 12 : 0;
   const interest = Math.round(owed * rate);
-  const name = labelOf(ctx, account);
+  const name = labelOf(ctx, account2);
   if (interest > 0)
-    run.emit(asUnit(posting(bankLines(account, p.institution, interest), { memo: `${name} interest`, kind: "interest", category: "interest", at })));
+    run.emit(asUnit(posting(bankLines(account2, p.institution, interest), { memo: `${name} interest`, kind: "interest", category: "interest", at })));
   const total = owed + interest;
   const payment = typeof e.fields.payment === "number" && e.fields.payment > 0 ? e.fields.payment : Math.round(amortized(owed, rate, months));
   const due = months <= 1 ? total : Math.min(total, Math.round(payment));
   const pastDue = carriedPastDue(prev);
   const minimum = Math.min(total, due + pastDue);
   const cal = calendarOf(ctx.world);
-  run.emit([{ type: FINANCE_EVENTS.statement, data: { account, closing: total, interest, fees: 0, minimum, due: clockAt(cal, dateAt(cal, at).dayIndex, DUE_MINUTE), apr, stage: prev?.stage ?? "current", grace: true, past_due: pastDue, lates: prev?.lates ?? 0, penalty: prev?.penalty === true, months_left: Math.max(0, months - 1), at, streak: prev?.streak ?? 0, ontime: prev?.ontime ?? 0, late30: prev?.late30 ?? 0, late60: prev?.late60 ?? 0, late90: prev?.late90 ?? 0 } }]);
+  run.emit([{ type: FINANCE_EVENTS.statement, data: { account: account2, closing: total, interest, fees: 0, minimum, due: clockAt(cal, dateAt(cal, at).dayIndex, DUE_MINUTE), apr, stage: prev?.stage ?? "current", grace: true, past_due: pastDue, lates: prev?.lates ?? 0, penalty: prev?.penalty === true, months_left: Math.max(0, months - 1), at, streak: prev?.streak ?? 0, ontime: prev?.ontime ?? 0, late30: prev?.late30 ?? 0, late60: prev?.late60 ?? 0, late90: prev?.late90 ?? 0 } }]);
 }
-function remind(run, account) {
+function remind(run, account2) {
   const ctx = run.ctx;
-  const cycle = cycleOf2(ctx.state, account);
+  const cycle = cycleOf2(ctx.state, account2);
   if (!cycle)
     return;
   const left = cycle.minimum - cycle.paid;
   if (left > 0)
-    tell(run, account, "bill", `${labelOf(ctx, account)} payment of ${money2(ctx, left)} is due today.`, cycle.due - (DUE_MINUTE - (9 * 60 + 30)));
+    tell(run, account2, "bill", `${labelOf(ctx, account2)} payment of ${money2(ctx, left)} is due today.`, cycle.due - (DUE_MINUTE - (9 * 60 + 30)));
 }
-function creditEntries(ctx, account, kind, at, days) {
-  return creditHolders(ctx, account).map((person) => ({ type: FINANCE_EVENTS.credit, data: { person, kind, account, at, ...days !== undefined ? { days } : {} } }));
+function creditEntries(ctx, account2, kind, at, days) {
+  return creditHolders(ctx, account2).map((person) => ({ type: FINANCE_EVENTS.credit, data: { person, kind, account: account2, at, ...days !== undefined ? { days } : {} } }));
 }
-function dueCheck(run, account, at) {
+function dueCheck(run, account2, at) {
   const ctx = run.ctx;
-  const cycle = cycleOf2(ctx.state, account);
-  const p = productOf(ctx, account);
+  const cycle = cycleOf2(ctx.state, account2);
+  const p = productOf(ctx, account2);
   if (!cycle || !p || cycle.minimum <= 0)
     return;
-  const name = labelOf(ctx, account);
+  const name = labelOf(ctx, account2);
   if (cycle.paid >= cycle.minimum) {
     const streak = (cycle.streak ?? 0) + 1;
     const lifted = cycle.penalty && streak >= 6;
-    run.emit([{ type: FINANCE_EVENTS.delinquency, data: { account, stage: "current", past_due: 0, lates: streak >= 6 ? 0 : cycle.lates, penalty: cycle.penalty && !lifted, streak, ontime: (cycle.ontime ?? 0) + 1 } }]);
-    if (statusOf(ctx.state, account) === "frozen" && cycle.stage !== "current")
-      run.emit([{ type: FINANCE_EVENTS.status, data: { account, status: "open" } }]);
+    run.emit([{ type: FINANCE_EVENTS.delinquency, data: { account: account2, stage: "current", past_due: 0, lates: streak >= 6 ? 0 : cycle.lates, penalty: cycle.penalty && !lifted, streak, ontime: (cycle.ontime ?? 0) + 1 } }]);
+    if (statusOf(ctx.state, account2) === "frozen" && cycle.stage !== "current")
+      run.emit([{ type: FINANCE_EVENTS.status, data: { account: account2, status: "open" } }]);
     if (lifted)
-      tell(run, account, "bill", `${name}: six payments on time; the penalty rate is lifted.`, at);
+      tell(run, account2, "bill", `${name}: six payments on time; the penalty rate is lifted.`, at);
     return;
   }
   const short = cycle.minimum - cycle.paid;
   const stage = NEXT_STAGE[cycle.stage];
   let fee = 0;
-  if (feature(ctx, account, "fees") && stage !== "charged_off") {
+  if (feature(ctx, account2, "fees") && stage !== "charged_off") {
     const base = cycle.lates > 0 ? p.fees.late_repeat : p.fees.late_first;
     fee = Math.min(base, cycle.minimum);
     if (fee > 0)
-      run.emit(asUnit(posting(bankLines(account, p.institution, fee), { memo: `${name} late fee`, kind: "fee", category: "late_fee", at })));
+      run.emit(asUnit(posting(bankLines(account2, p.institution, fee), { memo: `${name} late fee`, kind: "fee", category: "late_fee", at })));
   }
   const penalty = cycle.penalty || (stage === "60" || stage === "90" || stage === "120" || stage === "collections") && p.penalty_apr_pct > 0;
   const counters = { late30: (cycle.late30 ?? 0) + (stage === "30" ? 1 : 0), late60: (cycle.late60 ?? 0) + (stage === "60" ? 1 : 0), late90: (cycle.late90 ?? 0) + (stage === "90" ? 1 : 0) };
-  run.emit([{ type: FINANCE_EVENTS.delinquency, data: { account, stage, past_due: short, lates: cycle.lates + 1, penalty, streak: 0, ontime: cycle.ontime ?? 0, ...counters } }]);
+  run.emit([{ type: FINANCE_EVENTS.delinquency, data: { account: account2, stage, past_due: short, lates: cycle.lates + 1, penalty, streak: 0, ontime: cycle.ontime ?? 0, ...counters } }]);
   const days = { "30": 30, "60": 60, "90": 90 };
   const reported = own(days, stage);
   if (reported !== undefined)
-    run.emit(creditEntries(ctx, account, "late", at, reported));
+    run.emit(creditEntries(ctx, account2, "late", at, reported));
   if (stage === "90")
-    run.emit([{ type: FINANCE_EVENTS.status, data: { account, status: "frozen" } }]);
+    run.emit([{ type: FINANCE_EVENTS.status, data: { account: account2, status: "frozen" } }]);
   if (stage === "120")
-    run.emit([{ type: FINANCE_EVENTS.status, data: { account, status: "collections" } }, ...creditEntries(ctx, account, "collections", at)]);
+    run.emit([{ type: FINANCE_EVENTS.status, data: { account: account2, status: "collections" } }, ...creditEntries(ctx, account2, "collections", at)]);
   if (stage === "charged_off")
-    run.emit([{ type: FINANCE_EVENTS.status, data: { account, status: "charged_off" } }, ...creditEntries(ctx, account, "charged_off", at)]);
+    run.emit([{ type: FINANCE_EVENTS.status, data: { account: account2, status: "charged_off" } }, ...creditEntries(ctx, account2, "charged_off", at)]);
   const what = stage === "late" ? "missed" : stage === "120" ? "sent to collections" : stage === "charged_off" ? "charged off" : stage === "collections" ? "still in collections" : `${stage} days late`;
-  tell(run, account, "decline", `${name} payment of ${money2(ctx, short)} ${what}${fee > 0 ? `; a ${money2(ctx, fee)} late fee was charged` : ""}${penalty && !cycle.penalty ? `; the penalty rate of ${p.penalty_apr_pct}% applies` : ""}.`, at);
+  tell(run, account2, "decline", `${name} payment of ${money2(ctx, short)} ${what}${fee > 0 ? `; a ${money2(ctx, fee)} late fee was charged` : ""}${penalty && !cycle.penalty ? `; the penalty rate of ${p.penalty_apr_pct}% applies` : ""}.`, at);
 }
-function monthEnd(run, account, at) {
+function monthEnd(run, account2, at) {
   const ctx = run.ctx;
-  const p = productOf(ctx, account);
+  const p = productOf(ctx, account2);
   if (!p)
     return;
-  const name = labelOf(ctx, account);
-  const a = accrualOf(ctx.state, account);
-  const average = feature(ctx, account, "average_daily") && p.interest === "average_daily" ? averageBalance(ctx.state, account, at) : balance(ctx.state, account);
-  if (feature(ctx, account, "interest") && p.apy_pct > 0 && average > 0) {
-    const days = a && feature(ctx, account, "average_daily") ? Math.max(1, (at - a.from) / 1440) : 365 / 12;
+  const name = labelOf(ctx, account2);
+  const a = accrualOf(ctx.state, account2);
+  const average = feature(ctx, account2, "average_daily") && p.interest === "average_daily" ? averageBalance(ctx.state, account2, at) : balance(ctx.state, account2);
+  if (feature(ctx, account2, "interest") && p.apy_pct > 0 && average > 0) {
+    const days = a && feature(ctx, account2, "average_daily") ? Math.max(1, (at - a.from) / 1440) : 365 / 12;
     const interest = Math.round(average * p.apy_pct * days / 100 / 365);
     if (interest > 0)
-      run.emit(asUnit(posting([{ account: bankSide(p.institution), amount: -interest }, { account, amount: interest }], { memo: `${name} interest`, kind: "interest", category: "interest", at })));
+      run.emit(asUnit(posting([{ account: bankSide(p.institution), amount: -interest }, { account: account2, amount: interest }], { memo: `${name} interest`, kind: "interest", category: "interest", at })));
   }
-  if (feature(ctx, account, "fees") && p.fees.maintenance > 0 && Math.min(balance(ctx.state, account), average) < p.fees.maintenance_waive) {
-    run.emit(asUnit(posting(bankLines(account, p.institution, p.fees.maintenance), { memo: `${name} monthly fee`, kind: "fee", category: "maintenance", at })));
+  if (feature(ctx, account2, "fees") && p.fees.maintenance > 0 && Math.min(balance(ctx.state, account2), average) < p.fees.maintenance_waive) {
+    run.emit(asUnit(posting(bankLines(account2, p.institution, p.fees.maintenance), { memo: `${name} monthly fee`, kind: "fee", category: "maintenance", at })));
   }
-  run.emit([{ type: FINANCE_EVENTS.accrue, data: { account, at } }]);
+  run.emit([{ type: FINANCE_EVENTS.accrue, data: { account: account2, at } }]);
 }
 function statementState(cycle, now) {
   if (cycle.paid >= cycle.closing)
@@ -18548,9 +18548,9 @@ function openingBalances(entity, ctx, claimed) {
   const out = [];
   if (lines.length > 0) {
     const total = lines.reduce((a, l) => a + l.amount, 0);
-    const all = total === 0 ? lines : [...lines, { account: external(entity), amount: -total }];
-    if (all.length >= 2)
-      out.push({ type: "post", lines: all, memo: "Opening balances" }, { type: FINANCE_EVENTS.txn, data: { memo: "Opening balance", kind: "opening", category: "opening", lines: lines.map((l) => ({ account: l.account, amount: l.amount })) } });
+    const all2 = total === 0 ? lines : [...lines, { account: external(entity), amount: -total }];
+    if (all2.length >= 2)
+      out.push({ type: "post", lines: all2, memo: "Opening balances" }, { type: FINANCE_EVENTS.txn, data: { memo: "Opening balance", kind: "opening", category: "opening", lines: lines.map((l) => ({ account: l.account, amount: l.amount })) } });
   }
   if (closed.length > 0)
     out.push({ type: FINANCE_EVENTS.open, data: { accounts: closed } });
@@ -18572,8 +18572,8 @@ function openingEvent(ctx, who, claimed) {
   const version = pinnedVersion(ctx.world, ctx.registry, "money");
   if (typeof version !== "number")
     return null;
-  const events = openingBalances(who, ctx, claimed);
-  return events.length > 0 ? { type: "materialize", entity: who, domain: "money", generatorVersion: version, tablesRevision: tablesRevision(ctx.world), events } : null;
+  const events2 = openingBalances(who, ctx, claimed);
+  return events2.length > 0 ? { type: "materialize", entity: who, domain: "money", generatorVersion: version, tablesRevision: tablesRevision(ctx.world), events: events2 } : null;
 }
 function moneyStep(hooks, slot, ctx, rng) {
   const tasks = [...cycleTasks(ctx, slot.start, slot.end), ...planTasks(hooks, slot, ctx, rng)];
@@ -18614,7 +18614,7 @@ function runTasks(ctx, tasks) {
   return run.out;
 }
 function planTasks(hooks, slot, ctx, rng) {
-  return planPayments(ctx).flatMap(({ entity, plan, flow, at: due }) => {
+  return planPayments(ctx).flatMap(({ entity, plan: plan2, flow, at: due }) => {
     if (due > slot.end)
       return [];
     const at = Math.max(due, slot.start + 1);
@@ -18626,7 +18626,7 @@ function planTasks(hooks, slot, ctx, rng) {
         run: (r) => {
           const ran = runOccurrence(hooks, r, flow, at, rng(`flow:${flow.id}:${at}`), false);
           const paid = ran?.outcome === "paid";
-          r.emit([{ type: MINDS_EVENTS.plan, data: { entity, plan: plan.id, status: paid ? "done" : "dropped", at, reason: paid ? null : ran?.reason ?? "the payment didn't go through" } }]);
+          r.emit([{ type: MINDS_EVENTS.plan, data: { entity, plan: plan2.id, status: paid ? "done" : "dropped", at, reason: paid ? null : ran?.reason ?? "the payment didn't go through" } }]);
         }
       }
     ];
@@ -18666,7 +18666,7 @@ function materializeMoney(entity, ctx, rng, version) {
   const limit = Math.round(Math.min(2500000, Math.max(50000, band.typical * 0.3)) / 1e4) * 1e4;
   const owed = Math.round(limit * rng.next() * 0.25);
   const statementDay = 1 + rng.int(0, 27);
-  const wallet = Object.keys(s.entities).sort().find((id) => own(s.entities, id)?.fields.owner === entity && (own(s.entities, id)?.fields.catalog === "wallet" || /wallet|purse/i.test(own(s.entities, id)?.name ?? "")));
+  const wallet = Object.keys(s.entities).sort().find((id2) => own(s.entities, id2)?.fields.owner === entity && (own(s.entities, id2)?.fields.catalog === "wallet" || /wallet|purse/i.test(own(s.entities, id2)?.name ?? "")));
   const id = (suffix) => `${entity}:${suffix}`;
   const out = [];
   if (version === 1) {
@@ -18676,7 +18676,7 @@ function materializeMoney(entity, ctx, rng, version) {
   } else {
     const owners = [{ party: entity, role: "owner" }];
     const mk = (suffix, name, fields, inWallet = false) => ({ id: id(suffix), kind: "account", name, tier: "background", fields: { owners, ...fields }, relations: inWallet && wallet ? [{ type: "in", to: wallet }] : [] });
-    const card = (suffix, name, account, network) => ({ id: id(suffix), kind: "card", name, tier: "background", fields: { account, holder: entity, network, state: "active" }, relations: [] });
+    const card = (suffix, name, account2, network) => ({ id: id(suffix), kind: "card", name, tier: "background", fields: { account: account2, holder: entity, network, state: "active" }, relations: [] });
     for (const def of [
       mk("cash", "Cash", { product: "cash" }, true),
       mk("checking", "Checking", { product: "checking", institution: "Local bank" }),
@@ -18756,34 +18756,34 @@ function moneySummary(hooks, ctx, who) {
   const band = level >= 1 ? wealthOf(hooks, ctx, who) : null;
   if (level < 2 || accountsOf(ctx, who).length === 0)
     return { lines: band ? [`Money: ${band}.`] : [], band, spendable: null, pressing: [] };
-  const money = (c) => formatMoney(c, ctx.world.currency);
+  const money3 = (c) => formatMoney(c, ctx.world.currency);
   const cal = calendarOf(ctx.world);
   const day = (at) => formatClock(cal, at).split(",")[0] ?? "";
-  const shown = (id) => balance(ctx.state, id) + (isOpened(ctx.state, id, openerOf(ctx.state, id)) ? 0 : Math.round(numOf(own(ctx.state.entities, id)?.fields.opening)));
+  const shown2 = (id) => balance(ctx.state, id) + (isOpened(ctx.state, id, openerOf(ctx.state, id)) ? 0 : Math.round(numOf(own(ctx.state.entities, id)?.fields.opening)));
   const lines = [];
   const mine = accountsOf(ctx, who, "worth");
-  const cash = mine.filter((id) => classOf2(ctx, id) === "cash" && rightsOf(ctx.state, id, who)?.spend).reduce((a, id) => a + shown(id), 0);
+  const cash = mine.filter((id) => classOf2(ctx, id) === "cash" && rightsOf(ctx.state, id, who)?.spend).reduce((a, id) => a + shown2(id), 0);
   const bank = mine.filter((id) => traitsOf(ctx, id)?.asset && !traitsOf(ctx, id)?.cash && rightsOf(ctx.state, id, who)?.spend && !traitsOf(ctx, id)?.locked);
-  const inBank = bank.reduce((a, id) => a + shown(id), 0);
-  lines.push(`You have ${money(cash)} in cash and ${money(inBank)} in the bank.`);
-  let spendable = cash + bank.reduce((a, id) => a + Math.max(0, availableOf(ctx, id) + overdraftRoom(ctx, id)), 0);
+  const inBank = bank.reduce((a, id) => a + shown2(id), 0);
+  lines.push(`You have ${money3(cash)} in cash and ${money3(inBank)} in the bank.`);
+  let spendable2 = cash + bank.reduce((a, id) => a + Math.max(0, availableOf(ctx, id) + overdraftRoom(ctx, id)), 0);
   const pressing = [];
   const now = ctx.state.clock;
   for (const id of mine) {
     const t = traitsOf(ctx, id);
     if (!t?.liability || !rightsOf(ctx.state, id, who)?.worth)
       continue;
-    const owed = Math.max(0, -shown(id));
+    const owed = Math.max(0, -shown2(id));
     const name = own(ctx.state.entities, id)?.name ?? id;
     if (t.revolving && statusOf(ctx.state, id) === "open")
-      spendable += Math.max(0, Math.min(availableOf(ctx, id), 1e7));
+      spendable2 += Math.max(0, Math.min(availableOf(ctx, id), 1e7));
     if (owed <= 0)
       continue;
     const cycle = cycleOf2(ctx.state, id);
     const left = cycle ? cycle.minimum - cycle.paid : 0;
-    let line = `${name} owes ${money(owed)}`;
+    let line = `${name} owes ${money3(owed)}`;
     if (cycle && left > 0) {
-      line += cycle.stage !== "current" ? `; ${money(left)} is past due` : `; ${money(left)} is due ${day(cycle.due)}`;
+      line += cycle.stage !== "current" ? `; ${money3(left)} is past due` : `; ${money3(left)} is due ${day(cycle.due)}`;
       if (cycle.due - now <= 14 * DAY || cycle.stage !== "current")
         pressing.push({ label: name, cents: left, at: day(cycle.due) });
     }
@@ -18805,7 +18805,7 @@ function moneySummary(hooks, ctx, who) {
         continue;
       const amount = "provider" in f.amount ? null : occurrenceAmount(hooks, ctx, f, next.at, createRng(`summary:${f.id}`), flowRunOf(ctx.state, f.id).deferred ?? 0);
       const cents = amount && !("code" in amount) ? amount.cents : 0;
-      soon.push({ at: next.at, cents, out: fromMine, label: f.label, text: `${f.label}${cents > 0 ? ` (${money(cents)})` : ""} ${fromMine ? "is due" : "comes in"} ${day(next.at)}` });
+      soon.push({ at: next.at, cents, out: fromMine, label: f.label, text: `${f.label}${cents > 0 ? ` (${money3(cents)})` : ""} ${fromMine ? "is due" : "comes in"} ${day(next.at)}` });
     }
     soon.sort((a, b) => a.at - b.at);
     for (const s of soon.slice(0, 5))
@@ -18818,7 +18818,7 @@ function moneySummary(hooks, ctx, who) {
   }
   for (const source of hooks.summaries)
     lines.push(...source(ctx, who));
-  return { lines, band, spendable: Math.round(spendable), pressing };
+  return { lines, band, spendable: Math.round(spendable2), pressing };
 }
 
 // node_modules/lumi-rp-engine/src/packs/economy/core/view.ts
@@ -18885,11 +18885,11 @@ function hiddenNames(ctx, pov) {
   const sorted = [...ways].sort((a, b) => b[1].length - a[1].length);
   return sorted.length === 0 ? NO_HIDDEN : { pattern: new RegExp(sorted.map(([source]) => `(${source})`).join("|"), "giu"), reads: sorted.map(([, w]) => w.reads) };
 }
-function says(viewer, text) {
+function says(viewer, text3) {
   const { pattern, reads } = viewer.hidden;
   if (pattern === null)
-    return text;
-  return text.normalize("NFC").replace(pattern, (match, ...rest) => {
+    return text3;
+  return text3.normalize("NFC").replace(pattern, (match, ...rest) => {
     const reading = reads[rest.slice(0, reads.length).findIndex((group) => typeof group === "string")];
     if (!reading)
       return match;
@@ -18946,12 +18946,12 @@ function partyKindOf(ctx, id) {
       return k;
   return "person";
 }
-function shown2(ctx, account) {
-  const opened = isOpened(ctx.state, account, openerOf(ctx.state, account));
-  return balance(ctx.state, account) + (opened ? 0 : Math.round(numOf(own(ctx.state.entities, account)?.fields.opening)));
+function shown2(ctx, account2) {
+  const opened = isOpened(ctx.state, account2, openerOf(ctx.state, account2));
+  return balance(ctx.state, account2) + (opened ? 0 : Math.round(numOf(own(ctx.state.entities, account2)?.fields.opening)));
 }
-function shownAvailable(ctx, account) {
-  return availableOf(ctx, account) + shown2(ctx, account) - balance(ctx.state, account);
+function shownAvailable(ctx, account2) {
+  return availableOf(ctx, account2) + shown2(ctx, account2) - balance(ctx.state, account2);
 }
 function journalLine(ctx, viewer, party, j) {
   const worth = Object.entries(worthShares(ownersOf(ctx.state, j.account))).filter(([, share]) => share > 0);
@@ -18986,9 +18986,9 @@ function cardView(ctx, viewer, card) {
 function money3(ctx, cents) {
   return formatMoney(cents, ctx.world.currency);
 }
-function terms(ctx, account, detail) {
-  const p = productOf(ctx, account);
-  const t = traitsOf(ctx, account);
+function terms(ctx, account2, detail) {
+  const p = productOf(ctx, account2);
+  const t = traitsOf(ctx, account2);
   if (!p || !t)
     return [];
   const out = [];
@@ -19016,7 +19016,7 @@ function terms(ctx, account, detail) {
     if (p.apy_pct > 0)
       out.push({ label: "APY", value: `${p.apy_pct}%` });
     if (t.transactional) {
-      out.push({ label: "Overdraft", value: p.overdraft === "fee" ? `Pays up to ${money3(ctx, p.overdraft_limit)} over, for ${money3(ctx, p.fees.overdraft)} an item` : p.overdraft === "linked" ? `Covered from ${own(ctx.state.entities, strOf(own(ctx.state.entities, account)?.fields.overdraft_link))?.name ?? "the linked account"}` : "Declined" });
+      out.push({ label: "Overdraft", value: p.overdraft === "fee" ? `Pays up to ${money3(ctx, p.overdraft_limit)} over, for ${money3(ctx, p.fees.overdraft)} an item` : p.overdraft === "linked" ? `Covered from ${own(ctx.state.entities, strOf(own(ctx.state.entities, account2)?.fields.overdraft_link))?.name ?? "the linked account"}` : "Declined" });
       if (detail && p.fees.maintenance > 0)
         out.push({ label: "Monthly fee", value: `${money3(ctx, p.fees.maintenance)}, waived from ${money3(ctx, p.fees.maintenance_waive)}` });
       if (detail && p.daily_purchase_limit !== null)
@@ -19038,20 +19038,20 @@ function statementView(ctx, raw) {
     return null;
   return { at: day(ctx, raw.at), closing: raw.closing, interest: raw.interest, fees: raw.fees, minimum: raw.minimum, due: day(ctx, raw.due), paid: raw.paid, apr: raw.apr, stage: raw.stage, state: statementState(raw, ctx.state.clock) };
 }
-function pastStatements(ctx, account) {
-  const raw = own(objOf(sliceOf(ctx.state, "economy").statements), account);
+function pastStatements(ctx, account2) {
+  const raw = own(objOf(sliceOf(ctx.state, "economy").statements), account2);
   return (Array.isArray(raw) ? raw : []).map((x) => objOf(x)).reverse().map((c) => ({ at: day(ctx, numOf(c.at)), closing: numOf(c.closing), interest: numOf(c.interest), fees: numOf(c.fees), minimum: numOf(c.minimum), due: day(ctx, numOf(c.due)), paid: numOf(c.paid), apr: numOf(c.apr), stage: strOf(c.stage, "current") ?? "current", state: numOf(c.paid) >= numOf(c.closing) ? "paid" : numOf(c.paid) >= numOf(c.minimum) ? "minimum" : "late" }));
 }
-function accountView(ctx, viewer, party, account, level, detail) {
-  const e = own(ctx.state.entities, account);
-  const cls = classOf2(ctx, account) ?? "checking";
+function accountView(ctx, viewer, party, account2, level, detail) {
+  const e = own(ctx.state.entities, account2);
+  const cls = classOf2(ctx, account2) ?? "checking";
   const t = CLASS_TRAITS[cls];
-  const p = productOf(ctx, account);
-  const owners = ownersOf(ctx.state, account);
+  const p = productOf(ctx, account2);
+  const owners = ownersOf(ctx.state, account2);
   const shares = worthShares(owners);
-  const cycle = cycleOf2(ctx.state, account);
-  const journal = journalOf(ctx.state, account);
-  const cents = shown2(ctx, account);
+  const cycle = cycleOf2(ctx.state, account2);
+  const journal = journalOf(ctx.state, account2);
+  const cents = shown2(ctx, account2);
   const statements = featureOn(level, "statements", toggles(ctx.world));
   const holds = featureOn(level, "holds", toggles(ctx.world));
   const cards = featureOn(level, "cards", toggles(ctx.world));
@@ -19061,31 +19061,31 @@ function accountView(ctx, viewer, party, account, level, detail) {
   const due = cycle && cycle.minimum - cycle.paid > 0 && (t.liability || false) ? { label: t.installment ? "Payment due" : "Minimum due", cents: cycle.minimum - cycle.paid, at: day(ctx, cycle.due) } : null;
   const role = owners.find((o) => o.party === party)?.role ?? null;
   return {
-    id: account,
-    name: e?.name ?? account,
+    id: account2,
+    name: e?.name ?? account2,
     class: cls,
     classLabel: t.label,
     product: { id: p?.id ?? cls, label: p?.label ?? t.label },
     institution: p?.institution || null,
-    status: statusOf(ctx.state, account),
+    status: statusOf(ctx.state, account2),
     cents,
-    available: level >= 2 ? t.liability ? p?.limit === null && cls === "charge_card" ? null : shownAvailable(ctx, account) : shownAvailable(ctx, account) + overdraftRoom(ctx, account) : null,
+    available: level >= 2 ? t.liability ? p?.limit === null && cls === "charge_card" ? null : shownAvailable(ctx, account2) : shownAvailable(ctx, account2) + overdraftRoom(ctx, account2) : null,
     owners: owners.map((o) => ({ party: idFor(ctx, viewer, o.party), name: nameFor(ctx, viewer, o.party), role: o.role, share: Math.round((own(shares, o.party) ?? 0) * 100) / 100 })),
     role,
-    manages: managesAccount(ctx, account, party),
-    spends: canSpend(ctx.state, account, party),
+    manages: managesAccount(ctx, account2, party),
+    spends: canSpend(ctx.state, account2, party),
     autopayFrom: [],
     fallbacks: [],
     limit: level >= 3 && t.liability ? p?.limit ?? null : null,
     aprPct: level >= 4 && t.liability ? p?.apr_pct ?? null : null,
     apyPct: level >= 4 && t.earns ? p?.apy_pct ?? null : null,
-    terms: level >= 3 ? terms(ctx, account, detail) : [],
+    terms: level >= 3 ? terms(ctx, account2, detail) : [],
     autopay: level >= 3 && (t.revolving || t.installment) ? { mode: AUTOPAY_MODES.includes(autopayMode) ? autopayMode : "none", from: autopayFrom ? idFor(ctx, viewer, autopayFrom) : null, fromName: autopayFrom ? nameFor(ctx, viewer, autopayFrom) : null, cents: autopayMode === "fixed" ? numOf(e?.fields.autopay_cents) : null } : null,
     due: statements ? due : null,
-    statements: statements && (t.revolving || t.installment) ? [statementView(ctx, cycle), ...pastStatements(ctx, account)].filter((s) => s !== null) : [],
-    cards: cards ? cardsOn(ctx.state, account).map((c) => cardView(ctx, viewer, c)) : [],
+    statements: statements && (t.revolving || t.installment) ? [statementView(ctx, cycle), ...pastStatements(ctx, account2)].filter((s) => s !== null) : [],
+    cards: cards ? cardsOn(ctx.state, account2).map((c) => cardView(ctx, viewer, c)) : [],
     pending: holds ? journal.filter((j) => j.status === "pending").reverse().map((j) => journalLine(ctx, viewer, party, j)) : [],
-    holds: holds ? holdsOn(ctx.state, account).map((h) => ({ id: h.id, cents: h.cents, until: day(ctx, h.until), kind: h.kind, memo: says(viewer, h.memo) })) : [],
+    holds: holds ? holdsOn(ctx.state, account2).map((h) => ({ id: h.id, cents: h.cents, until: day(ctx, h.until), kind: h.kind, memo: says(viewer, h.memo) })) : [],
     transactions: level >= 2 ? journal.slice(-(level >= 4 ? 40 : 20)).reverse().map((j) => journalLine(ctx, viewer, party, j)) : [],
     securedBy: securedBy !== "" && own(ctx.state.entities, securedBy) && visible(ctx, viewer, securedBy) ? { id: securedBy, name: nameFor(ctx, viewer, securedBy) } : null,
     loan: t.installment && level >= 3 ? { payment: typeof e?.fields.payment === "number" ? e.fields.payment : cycle?.minimum ?? 0, monthsLeft: cycle?.months_left ?? numOf(e?.fields.months_left, numOf(e?.fields.remaining_months, p?.term_months ?? 0)), payoff: Math.max(0, -cents) } : null
@@ -19217,7 +19217,7 @@ function householdView(ctx, viewer, household, flows, viewOf) {
       const part = partOf(m);
       return { id: idFor(ctx, viewer, m), name: nameFor(ctx, viewer, m), role: strOf(rel?.fields?.role), share: total > 0 ? Math.round(part * 1000 / total) / 10 : Math.round(1000 / Math.max(1, members.length)) / 10 };
     }),
-    accounts: accountsOf(ctx, household).concat(members.length > 1 ? accountsOf(ctx, members[0] ?? household).filter((id) => members.every((m) => rightsOf(ctx.state, id, m) !== null)) : []).filter((id, i, all) => all.indexOf(id) === i),
+    accounts: accountsOf(ctx, household).concat(members.length > 1 ? accountsOf(ctx, members[0] ?? household).filter((id) => members.every((m) => rightsOf(ctx.state, id, m) !== null)) : []).filter((id, i, all2) => all2.indexOf(id) === i),
     flows: shared.map(viewOf),
     monthly: { total, parts: members.map((m) => ({ id: idFor(ctx, viewer, m), name: nameFor(ctx, viewer, m), cents: partOf(m) })) }
   };
@@ -19237,7 +19237,7 @@ function buildFinanceView(hooks, ctx, party, player) {
   };
   let every = null;
   const shownId = (id) => {
-    every ??= new Map(allFlows(hooks, ctx).map((f) => [f.id, f]));
+    every ??= new Map(allFlows(hooks, ctx).map((f2) => [f2.id, f2]));
     const f = every.get(id);
     return f ? viewOf(f).id : null;
   };
@@ -19379,14 +19379,14 @@ function buildFinanceView(hooks, ctx, party, player) {
   }
   const interests = interestsOf(ctx, party);
   const onlyManaged = (side) => side !== "" && side !== party && visible(ctx, viewer, side) && mayPayFrom(ctx, party, side) && (isParty(ctx, side) || !canSpend(ctx.state, side, party));
-  const payers = [...new Set([...listed.map((a) => a.id), ...view.flows.flatMap((f) => f.spec ? [f.spec.from, f.spec.fallback ?? ""] : [])])].filter(onlyManaged);
+  const payers2 = [...new Set([...listed.map((a) => a.id), ...view.flows.flatMap((f) => f.spec ? [f.spec.from, f.spec.fallback ?? ""] : [])])].filter(onlyManaged);
   const carried = new Set;
   stringsIn2(view, carried);
   for (const id of interests)
     if (visible(ctx, viewer, id))
       carried.add(id);
   const payees = [...carried].filter((id) => own(ctx.state.entities, id)?.kind === "account" || isParty(ctx, id));
-  view.paysFor = payers.map((from) => ({ from, to: payees.filter((to) => paysFor(ctx, party, to, from, { interests })) }));
+  view.paysFor = payers2.map((from) => ({ from, to: payees.filter((to) => paysFor(ctx, party, to, from, { interests })) }));
   const home = householdOf(ctx, party);
   const keyed = [party, ...home !== null && visible(ctx, viewer, home) ? [home] : []];
   view.ownKeys = [...new Set(keyed.flatMap((id) => [payeeKey(id), payeeKey(own(ctx.state.entities, id)?.name ?? "")]).filter((k) => k !== ""))];
@@ -20051,14 +20051,14 @@ function offersAtPlace(ctx, place) {
   }
   return out;
 }
-function matchCatalog(ctx, text, place, category = "") {
-  const item = itemName(text);
+function matchCatalog(ctx, text3, place, category = "") {
+  const item = itemName(text3);
   if (!item)
     return null;
-  const said = new Set([...item.words, ...item.trailing?.words ?? []]);
+  const said2 = new Set([...item.words, ...item.trailing?.words ?? []]);
   const rows = ctx.tables.get("economy.catalog")?.rows ?? {};
-  const trade = placeTrade(ctx, place);
-  const tags = trade.tags.map((t) => stem(t.toLowerCase()));
+  const trade2 = placeTrade(ctx, place);
+  const tags = trade2.tags.map((t) => stem(t.toLowerCase()));
   let best = null;
   for (const id of Object.keys(rows).sort()) {
     const row = rows[id];
@@ -20066,10 +20066,10 @@ function matchCatalog(ctx, text, place, category = "") {
     if (!name.heads.has(item.head))
       continue;
     const unnamed = [...item.words].some((w) => w !== item.head && !name.words.has(w));
-    if (unnamed && [...name.qualifiers].some((q) => !said.has(q)))
+    if (unnamed && [...name.qualifiers].some((q) => !said2.has(q)))
       continue;
     const rowCategory = strOf(row?.category);
-    const score = [[...said].filter((w) => name.words.has(w)).length, name.main === item.head ? 1 : 0, rowCategory === category ? 1 : 0, trade.categories.includes(rowCategory) ? 1 : 0, tags.some((t) => name.words.has(t)) ? 1 : 0];
+    const score = [[...said2].filter((w) => name.words.has(w)).length, name.main === item.head ? 1 : 0, rowCategory === category ? 1 : 0, trade2.categories.includes(rowCategory) ? 1 : 0, tags.some((t) => name.words.has(t)) ? 1 : 0];
     const first = best ? score.findIndex((s, i) => s !== best?.score[i]) : 0;
     if (!best || first >= 0 && (score[first] ?? 0) > (best.score[first] ?? 0))
       best = { id, score };
@@ -20077,7 +20077,7 @@ function matchCatalog(ctx, text, place, category = "") {
   return best?.id ?? null;
 }
 function boughtRef(ctx, name) {
-  const named = (table) => Object.entries(ctx.tables.get(table)?.rows ?? {}).find(([id, row]) => strOf(row?.name, id) === name)?.[0];
+  const named = (table) => Object.entries(ctx.tables.get(table)?.rows ?? {}).find(([id, row2]) => strOf(row2?.name, id) === name)?.[0];
   const row = named("economy.catalog");
   if (row)
     return { catalog: row };
@@ -20094,19 +20094,19 @@ function quote(ctx, args, payer, qty) {
   const given = strOf(args.category);
   const row = named === "" ? null : rowOf(ctx, "economy.catalog", named) ? named : matchCatalog(ctx, named, place, given);
   const category = given !== "" ? given : !row && rowOf(ctx, "economy.categories", named) ? named : "";
-  const said = typeof args.price === "number" && args.price > 0 ? Math.round(args.price) : undefined;
+  const said2 = typeof args.price === "number" && args.price > 0 ? Math.round(args.price) : undefined;
   const rowDef = row ? rowOf(ctx, "economy.catalog", row) : undefined;
   const asIs = (cents) => ({ cents, unitCents: Math.round(cents / qty), band: { min: cents, typical: cents, max: cents }, source: row ? "catalog" : "category", clamped: false, name: strOf(rowDef?.name, named || "something"), category: rowDef ? strOf(rowDef.category) : rowOf(ctx, "economy.categories", category) ? category : "misc" });
-  if (said !== undefined && args.exact === true)
-    return { price: asIs(said), row };
+  if (said2 !== undefined && args.exact === true)
+    return { price: asIs(said2), row };
   if (row) {
-    const price = priceOf(ctx, { catalog: row, qty, place, ...said !== undefined ? { narrated: said } : {} }, ctx.rng);
+    const price = priceOf(ctx, { catalog: row, qty, place, ...said2 !== undefined ? { narrated: said2 } : {} }, ctx.rng);
     if (price)
-      return { price, row, ...price.clamped && said !== undefined ? { narrated: { cents: said, limited: "band" } } : {} };
+      return { price, row, ...price.clamped && said2 !== undefined ? { narrated: { cents: said2, limited: "band" } } : {} };
   }
-  if (said !== undefined) {
-    const cents = Math.min(said, args.stated === true ? Infinity : unpricedCap(ctx.world));
-    return { price: { ...asIs(cents), clamped: cents !== said }, row: null, ...cents !== said ? { narrated: { cents: said, limited: "cap" } } : {} };
+  if (said2 !== undefined) {
+    const cents = Math.min(said2, args.stated === true ? Infinity : unpricedCap(ctx.world));
+    return { price: { ...asIs(cents), clamped: cents !== said2 }, row: null, ...cents !== said2 ? { narrated: { cents: said2, limited: "cap" } } : {} };
   }
   const banded = category !== "" ? priceOf(ctx, { category, qty, place }, ctx.rng) : null;
   return banded ? { price: banded, row: null } : null;
@@ -20125,29 +20125,29 @@ function partyKindOf2(ctx, id) {
 }
 function makeApi(hooks) {
   return {
-    classOf: (books, account) => classOf2(books, account),
-    traitsOf: (books, account) => traitsOf(books, account),
+    classOf: (books, account2) => classOf2(books, account2),
+    traitsOf: (books, account2) => traitsOf(books, account2),
     ownersOf: (state, entity) => ownersOf(state, entity),
     shareOf: (state, entity, party) => shareOf(state, entity, party),
     interestsOf: (ctx, who) => interestsOf(ctx, who),
-    paysFor: (ctx, who, to, from, deposit) => paysFor(ctx, who, to, from, { deposit }),
-    landsInReach: (ctx, who, account, from) => landsInReach(ctx, who, account, from),
+    paysFor: (ctx, who, to, from, deposit2) => paysFor(ctx, who, to, from, { deposit: deposit2 }),
+    landsInReach: (ctx, who, account2, from) => landsInReach(ctx, who, account2, from),
     accountsOf: (books, party, right) => accountsOf(books, party, right ?? "sees"),
-    balance: (state, account) => balance(state, account),
-    available: (ctx, account) => availableOf(ctx, account) + overdraftRoom(ctx, account),
-    product: (ctx, account) => productOf(ctx, account),
+    balance: (state, account2) => balance(state, account2),
+    available: (ctx, account2) => availableOf(ctx, account2) + overdraftRoom(ctx, account2),
+    product: (ctx, account2) => productOf(ctx, account2),
     depositAccount: (ctx, party, except) => depositAccount(ctx, party, except),
     partyKind: (ctx, id) => partyKindOf2(ctx, id),
-    feature: (ctx, party, feature) => featureFor(ctx, party, feature),
+    feature: (ctx, party, feature2) => featureFor(ctx, party, feature2),
     outside: (id) => external(id),
-    mayUse: (ctx, party, account, side) => mayUse(ctx, party, account, side),
+    mayUse: (ctx, party, account2, side) => mayUse(ctx, party, account2, side),
     pay: (ctx, p) => payWith(hooks, ctx, p),
     post: (ctx, lines, meta) => postWith(ctx, lines, meta),
-    note: (ctx, who, cls, text) => [signal(cls, text, who, ctx.state.clock)],
+    note: (ctx, who, cls, text3) => [signal(cls, text3, who, ctx.state.clock)],
     money: (ctx, cents) => formatMoney(cents, ctx.world.currency),
     split: (cents, splits, rest) => splitAmount(cents, splits, rest),
     occurrences: (ctx, schedule, from, to, start) => occurrences(ctx, schedule, from, to, start).map((o) => o.at),
-    businessDay: (ctx, day, roll) => businessDay(calendarOf(ctx.world), day, roll),
+    businessDay: (ctx, day2, roll) => businessDay(calendarOf(ctx.world), day2, roll),
     flows: (ctx) => allFlows(hooks, ctx),
     openAccount: (ctx, spec) => openAccount(ctx, spec),
     applyCredit: (ctx, who, app) => {
@@ -20164,16 +20164,16 @@ function payWith(hooks, ctx, p) {
   const from = own(ctx.state.entities, p.from);
   if (!from)
     return reject8("missing_entity", `no ${labelOf(ctx, p.from)}`);
-  const account = from.kind === "account" ? p.from : undefined;
-  const payer = account ? holdersOf(ctx.state, account).find((h) => canSpend(ctx.state, account, h)) : p.from;
+  const account2 = from.kind === "account" ? p.from : undefined;
+  const payer = account2 ? holdersOf(ctx.state, account2).find((h) => canSpend(ctx.state, account2, h)) : p.from;
   if (!payer)
     return reject8("not_owner", `no one can pay from ${labelOf(ctx, p.from)}`);
   const to = own(ctx.state.entities, p.to);
-  const opts = { method: p.method ?? (account ? "auto" : "account"), ...account ? { source: account } : {}, ...p.kind ? { kind: p.kind } : {}, ...p.category ? { category: p.category } : {}, ...p.flow ? { flow: p.flow } : {} };
+  const opts = { method: p.method ?? (account2 ? "auto" : "account"), ...account2 ? { source: account2 } : {}, ...p.kind ? { kind: p.kind } : {}, ...p.category ? { category: p.category } : {}, ...p.flow ? { flow: p.flow } : {} };
   if (to?.kind === "account") {
     const holder = holdersOf(ctx.state, p.to)[0];
     if (holder === payer)
-      return move(ctx, account ?? depositAccount(ctx, payer) ?? "", p.to, p.cents, p.memo, { cap: true });
+      return move(ctx, account2 ?? depositAccount(ctx, payer) ?? "", p.to, p.cents, p.memo, { cap: true });
     return charge(hooks, ctx, payer, p.cents, p.memo, { ...opts, ...holder ? { payee: holder } : {}, deposit: p.to });
   }
   if (to && isParty(ctx, p.to))
@@ -20209,22 +20209,22 @@ function spendableNow(ctx, who) {
 }
 function purchaser(p, ctx) {
   const named = strOf(p.payer);
-  const said = { ...typeof p.method === "string" ? { method: p.method } : {}, ...typeof p.from === "string" ? { from: p.from } : {} };
+  const said2 = { ...typeof p.method === "string" ? { method: p.method } : {}, ...typeof p.from === "string" ? { from: p.from } : {} };
   if (named === "")
-    return { payer: ctx.world.pov, ...said };
+    return { payer: ctx.world.pov, ...said2 };
   const e = own(ctx.state.entities, named);
   if (e?.kind === "account" || e?.kind === "card") {
     const holder = e.kind === "card" ? strOf(e.fields.holder) : holdersOf(ctx.state, named).find((h) => canSpend(ctx.state, named, h)) ?? "";
     if (holder !== "" && own(ctx.state.entities, holder))
-      return { payer: holder, method: said.method ?? "auto", from: said.from ?? named };
+      return { payer: holder, method: said2.method ?? "auto", from: said2.from ?? named };
   }
   if (!e)
-    return payMethodOf(named) !== "auto" ? { payer: ctx.world.pov, method: said.method ?? named, ...said.from ? { from: said.from } : {} } : { payer: named, ...said };
+    return payMethodOf(named) !== "auto" ? { payer: ctx.world.pov, method: said2.method ?? named, ...said2.from ? { from: said2.from } : {} } : { payer: named, ...said2 };
   const owner = strOf(e.fields.owner);
   if (!isParty(ctx, named) && owner !== "" && own(ctx.state.entities, owner)) {
-    return { payer: owner, method: said.method ?? payMethodOf(`${e.name} ${named.replace(/_/g, " ")}`), ...said.from ? { from: said.from } : {} };
+    return { payer: owner, method: said2.method ?? payMethodOf(`${e.name} ${named.replace(/_/g, " ")}`), ...said2.from ? { from: said2.from } : {} };
   }
-  return { payer: named, ...said };
+  return { payer: named, ...said2 };
 }
 var ID_SHAPED = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 function registerRest(r, hooks) {
@@ -20234,25 +20234,25 @@ function registerRest(r, hooks) {
   r.service("economy.lose", loseWith);
   r.service("economy.set_cash", setCash);
   r.service("economy.reprice", reprice);
-  r.service("economy.adjust", (ctx, account, cents) => {
-    if (own(ctx.state.entities, account)?.kind !== "account")
-      return reject8("not_account", `${labelOf(ctx, account)} isn't an account`);
+  r.service("economy.adjust", (ctx, account2, cents) => {
+    if (own(ctx.state.entities, account2)?.kind !== "account")
+      return reject8("not_account", `${labelOf(ctx, account2)} isn't an account`);
     if (!Number.isSafeInteger(cents) || cents === 0)
       return reject8("bad_amount", "an adjustment is a whole amount other than nothing");
     const lines = [
-      { account, amount: cents },
+      { account: account2, amount: cents },
       { account: CORRECTION_ACCOUNT, amount: -cents }
     ];
-    const opener = openerOf(ctx.state, account);
-    const opening = opener !== null && !isOpened(ctx.state, account, opener) ? openingEvent(ctx, opener) : null;
+    const opener = openerOf(ctx.state, account2);
+    const opening = opener !== null && !isOpened(ctx.state, account2, opener) ? openingEvent(ctx, opener) : null;
     return asUnit([...opening ? [opening] : [], ...posting(lines, { memo: "Correction", kind: "adjustment", category: "correction" })]);
   });
-  r.service("economy.reopen", (ctx, account, cents) => {
-    const opener = ownersOf(ctx.state, account)[0]?.party ?? "";
-    if (own(ctx.state.entities, account)?.kind !== "account" || !own(ctx.state.entities, opener) || !isMaterialized(ctx.state, opener, "money") || !Number.isSafeInteger(cents) || cents === 0)
+  r.service("economy.reopen", (ctx, account2, cents) => {
+    const opener = ownersOf(ctx.state, account2)[0]?.party ?? "";
+    if (own(ctx.state.entities, account2)?.kind !== "account" || !own(ctx.state.entities, opener) || !isMaterialized(ctx.state, opener, "money") || !Number.isSafeInteger(cents) || cents === 0)
       return [];
     const lines = [
-      { account, amount: cents },
+      { account: account2, amount: cents },
       { account: external(opener), amount: -cents }
     ];
     return posting(lines, { memo: "Opening balance changed", kind: "adjustment", category: "opening" });
@@ -20267,12 +20267,12 @@ function registerRest(r, hooks) {
     return price ? { min: price.band.min * qty, max: price.band.max * qty } : null;
   });
   r.query("economy.offers", (ctx, who) => offersAtPlace(ctx, placeOfEntity(ctx.state, who)));
-  r.query("economy.item_choices", (ctx, text, who) => {
+  r.query("economy.item_choices", (ctx, text3, who) => {
     const place = placeOfEntity(ctx.state, who);
-    const item = itemName(text);
-    const said = new Set(item ? [...item.words, ...item.trailing?.words ?? []] : []);
+    const item = itemName(text3);
+    const said2 = new Set(item ? [...item.words, ...item.trailing?.words ?? []] : []);
     const rows = ctx.tables.get("economy.catalog")?.rows ?? {};
-    const near = Object.keys(rows).sort().map((id) => ({ id, shared: [...catalogName(id, strOf(rows[id]?.name, id)).words].filter((w) => said.has(w)).length })).filter((x) => x.shared > 0).sort((a, b) => b.shared - a.shared).slice(0, 6);
+    const near = Object.keys(rows).sort().map((id) => ({ id, shared: [...catalogName(id, strOf(rows[id]?.name, id)).words].filter((w) => said2.has(w)).length })).filter((x) => x.shared > 0).sort((a, b) => b.shared - a.shared).slice(0, 6);
     const out = [];
     for (const { id } of near) {
       const price = priceOf(ctx, { catalog: id, place });
@@ -20292,17 +20292,17 @@ function registerRest(r, hooks) {
   r.formula("wealth", (ctx, who) => wealthOf(hooks, ctx, String(who ?? ctx.world.pov)));
   r.formula("can_afford", (ctx, who, cents) => ctx.query("can_afford")(ctx, String(who ?? ctx.world.pov), Number(cents ?? 0)));
   r.formula("net_worth", (ctx, who) => netWorth(hooks, ctx, String(who ?? ctx.world.pov)));
-  r.formula("balance", (ctx, account) => balance(ctx.state, String(account ?? "")));
+  r.formula("balance", (ctx, account2) => balance(ctx.state, String(account2 ?? "")));
   r.formula("price", (ctx, item) => priceOf(ctx, { catalog: String(item ?? "") })?.cents ?? priceOf(ctx, { category: String(item ?? "") })?.cents ?? 0);
   r.formula("holds", (ctx, who, thing) => heldBy(ctx.state.entities, String(thing ?? ""), String(who ?? ctx.world.pov)));
-  r.formula("spends", (ctx, who, account) => canSpend(ctx.state, String(account ?? ""), String(who ?? ctx.world.pov)));
+  r.formula("spends", (ctx, who, account2) => canSpend(ctx.state, String(account2 ?? ""), String(who ?? ctx.world.pov)));
   r.formula("manages", (ctx, who, thing) => {
     const id = String(thing ?? "");
     const by = String(who ?? ctx.world.pov);
     return own(ctx.state.entities, id)?.kind === "account" ? managesAccount(ctx, id, by) : managesParty(ctx.state, id, by);
   });
-  r.formula("is_credit", (ctx, account) => traitsOf(ctx, String(account ?? ""))?.liability === true);
-  r.formula("money_feature", (ctx, feature, who) => FINANCE_FEATURES.includes(String(feature)) && featureFor(ctx, String(who ?? ctx.world.pov), String(feature)));
+  r.formula("is_credit", (ctx, account2) => traitsOf(ctx, String(account2 ?? ""))?.liability === true);
+  r.formula("money_feature", (ctx, feature2, who) => FINANCE_FEATURES.includes(String(feature2)) && featureFor(ctx, String(who ?? ctx.world.pov), String(feature2)));
   r.formula("credit_score", (ctx, who) => currentScore(ctx, String(who ?? ctx.world.pov)) ?? 0);
   registerEffects(r, hooks);
   registerActions(r);
@@ -20321,8 +20321,8 @@ function registerRest(r, hooks) {
         return [`Money: ${wealthOf(hooks, ctx, pov)}.`];
       const mine = accountsOf(ctx, pov);
       const firstTransactional = mine.find((id) => traitsOf(ctx, id)?.transactional);
-      const shown = mine.filter((id) => level >= 3 || classOf2(ctx, id) === "cash" || id === firstTransactional);
-      const parts = shown.map((id) => {
+      const shown3 = mine.filter((id) => level >= 3 || classOf2(ctx, id) === "cash" || id === firstTransactional);
+      const parts = shown3.map((id) => {
         const b = balance(ctx.state, id);
         const name = own(ctx.state.entities, id)?.name ?? id;
         return traitsOf(ctx, id)?.liability ? `${name} owes ${formatMoney(-b, ctx.world.currency)}` : `${name} ${formatMoney(b, ctx.world.currency)}`;
@@ -20413,11 +20413,11 @@ function registerRest(r, hooks) {
           issues.push({ severity: "warning", code: "economy.accounts", message: `There's no money feature "${key}"; the toggle does nothing.`, path: `packs.economy.config.features.${key}` });
       for (const e of Object.values(world.entities)) {
         if (e.kind === "card") {
-          const account = own(world.entities, strOf(e.fields.account));
-          if (!account || account.kind !== "account")
+          const account2 = own(world.entities, strOf(e.fields.account));
+          if (!account2 || account2.kind !== "account")
             issues.push({ severity: "error", code: "economy.accounts", message: `Card ${e.name} isn't on an account.`, path: `entities.${e.id}.fields.account` });
-          else if (!ownersIn(account.fields).some((o) => o.party === strOf(e.fields.holder)))
-            issues.push({ severity: "error", code: "economy.accounts", message: `Card ${e.name}'s holder doesn't hold ${account.name}.`, path: `entities.${e.id}.fields.holder` });
+          else if (!ownersIn(account2.fields).some((o) => o.party === strOf(e.fields.holder)))
+            issues.push({ severity: "error", code: "economy.accounts", message: `Card ${e.name}'s holder doesn't hold ${account2.name}.`, path: `entities.${e.id}.fields.holder` });
           const item = strOf(e.fields.item);
           if (item !== "" && !own(world.entities, item))
             issues.push({ severity: "error", code: "economy.accounts", message: `Card ${e.name}'s gear card "${item}" isn't in the world.`, path: `entities.${e.id}.fields.item` });
@@ -20478,8 +20478,8 @@ function registerEffects(r, hooks) {
         return reject8("unpriced", `no price for ${labelOf(ctx, strOf(args.item) || strOf(args.category))}`);
       const { price, row } = priced;
       const name = strOf(args.name) || price.name;
-      const said = payMethodOf(strOf(args.method));
-      const paid = charge(hooks, ctx, payer, price.cents, `Bought ${name}${qty > 1 ? ` \xD7${qty}` : ""}`, { method: said, category: price.category, kind: "purchase", sale: { place: placeOfEntity(ctx.state, payer), item: row ?? name }, ...priced.narrated ? { narrated: priced.narrated } : {}, ...typeof args.payee === "string" ? { payee: args.payee } : {}, ...strOf(args.from) !== "" ? { source: strOf(args.from) } : {}, ...typeof args.cashback === "number" && args.cashback > 0 ? { cashback: args.cashback } : {} });
+      const said2 = payMethodOf(strOf(args.method));
+      const paid = charge(hooks, ctx, payer, price.cents, `Bought ${name}${qty > 1 ? ` \xD7${qty}` : ""}`, { method: said2, category: price.category, kind: "purchase", sale: { place: placeOfEntity(ctx.state, payer), item: row ?? name }, ...priced.narrated ? { narrated: priced.narrated } : {}, ...typeof args.payee === "string" ? { payee: args.payee } : {}, ...strOf(args.from) !== "" ? { source: strOf(args.from) } : {}, ...typeof args.cashback === "number" && args.cashback > 0 ? { cashback: args.cashback } : {} });
       if (isRejection5(paid))
         return paid;
       const out = [...paid];
@@ -20660,15 +20660,15 @@ function isInside(state, inner, outer) {
 }
 function carriedBy(state, holder) {
   const out = [];
-  const visit = (h, depth) => {
+  const visit2 = (h, depth) => {
     if (depth > 32)
       return;
     for (const id of contentsOf(state, h)) {
       out.push(id);
-      visit(id, depth + 1);
+      visit2(id, depth + 1);
     }
   };
-  visit(holder, 0);
+  visit2(holder, 0);
   return out;
 }
 function weightOf(state, id) {
@@ -20739,13 +20739,13 @@ function kitStatus(ctx, kit) {
       back[item.fields.piece] = (own(back, item.fields.piece) ?? 0) + Math.max(1, numOf(item.fields.qty, 1));
   }
   const pieces = template.pieces.map((p) => ({ name: p.name, qty: p.qty, present: Math.max(0, p.qty - (own(taken, p.name) ?? 0) + (own(back, p.name) ?? 0)) }));
-  const present = template.total - template.pieces.reduce((a, p) => a + p.qty, 0) + pieces.reduce((a, p) => a + p.present, 0);
+  const present2 = template.total - template.pieces.reduce((a, p) => a + p.qty, 0) + pieces.reduce((a, p) => a + p.present, 0);
   const missing = pieces.filter((p) => p.present < p.qty).map((p) => `${p.name} \xD7${p.qty - p.present}`);
-  return { present, total: template.total, complete: missing.length === 0, missing, pieces };
+  return { present: present2, total: template.total, complete: missing.length === 0, missing, pieces };
 }
 var PIECE_FILLER = new Set(["a", "an", "the", "of", "my", "your", "some", "one", "set", "and", "with"]);
-function pieceWords(text) {
-  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => !PIECE_FILLER.has(w)).map((w) => /(?:ch|sh|x|ss)es$/.test(w) ? w.slice(0, -2) : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+function pieceWords(text3) {
+  return (text3.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => !PIECE_FILLER.has(w)).map((w) => /(?:ch|sh|x|ss)es$/.test(w) ? w.slice(0, -2) : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
 }
 function findPiece(ctx, kit, name) {
   const template = kitTemplate(ctx, kit);
@@ -20757,17 +20757,17 @@ function findPiece(ctx, kit, name) {
   const direct = template.pieces.find((p) => p.name.toLowerCase() === lower) ?? template.pieces.find((p) => p.name.toLowerCase().includes(lower));
   if (direct)
     return direct;
-  const said = [...new Set(pieceWords(name))];
-  if (said.length === 0)
+  const said2 = [...new Set(pieceWords(name))];
+  if (said2.length === 0)
     return null;
   let best = null;
   for (const piece of template.pieces) {
-    const words = new Set(pieceWords(piece.name));
-    const hit = said.filter((w) => words.has(w));
-    if (hit.length * 2 < said.length || !hit.some((w) => /[a-z]/.test(w)))
+    const words2 = new Set(pieceWords(piece.name));
+    const hit = said2.filter((w) => words2.has(w));
+    if (hit.length * 2 < said2.length || !hit.some((w) => /[a-z]/.test(w)))
       continue;
-    if (!best || hit.length > best.hits || hit.length === best.hits && words.size < best.size)
-      best = { piece, hits: hit.length, size: words.size };
+    if (!best || hit.length > best.hits || hit.length === best.hits && words2.size < best.size)
+      best = { piece, hits: hit.length, size: words2.size };
   }
   return best?.piece ?? null;
 }
@@ -20815,7 +20815,7 @@ function buildGearView(ctx) {
   const level = ctx.levelOf(pov, "gear");
   const cal = calendarOf(ctx.world);
   const lent = new Map(grants(ctx.state).map((g) => [g.thing, g]));
-  const shown = (id) => {
+  const shown3 = (id) => {
     const e = own(ctx.state.entities, id);
     return !!e && e.kind !== "account" && canSeeEntity(ctx.registry, ctx.world, ctx.state, pov, id) && (level >= 2 || e.fields.notable === true);
   };
@@ -20841,23 +20841,23 @@ function buildGearView(ctx) {
     const g = lent.get(id);
     if (g)
       out.lent = { to: own(ctx.state.entities, g.borrower)?.name ?? g.borrower, ...g.until !== null ? { until: formatClock(cal, g.until) } : {}, overdue: g.overdue };
-    const kids = depth < 8 ? contentsOf(ctx.state, id).filter(shown) : [];
+    const kids = depth < 8 ? contentsOf(ctx.state, id).filter(shown3) : [];
     if (kids.length > 0)
       out.children = kids.map((k) => item(k, depth + 1));
     return out;
   };
   const ids = Object.keys(ctx.state.entities).sort();
-  const worn = level >= 3 ? ids.filter((id) => shown(id) && own(ctx.state.entities, id)?.relations.some((r) => (r.type === "worn_by" || r.type === "equipped") && r.to === pov)) : [];
-  const carried = contentsOf(ctx.state, pov).filter((id) => shown(id) && !worn.includes(id));
-  const owned = ids.filter((id) => shown(id) && own(ctx.state.entities, id)?.fields.owner === pov);
+  const worn = level >= 3 ? ids.filter((id) => shown3(id) && own(ctx.state.entities, id)?.relations.some((r) => (r.type === "worn_by" || r.type === "equipped") && r.to === pov)) : [];
+  const carried = contentsOf(ctx.state, pov).filter((id) => shown3(id) && !worn.includes(id));
+  const owned2 = ids.filter((id) => shown3(id) && own(ctx.state.entities, id)?.fields.owner === pov);
   const nested = (id) => {
     const holder = holderOf(ctx.state, id);
-    return !!holder && holder !== pov && own(ctx.state.entities, holder)?.fields.owner === pov && shown(holder);
+    return !!holder && holder !== pov && own(ctx.state.entities, holder)?.fields.owner === pov && shown3(holder);
   };
-  const stored = owned.filter((id) => own(ctx.state.entities, id)?.fields.lost !== true && !isInside(ctx.state, id, pov) && !(holderOf(ctx.state, id) && own(ctx.state.entities, holderOf(ctx.state, id) ?? "")?.fields.owner === pov));
+  const stored = owned2.filter((id) => own(ctx.state.entities, id)?.fields.lost !== true && !isInside(ctx.state, id, pov) && !(holderOf(ctx.state, id) && own(ctx.state.entities, holderOf(ctx.state, id) ?? "")?.fields.owner === pov));
   return {
     level,
-    owned: owned.filter((id) => !nested(id)).map((id) => item(id, 0)),
+    owned: owned2.filter((id) => !nested(id)).map((id) => item(id, 0)),
     worn: worn.map((id) => item(id, 8)),
     carried: carried.map((id) => item(id, 0)),
     stored: stored.map((id) => item(id, 0))
@@ -21140,24 +21140,24 @@ function reject9(code, reason) {
   return { code, reason };
 }
 var CASH_WORDS = { cash: null, money: null, buck: null, bucks: null, change: null, coin: null, coins: null, banknote: null, banknotes: null, twenties: null, fifties: null, fiver: 5, tenner: 10, twenty: 20, fifty: 50, hundred: 100 };
-function cashGift(text, currency) {
-  const t = text.trim().toLowerCase().replace(/\s+/g, " ").replace(/(\d),(?=\d{3}\b)/g, "$1");
+function cashGift(text3, currency) {
+  const t = text3.trim().toLowerCase().replace(/\s+/g, " ").replace(/(\d),(?=\d{3}\b)/g, "$1");
   if (t === "")
     return null;
-  const quote = (s) => s.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const quote2 = (s) => s.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const article = "(?:(?:some|the|a|an|my|his|her|their) )?";
   const tail = "(?: (?:bills?|notes?|in cash))?";
-  const unit = "(?:dollars?|bucks?|euros?|pounds?)";
+  const unit3 = "(?:dollars?|bucks?|euros?|pounds?)";
   const n = "(\\d+(?:\\.\\d+)?)";
-  const symbol = quote(currency.symbol);
-  const code = quote(currency.code);
-  const amounts = [...symbol !== "" ? [`${symbol} ?${n}`, `${n} ?${symbol}`] : [], ...code !== "" ? [`${n} ?${code}`] : [], `${n}[ -]${unit}`];
+  const symbol = quote2(currency.symbol);
+  const code = quote2(currency.code);
+  const amounts = [...symbol !== "" ? [`${symbol} ?${n}`, `${n} ?${symbol}`] : [], ...code !== "" ? [`${n} ?${code}`] : [], `${n}[ -]${unit3}`];
   for (const form of amounts) {
-    const said = new RegExp(`^${article}${form}${tail}$`).exec(t)?.[1];
-    if (said !== undefined)
-      return { amount: Number(said) };
+    const said2 = new RegExp(`^${article}${form}${tail}$`).exec(t)?.[1];
+    if (said2 !== undefined)
+      return { amount: Number(said2) };
   }
-  const word = new RegExp(`^${article}([a-z]+)(?:[ -]${unit})?${tail}$`).exec(t)?.[1];
+  const word = new RegExp(`^${article}([a-z]+)(?:[ -]${unit3})?${tail}$`).exec(t)?.[1];
   return word !== undefined && hasOwn(CASH_WORDS, word) ? { amount: CASH_WORDS[word] ?? null } : null;
 }
 function gearLevel(ctx, thing, to) {
@@ -21279,8 +21279,8 @@ var takePiece = (ctx, kit, piece, to) => {
   const back = contentsOf(ctx.state, kit).find((id) => own(ctx.state.entities, id)?.fields.from_kit === kit && own(ctx.state.entities, id)?.fields.piece === p.name);
   if (back)
     return transfer2(ctx, back, to);
-  const present = status.pieces.find((x) => x.name === p.name)?.present ?? 0;
-  if (present <= 0)
+  const present2 = status.pieces.find((x) => x.name === p.name)?.present ?? 0;
+  if (present2 <= 0)
     return reject9("no_piece", `no ${p.name} left in ${k.name}`);
   const taken = takenOf(ctx.state, kit);
   const spawned = spawn(ctx, { name: p.name, owner: typeof k.fields.owner === "string" ? k.fields.owner : null, holder: to, salt: `${kit}:${p.name}:${own(taken, p.name) ?? 0}` });
@@ -21400,11 +21400,11 @@ var gearPack = {
     wrap("gear.receive", ["name", "to", "from?"], (a, ctx) => spawn(ctx, { name: strOf(a.name), owner: strOf(a.to), holder: strOf(a.to), salt: `give:${strOf(a.from)}:${ctx.state.clock}` }));
     wrap("gear.take_piece", ["kit", "piece", "to"], (a, ctx) => takePiece(ctx, strOf(a.kit), strOf(a.piece), strOf(a.to)));
     wrap("gear.lend", ["item", "to", "until?", "said?"], (a, ctx) => {
-      const said = strOf(a.said);
-      const at = said !== "" ? clockOfPhrase(calendarOf(ctx.world), ctx.state.clock, said) : null;
+      const said2 = strOf(a.said);
+      const at = said2 !== "" ? clockOfPhrase(calendarOf(ctx.world), ctx.state.clock, said2) : null;
       const until = at ?? numOf(a.until, NaN);
-      if (said !== "" && at === null && !(until > ctx.state.clock))
-        return reject9("bad_until", `"${said}" names no time; say how many days or until when`);
+      if (said2 !== "" && at === null && !(until > ctx.state.clock))
+        return reject9("bad_until", `"${said2}" names no time; say how many days or until when`);
       return lend(ctx, strOf(a.item), strOf(a.to), until);
     });
     wrap("gear.retrieve", ["item"], (a, ctx) => retrieve(ctx, strOf(a.item)));
@@ -21456,14 +21456,14 @@ var gearPack = {
         const out = [];
         const lose = optionalService(ctx, "economy.lose");
         if (lose) {
-          const money = lose(ctx, item, strOf(args.thief) || undefined);
-          if (!Array.isArray(money))
-            return money;
-          out.push(...money);
+          const money4 = lose(ctx, item, strOf(args.thief) || undefined);
+          if (!Array.isArray(money4))
+            return money4;
+          out.push(...money4);
         }
-        for (const r of e.relations)
-          if (r.type === "in" || r.type === "worn_by" || r.type === "equipped")
-            out.push({ type: "unlink", rel: r.type, from: item, to: r.to });
+        for (const r2 of e.relations)
+          if (r2.type === "in" || r2.type === "worn_by" || r2.type === "equipped")
+            out.push({ type: "unlink", rel: r2.type, from: item, to: r2.to });
         out.push({ type: "set", entity: item, field: "lost", value: true });
         if (typeof e.fields.place === "string")
           out.push({ type: "set", entity: item, field: "place", value: null });
@@ -21537,7 +21537,7 @@ var gearPack = {
         if (level === 0)
           return [];
         const carried = carriedBy(ctx.state, pov).filter((id) => own(ctx.state.entities, id)?.kind !== "account");
-        const shown = carried.filter((id) => level >= 2 || own(ctx.state.entities, id)?.fields.notable === true);
+        const shown3 = carried.filter((id) => level >= 2 || own(ctx.state.entities, id)?.fields.notable === true);
         const lines = [];
         const label = (id) => {
           const e = own(ctx.state.entities, id);
@@ -21547,8 +21547,8 @@ var gearPack = {
           const kit = level >= 3 ? kitStatus(ctx, id) : null;
           return `${e.name}${qty > 1 ? ` \xD7${qty}` : ""}${kit ? ` (${kit.present}/${kit.total})` : ""}`;
         };
-        if (shown.length > 0)
-          lines.push(`Carrying: ${shown.slice(0, 12).map(label).join(", ")}.`);
+        if (shown3.length > 0)
+          lines.push(`Carrying: ${shown3.slice(0, 12).map(label).join(", ")}.`);
         if (level >= 3) {
           const worn = Object.keys(ctx.state.entities).filter((id) => own(ctx.state.entities, id)?.relations.some((x) => (x.type === "worn_by" || x.type === "equipped") && x.to === pov));
           if (worn.length > 0)
@@ -21667,8 +21667,8 @@ function buildGarageView(ctx) {
       if (interval !== null) {
         const used = typeof e.fields.odometer_mi === "number" ? e.fields.odometer_mi : numOf(e.fields.engine_hours);
         const due = numOf(e.fields.last_service) + interval;
-        const unit = typeof e.fields.odometer_mi === "number" ? "mi" : "h";
-        v.service = [{ label: "Service", due: `${Math.round(due)} ${unit}`, overdue: used > due }];
+        const unit3 = typeof e.fields.odometer_mi === "number" ? "mi" : "h";
+        v.service = [{ label: "Service", due: `${Math.round(due)} ${unit3}`, overdue: used > due }];
       }
     }
     vehicles.push(v);
@@ -21815,12 +21815,12 @@ function fuelUse(ctx, vehicle, leg) {
   if (level >= 4 && payload > 0 && cargoKg > payload / 2)
     mult *= guide === "road" ? factor(ctx, "road", "loaded_to_payload") : guide === "marine" ? factor(ctx, "marine", "heavy_load_full_crew") : factor(ctx, "offroad", "two_up_or_loaded_cargo");
   const consumption = objOf(row.consumption);
-  const unit = strOf(row.consumption_unit);
-  if (unit === "mpg" || unit === "mi_per_kwh") {
+  const unit3 = strOf(row.consumption_unit);
+  if (unit3 === "mpg" || unit3 === "mi_per_kwh") {
     const rate = numOf(consumption.combined, numOf(consumption.highway, 25));
     const used = rate > 0 ? miles / rate * mult : 0;
-    const capacity = unit === "mpg" ? numOf(row.tank_capacity_gal, 15) : numOf(row.usable_battery_kwh, 60);
-    return { pct: used / capacity * 100, miles, hours };
+    const capacity2 = unit3 === "mpg" ? numOf(row.tank_capacity_gal, 15) : numOf(row.usable_battery_kwh, 60);
+    return { pct: used / capacity2 * 100, miles, hours };
   }
   const perHour = guide === "marine" ? numOf(consumption.cruise_planing, 5) : numOf(consumption.normal_trail, 1.5);
   const capacity = numOf(row.tank_capacity_gal, 10);
@@ -21873,9 +21873,9 @@ var consume = (ctx, vehicle, leg, rng) => {
 function legFor(ctx, vehicle, from, to) {
   const route = optionalQuery(ctx, "space.route");
   for (const mode of modesOf(ctx, vehicle)) {
-    const plan = route ? route(ctx, from, to, mode) : null;
-    if (plan)
-      return { minutes: plan.minutes, distanceKm: plan.distanceKm, terrain: plan.legs.find((l) => l.terrain)?.terrain ?? null, mode };
+    const plan2 = route ? route(ctx, from, to, mode) : null;
+    if (plan2)
+      return { minutes: plan2.minutes, distanceKm: plan2.distanceKm, terrain: plan2.legs.find((l) => l.terrain)?.terrain ?? null, mode };
   }
   return null;
 }
@@ -22174,7 +22174,7 @@ var core_default5 = vehiclesPack;
 
 // node_modules/lumi-rp-engine/src/packs/weather/core/index.ts
 var DEFAULT_PERSIST = 0.7;
-var state = (id, label, factor, closes = []) => ({ id, label, travel: factor === 1 ? {} : { walk: factor, road: factor, offroad: factor, water: factor }, closes });
+var state = (id, label, factor2, closes = []) => ({ id, label, travel: factor2 === 1 ? {} : { walk: factor2, road: factor2, offroad: factor2, water: factor2 }, closes });
 var BASE_STATES = [state("clear", "Clear", 1), state("cloudy", "Overcast", 1), state("rain", "Rain", 1.15), state("storm", "A storm", 1.6, ["water"]), state("fog", "Fog", 1.2), state("snow", "Snow", 1.5)];
 var CLIMATES = {
   temperate: {
@@ -22233,12 +22233,12 @@ function parseClimate(raw) {
   const states = (Array.isArray(raw.states) ? raw.states : []).map((s) => {
     const o = objOf(s);
     const effects = objOf(o.effects);
-    const travel = {};
+    const travel2 = {};
     for (const [mode, x] of Object.entries(objOf(effects.travelTimeMultiplier)))
       if (typeof x === "number")
-        travel[mode] = x;
+        travel2[mode] = x;
     const closes = Array.isArray(effects.closes) ? effects.closes.filter((m) => typeof m === "string") : [];
-    return { id: strOf(o.id), label: strOf(o.label, strOf(o.id)), travel, closes };
+    return { id: strOf(o.id), label: strOf(o.label, strOf(o.id)), travel: travel2, closes };
   });
   const seasons = (Array.isArray(raw.seasons) ? raw.seasons : []).map((s) => {
     const o = objOf(s);
@@ -22323,8 +22323,8 @@ function stepRegions(slot, ctx, rng) {
     if (level >= 3) {
       const [lo, hi] = season.temp;
       const warm = part === "afternoon" ? 1 : part === "morning" || part === "evening" ? 0.55 : 0.1;
-      const st = climate.states.find((s) => s.id === next);
-      const wet = st && (st.closes.length > 0 || Object.keys(st.travel).length > 0) ? -2 : 0;
+      const st2 = climate.states.find((s) => s.id === next);
+      const wet = st2 && (st2.closes.length > 0 || Object.keys(st2.travel).length > 0) ? -2 : 0;
       const t = Math.round((lo + (hi - lo) * warm + wet + (g.next() * 4 - 2)) * 10) / 10;
       if (t !== numOf(e.fields.temp_c, NaN))
         out.push({ type: "set", entity: id, field: "temp_c", value: t });
@@ -22500,8 +22500,8 @@ function bandsOf(ctx) {
 function halfLife(ctx) {
   return numOf(config(ctx).halfLifeDays, DEFAULT_HALF_LIFE_DAYS) * 1440;
 }
-function relationOf(state, from, to) {
-  const r = own(state.entities, from)?.relations.find((x) => x.type === "regard" && x.to === to);
+function relationOf(state2, from, to) {
+  const r = own(state2.entities, from)?.relations.find((x) => x.type === "regard" && x.to === to);
   return r ? r.fields ?? {} : null;
 }
 function decayed(ctx, from, value, since, at) {
@@ -22567,11 +22567,11 @@ function anchorAfter(ctx, from, to, deltas, at) {
   out.t = at;
   return out;
 }
-function writeRegard(state, from, to, anchor, entry) {
-  const entity = own(state.entities, from);
+function writeRegard(state2, from, to, anchor, entry) {
+  const entity = own(state2.entities, from);
   if (!entity)
     return;
-  const prev = relationOf(state, from, to) ?? {};
+  const prev = relationOf(state2, from, to) ?? {};
   const fields = { ...prev, ...anchor };
   if (entry)
     fields.history = [...Array.isArray(prev.history) ? prev.history.slice(-(HISTORY - 1)) : [], entry];
@@ -22585,30 +22585,30 @@ var regardEvent = {
     const to = strOf(e.data.to);
     if (!own(ctx.state.entities, from) || !own(ctx.state.entities, to))
       return { code: "missing_entity", reason: "regard needs two entities" };
-    const numbers = [...Object.values(objOf(e.data.deltas)), ...Object.values(objOf(e.data.anchor))];
+    const numbers2 = [...Object.values(objOf(e.data.deltas)), ...Object.values(objOf(e.data.anchor))];
     if (e.data.deltas === undefined && e.data.anchor === undefined)
       return { code: "bad_delta", reason: "regard needs deltas or an anchor" };
-    return numbers.every((v) => typeof v === "number" && Number.isFinite(v)) ? null : { code: "bad_delta", reason: "regard values must be numbers" };
+    return numbers2.every((v) => typeof v === "number" && Number.isFinite(v)) ? null : { code: "bad_delta", reason: "regard values must be numbers" };
   },
-  apply: (e, state, ctx) => {
+  apply: (e, state2, ctx) => {
     const from = strOf(e.data.from);
     const to = strOf(e.data.to);
     const mutual = e.data.mutual === true;
     if (e.data.deltas !== undefined) {
-      const rctx = { ...ctx, state };
+      const rctx = { ...ctx, state: state2 };
       const deltas = objOf(e.data.deltas);
-      const entry = e.data.npc === true ? null : { at: state.clock, why: strOf(e.data.why), deltas };
-      const fwd = anchorAfter(rctx, from, to, deltas, state.clock);
-      const rev = mutual ? anchorAfter(rctx, to, from, deltas, state.clock) : null;
-      writeRegard(state, from, to, fwd, entry);
+      const entry = e.data.npc === true ? null : { at: state2.clock, why: strOf(e.data.why), deltas };
+      const fwd = anchorAfter(rctx, from, to, deltas, state2.clock);
+      const rev = mutual ? anchorAfter(rctx, to, from, deltas, state2.clock) : null;
+      writeRegard(state2, from, to, fwd, entry);
       if (rev)
-        writeRegard(state, to, from, rev, entry);
+        writeRegard(state2, to, from, rev, entry);
       return;
     }
     const anchor = objOf(e.data.anchor);
-    writeRegard(state, from, to, anchor, null);
+    writeRegard(state2, from, to, anchor, null);
     if (mutual)
-      writeRegard(state, to, from, e.data.back === undefined ? anchor : objOf(e.data.back), null);
+      writeRegard(state2, to, from, e.data.back === undefined ? anchor : objOf(e.data.back), null);
   },
   touches: (e) => {
     const from = strOf(e.data.from);
@@ -22879,10 +22879,10 @@ function workPlace(ctx, who) {
     return employer;
   return placeOfEntity(ctx.state, employer);
 }
-function placeOfType(ctx, sceneType, near) {
+function placeOfType(ctx, sceneType2, near) {
   const ids = Object.keys(ctx.world.places).sort();
   const parent = near ? own(ctx.world.places, near)?.parent : undefined;
-  return ids.find((id) => own(ctx.world.places, id)?.sceneType === sceneType && own(ctx.world.places, id)?.parent === parent) ?? ids.find((id) => own(ctx.world.places, id)?.sceneType === sceneType && own(ctx.world.places, id)?.visibility !== "secret") ?? null;
+  return ids.find((id) => own(ctx.world.places, id)?.sceneType === sceneType2 && own(ctx.world.places, id)?.parent === parent) ?? ids.find((id) => own(ctx.world.places, id)?.sceneType === sceneType2 && own(ctx.world.places, id)?.visibility !== "secret") ?? null;
 }
 
 // node_modules/lumi-rp-engine/src/packs/castlife/core/commitments.ts
@@ -22929,11 +22929,11 @@ function authored(ctx, who, start, end) {
     if (s.target !== "activity" || !scheduleOwners(ctx.registry, ctx.world, ctx.state, s).includes(who))
       continue;
     const rank = ownerRank(ctx.registry, ctx.world, ctx.state, s) ?? Number.MAX_SAFE_INTEGER;
-    const edges = scheduleInstants(ctx.world, [s], start - MINUTES_PER_DAY, end + MINUTES_PER_DAY);
-    for (const e of edges) {
+    const edges2 = scheduleInstants(ctx.world, [s], start - MINUTES_PER_DAY, end + MINUTES_PER_DAY);
+    for (const e of edges2) {
       if (e.edge !== "start")
         continue;
-      const close = edges.find((x) => x.edge === "end" && x.occurrence === e.occurrence);
+      const close = edges2.find((x) => x.edge === "end" && x.occurrence === e.occurrence);
       const value = s.slots[e.slot]?.value;
       if (!close || typeof value !== "string" || close.at <= start || e.at >= end)
         continue;
@@ -23010,15 +23010,15 @@ function placed(ctx, who, l, tier, a, stronger) {
   for (const b of blockers)
     if (b.end > l.from && b.end < to)
       candidates.add(b.end);
-  for (let day = dateAt(cal, l.from).dayIndex;clockAt(cal, day, 0) < to; day++)
-    candidates.add(clockAt(cal, day, hours[0] * 60));
+  for (let day2 = dateAt(cal, l.from).dayIndex;clockAt(cal, day2, 0) < to; day2++)
+    candidates.add(clockAt(cal, day2, hours[0] * 60));
   for (const c of [...candidates].sort((x, y) => x - y)) {
     if (c < l.from || c >= to)
       continue;
-    const day = dateAt(cal, c).dayIndex;
-    const start = Math.max(c, clockAt(cal, day, hours[0] * 60));
+    const day2 = dateAt(cal, c).dayIndex;
+    const start = Math.max(c, clockAt(cal, day2, hours[0] * 60));
     const end = start + minutes;
-    if (end > Math.min(to, clockAt(cal, day, hours[1] * 60)))
+    if (end > Math.min(to, clockAt(cal, day2, hours[1] * 60)))
       continue;
     if (!blockers.some((b) => b.start < end && b.end > start))
       return planBlock(ctx, who, l, start, end);
@@ -23088,7 +23088,7 @@ var SECRET_KINDS = ["lore", "track", "flag"];
 function readCue(raw) {
   if (!isRecord(raw) || typeof raw.text !== "string" || raw.text.trim() === "")
     return null;
-  const keyed = SECRET_KINDS.filter((kind) => raw[kind] !== undefined);
+  const keyed = SECRET_KINDS.filter((kind2) => raw[kind2] !== undefined);
   const kind = keyed[0];
   const id = kind === undefined ? undefined : raw[kind];
   return keyed.length === 1 && kind !== undefined && typeof id === "string" && id !== "" ? { text: raw.text.trim(), secret: { kind, id } } : null;
@@ -23100,14 +23100,14 @@ function cuesOf(world, who) {
 
 // node_modules/lumi-rp-engine/src/packs/castlife/core/cues.ts
 function cuesFor(ctx, who, safe) {
-  const { registry: reg, world, state } = ctx;
+  const { registry: reg, world, state: state2 } = ctx;
   const pov = world.pov;
   const out = [];
-  const add = (text) => {
-    if (safe(text) && !out.includes(text))
-      out.push(text);
+  const add = (text3) => {
+    if (safe(text3) && !out.includes(text3))
+      out.push(text3);
   };
-  const gateHolds = loreGateReader(reg, world, state);
+  const gateHolds = loreGateReader(reg, world, state2);
   const flag = optionalQuery(ctx, "story.flag");
   for (const cue of cuesOf(world, who)) {
     const { kind, id } = cue.secret;
@@ -23116,7 +23116,7 @@ function cuesFor(ctx, who, safe) {
       const entry = own(world.lore, id);
       kept = entry !== undefined && loreIsSecret(entry) && !gateHolds(entry);
     } else if (kind === "track")
-      kept = trackKeepsSecret(reg, world, state, pov, id);
+      kept = trackKeepsSecret(reg, world, state2, pov, id);
     else if (flag) {
       const value = flag(ctx, id);
       kept = value === null || value === false || value === 0 || value === "";
@@ -23128,9 +23128,9 @@ function cuesFor(ctx, who, safe) {
     const t = own(world.tracks, id);
     if (t?.owner !== who || t.kind === "agenda" && visibilityOf(t.visibility) === "public")
       continue;
-    const stage = currentStage(world, state, id);
+    const stage = currentStage(world, state2, id);
     const cue = stage === null ? undefined : own(t.stages, stage)?.cue;
-    if (typeof cue === "string" && cue.trim() !== "" && trackKeepsSecret(reg, world, state, pov, id))
+    if (typeof cue === "string" && cue.trim() !== "" && trackKeepsSecret(reg, world, state2, pov, id))
       add(cue.trim());
   }
   return out;
@@ -23146,13 +23146,13 @@ function personKind(world, kind) {
 }
 function hiddenNames2(world) {
   const out = [];
-  const label = (name, secret, entity) => void out.push({ name, secret, ...entity !== undefined ? { entity } : {}, said: (text) => namesAny(text, [], [name]) });
+  const label = (name, secret, entity) => void out.push({ name, secret, ...entity !== undefined ? { entity } : {}, said: (text3) => namesAny(text3, [], [name]) });
   for (const e of Object.values(world.entities)) {
     const v = visibilityOf(e.visibility);
     if (v === "public")
       continue;
     if (personKind(world, e.kind))
-      out.push({ name: e.name, secret: e.visibility === "secret", entity: e.id, said: (text) => namesAny(text, [e.name]) });
+      out.push({ name: e.name, secret: e.visibility === "secret", entity: e.id, said: (text3) => namesAny(text3, [e.name]) });
     else
       label(e.name, e.visibility === "secret", e.id);
   }
@@ -23189,33 +23189,33 @@ function cueIssues(world) {
       issue("warning", at, `${e.name} isn't a person, so its cues never show: the Stance section tells people.`);
     e.cues.forEach((raw, i) => {
       const path = `${at}.${i}`;
-      const text = isRecord(raw) && typeof raw.text === "string" ? raw.text.trim() : "";
-      if (text === "")
+      const text3 = isRecord(raw) && typeof raw.text === "string" ? raw.text.trim() : "";
+      if (text3 === "")
         return issue("error", `${path}.text`, `A cue of ${e.name}'s has no text: say what the narrator sees them do.`);
       const cue = readCue(raw);
       if (!cue)
-        return issue("error", path, `${e.name}'s cue "${text}" needs exactly one secret it stands for: a lore entry, a track or a story flag.`);
+        return issue("error", path, `${e.name}'s cue "${text3}" needs exactly one secret it stands for: a lore entry, a track or a story flag.`);
       const { kind, id } = cue.secret;
       if (kind === "lore") {
         const entry = own(world.lore, id);
         if (!entry)
-          issue("error", `${path}.lore`, `${e.name}'s cue "${text}" is for lore "${id}", which this world doesn't have.`);
+          issue("error", `${path}.lore`, `${e.name}'s cue "${text3}" is for lore "${id}", which this world doesn't have.`);
         else if (!loreIsSecret(entry))
-          issue("warning", `${path}.lore`, `${e.name}'s cue "${text}" is for "${entry.title}", which isn't secret lore, so it never shows.`);
+          issue("warning", `${path}.lore`, `${e.name}'s cue "${text3}" is for "${entry.title}", which isn't secret lore, so it never shows.`);
       } else if (kind === "track") {
         const track = own(world.tracks, id);
         if (!track)
-          issue("error", `${path}.track`, `${e.name}'s cue "${text}" is for track "${id}", which this world doesn't have.`);
+          issue("error", `${path}.track`, `${e.name}'s cue "${text3}" is for track "${id}", which this world doesn't have.`);
         else if (visibilityOf(track.visibility) === "public" && !Object.values(track.stages).some((s) => s.truth))
-          issue("warning", `${path}.track`, `${e.name}'s cue "${text}" is for "${track.label}", a public track with no truth to reveal, so it never shows.`);
+          issue("warning", `${path}.track`, `${e.name}'s cue "${text3}" is for "${track.label}", a public track with no truth to reveal, so it never shows.`);
       }
-      const lower = text.toLowerCase();
+      const lower = text3.toLowerCase();
       const secret = secrets.find((s) => s.trim() !== "" && lower.includes(s.toLowerCase()));
-      const named = secret === undefined ? hidden.find((h) => h.entity !== e.id && h.said(text)) : undefined;
+      const named = secret === undefined ? hidden.find((h) => h.entity !== e.id && h.said(text3)) : undefined;
       if (secret !== undefined)
-        issue("error", `${path}.text`, `${e.name}'s cue "${text}" gives away a secret ("${secret}"): a cue says how they act, never what they hide.`);
+        issue("error", `${path}.text`, `${e.name}'s cue "${text3}" gives away a secret ("${secret}"): a cue says how they act, never what they hide.`);
       else if (named)
-        issue("warning", `${path}.text`, `${e.name}'s cue "${text}" names "${named.name}", which the player may not know; it is left out while they don't.`);
+        issue("warning", `${path}.text`, `${e.name}'s cue "${text3}" names "${named.name}", which the player may not know; it is left out while they don't.`);
     });
   }
   for (const t of Object.values(world.tracks)) {
@@ -23247,12 +23247,12 @@ function birthdayOf(cal, v) {
   if (!m)
     return null;
   const month = Number(m[2]);
-  const day = Number(m[3]);
+  const day2 = Number(m[3]);
   const year = m[1] === undefined ? null : Number(m[1]);
-  if (month < 1 || month > cal.system.months || day < 1)
+  if (month < 1 || month > cal.system.months || day2 < 1)
     return null;
   const longest = year !== null ? cal.system.monthLength(year, month) : Math.max(...[0, 1, 2, 3].map((y) => cal.system.monthLength(y, month)));
-  return day <= longest ? { month, day, year } : null;
+  return day2 <= longest ? { month, day: day2, year } : null;
 }
 function birthdayOn(cal, v, date) {
   const b = birthdayOf(cal, v);
@@ -23261,11 +23261,11 @@ function birthdayOn(cal, v, date) {
   const last = cal.system.monthLength(date.year, date.month);
   return b.day === date.day || b.day > last && date.day === last;
 }
-function occasionOf(ctx, who, day) {
+function occasionOf(ctx, who, day2) {
   const cal = calendarOf(ctx.world);
-  const date = dateAt(cal, clockAt(cal, day, 0));
+  const date = dateAt(cal, clockAt(cal, day2, 0));
   const weekend = date.weekday === 0 || date.weekday === 6;
-  const holidays = ctx.levelOf(ctx.world.pov, "calendar") >= 4 ? holidaysOn(cal, day).map((h) => ({ id: h.id, label: h.label, dayOff: h.dayOff })) : [];
+  const holidays = ctx.levelOf(ctx.world.pov, "calendar") >= 4 ? holidaysOn(cal, day2).map((h) => ({ id: h.id, label: h.label, dayOff: h.dayOff })) : [];
   const regard = optionalQuery(ctx, "regard");
   const friends = regard ? Object.keys(ctx.state.entities).sort().filter((other) => {
     const e = own(ctx.state.entities, other);
@@ -23279,7 +23279,7 @@ function occasionOf(ctx, who, day) {
     holidays,
     birthday: birthdayOn(cal, own(ctx.state.entities, who)?.fields.birthday, date),
     friends,
-    season: optionalQuery(ctx, "weather.season")?.(ctx, clockAt(cal, day, 12 * 60)) ?? null,
+    season: optionalQuery(ctx, "weather.season")?.(ctx, clockAt(cal, day2, 12 * 60)) ?? null,
     foul: place ? optionalQuery(ctx, "weather.foul")?.(ctx, place) ?? null : null
   };
 }
@@ -23292,14 +23292,14 @@ var NEEDS = {
   fun: { rate: 1, satisfiedBy: ["leisure", "exercise", "drinks", "socialize"], label: "bored", daily: [1200] }
 };
 var NEED_ALERT = 80;
-function satisfies(activity, need) {
-  return own(NEEDS, need)?.satisfiedBy.some((w) => activity.includes(w)) ?? false;
+function satisfies(activity, need2) {
+  return own(NEEDS, need2)?.satisfiedBy.some((w) => activity.includes(w)) ?? false;
 }
-function needIn(ctx, who, need, at, blocks) {
-  const def = own(NEEDS, need);
+function needIn(ctx, who, need2, at, blocks) {
+  const def = own(NEEDS, need2);
   if (!def)
     return 0;
-  const n = objOf(own(objOf(own(ctx.state.entities, who)?.fields.needs), need));
+  const n = objOf(own(objOf(own(ctx.state.entities, who)?.fields.needs), need2));
   if (typeof n.t === "number" || who === ctx.world.pov) {
     const v = numOf(n.v, 20);
     const t = numOf(n.t, minutesBetween(ctx.world.calendar.epoch, ctx.world.start.at));
@@ -23307,7 +23307,7 @@ function needIn(ctx, who, need, at, blocks) {
   }
   let met = -Infinity;
   for (const b of blocks)
-    if (b.start <= at && satisfies(b.activity, need))
+    if (b.start <= at && satisfies(b.activity, need2))
       met = Math.max(met, Math.min(b.end, at));
   if (met === -Infinity) {
     const minute = dateAt(calendarOf(ctx.world), at).minuteOfDay;
@@ -23315,10 +23315,10 @@ function needIn(ctx, who, need, at, blocks) {
   }
   return Math.min(100, def.rate * (at - met) / 60);
 }
-function needValue(ctx, who, need, at = ctx.state.clock) {
-  const recorded = typeof objOf(own(objOf(own(ctx.state.entities, who)?.fields.needs), need)).t === "number";
+function needValue(ctx, who, need2, at = ctx.state.clock) {
+  const recorded = typeof objOf(own(objOf(own(ctx.state.entities, who)?.fields.needs), need2)).t === "number";
   const planned = !recorded && livesPlans(ctx, who);
-  return needIn(ctx, who, need, at, planned ? dayPlan(ctx, who, dateAt(calendarOf(ctx.world), at).dayIndex).blocks : []);
+  return needIn(ctx, who, need2, at, planned ? dayPlan(ctx, who, dateAt(calendarOf(ctx.world), at).dayIndex).blocks : []);
 }
 function within3(dayStart, fromH, toH) {
   return { from: dayStart + fromH * 60, to: dayStart + toH * 60 };
@@ -23339,23 +23339,23 @@ function dayOptions(ctx, who, dayStart) {
   const home = homeOf(ctx, who);
   const cal = calendarOf(ctx.world);
   const hourOf = (t) => dateAt(cal, t).minuteOfDay / 60;
-  const need = (n, t, laid) => level >= 4 ? needIn(ctx, who, n, t, laid) : 0;
+  const need2 = (n, t, laid) => level >= 4 ? needIn(ctx, who, n, t, laid) : 0;
   const pressed = (n, word) => (t, laid) => {
-    const v = need(n, t, laid);
+    const v = need2(n, t, laid);
     return v >= 50 ? [`${word} (${n} ${Math.round(v)})`] : [];
   };
   const occasion = occasionOf(ctx, who, dateAt(cal, dayStart).dayIndex);
   const off = occasion.dayOff;
-  const company = placeOfType(ctx, "conversation", home) ?? home;
+  const company2 = placeOfType(ctx, "conversation", home) ?? home;
   const outdoors = occasion.foul ? home : placeOfType(ctx, "exploration", home) ?? home;
   const outside = (occasion.season === "summer" ? 0.5 : occasion.season === "winter" ? -0.5 : 0) - (occasion.foul ? 1 : 0);
   const unwind = [...off ? ["a day off"] : [], ...occasion.season === "summer" || occasion.season === "winter" ? [occasion.season] : [], ...occasion.foul ? ["bad weather"] : []];
   const options = [
     { id: "sleep", label: "Sleep", activity: "sleep", place: home, duration: 480, repeat: true, reasons: ["night"], utility: (t) => hourOf(t) >= 21.5 || hourOf(t) < 6 ? 10 : 0 },
-    { id: "breakfast", label: "Breakfast", activity: "breakfast", place: home, duration: 30, window: off ? within3(dayStart, 7, 11) : within3(dayStart, 6, 10), utility: (t, laid) => 4 + need("hunger", t, laid) / 20, reasons: off ? ["morning meal", "a slow morning"] : ["morning meal"], because: pressed("hunger", "hungry") },
-    { id: "lunch", label: "Lunch", activity: "lunch", place: company, duration: 45, window: within3(dayStart, 11, 14), utility: (t, laid) => 4 + need("hunger", t, laid) / 20, reasons: ["midday meal"], because: pressed("hunger", "hungry") },
-    { id: "dinner", label: "Dinner", activity: "dinner", place: home, duration: 60, window: within3(dayStart, 17, 21), utility: (t, laid) => 4.5 + need("hunger", t, laid) / 20, reasons: ["evening meal"], because: pressed("hunger", "hungry") },
-    { id: "leisure", label: "Time out", activity: "leisure", place: outdoors, duration: 60, window: within3(dayStart, 9, off ? 22 : 20), utility: (t, laid) => 1.5 + (off ? 1 : 0) + outside + need("fun", t, laid) / 30, reasons: ["unwind", ...unwind], because: pressed("fun", "bored") }
+    { id: "breakfast", label: "Breakfast", activity: "breakfast", place: home, duration: 30, window: off ? within3(dayStart, 7, 11) : within3(dayStart, 6, 10), utility: (t, laid) => 4 + need2("hunger", t, laid) / 20, reasons: off ? ["morning meal", "a slow morning"] : ["morning meal"], because: pressed("hunger", "hungry") },
+    { id: "lunch", label: "Lunch", activity: "lunch", place: company2, duration: 45, window: within3(dayStart, 11, 14), utility: (t, laid) => 4 + need2("hunger", t, laid) / 20, reasons: ["midday meal"], because: pressed("hunger", "hungry") },
+    { id: "dinner", label: "Dinner", activity: "dinner", place: home, duration: 60, window: within3(dayStart, 17, 21), utility: (t, laid) => 4.5 + need2("hunger", t, laid) / 20, reasons: ["evening meal"], because: pressed("hunger", "hungry") },
+    { id: "leisure", label: "Time out", activity: "leisure", place: outdoors, duration: 60, window: within3(dayStart, 9, off ? 22 : 20), utility: (t, laid) => 1.5 + (off ? 1 : 0) + outside + need2("fun", t, laid) / 30, reasons: ["unwind", ...unwind], because: pressed("fun", "bored") }
   ];
   const social = optionalQuery(ctx, "regard");
   let fondness = 0;
@@ -23364,7 +23364,7 @@ function dayOptions(ctx, who, dayStart) {
       if (other !== who && kindIs(ctx.registry, ctx.world, own(ctx.state.entities, other)?.kind ?? "", "person"))
         fondness = Math.max(fondness, social(ctx, who, other));
   }
-  options.push({ id: "socialize", label: "See friends", activity: "socialize", place: company, duration: 90, window: off ? within3(dayStart, 12, 23) : within3(dayStart, 17, 22), utility: (t, laid) => 2.5 + (off ? 1 : 0) - (occasion.foul ? 0.5 : 0) + fondness / 50 + need("social", t, laid) / 25, reasons: ["company", ...fondness >= FOND ? ["a close friend"] : [], ...off ? ["a day off"] : []], because: pressed("social", "lonely") });
+  options.push({ id: "socialize", label: "See friends", activity: "socialize", place: company2, duration: 90, window: off ? within3(dayStart, 12, 23) : within3(dayStart, 17, 22), utility: (t, laid) => 2.5 + (off ? 1 : 0) - (occasion.foul ? 0.5 : 0) + fondness / 50 + need2("social", t, laid) / 25, reasons: ["company", ...fondness >= FOND ? ["a close friend"] : [], ...off ? ["a day off"] : []], because: pressed("social", "lonely") });
   const chores = own(ctx.state.entities, who)?.fields.chores;
   if (Array.isArray(chores)) {
     chores.forEach((raw, i) => {
@@ -23382,50 +23382,50 @@ function dayOptions(ctx, who, dayStart) {
     }
   }
   for (const h of occasion.holidays) {
-    options.push(h.dayOff ? { id: `holiday:${h.id}`, label: h.label, activity: "socialize", place: home, duration: 180, window: within3(dayStart, 12, 20), utility: 5.5, reasons: [h.label] } : { id: `holiday:${h.id}`, label: h.label, activity: "leisure", place: company, duration: 90, window: within3(dayStart, 17, 22), utility: 3, reasons: [h.label] });
+    options.push(h.dayOff ? { id: `holiday:${h.id}`, label: h.label, activity: "socialize", place: home, duration: 180, window: within3(dayStart, 12, 20), utility: 5.5, reasons: [h.label] } : { id: `holiday:${h.id}`, label: h.label, activity: "leisure", place: company2, duration: 90, window: within3(dayStart, 17, 22), utility: 3, reasons: [h.label] });
   }
   if (occasion.birthday)
-    options.push({ id: "birthday", label: "Birthday", activity: "socialize", place: company, duration: 150, window: within3(dayStart, 17, 23), utility: 6.5, reasons: ["their birthday"] });
+    options.push({ id: "birthday", label: "Birthday", activity: "socialize", place: company2, duration: 150, window: within3(dayStart, 17, 23), utility: 6.5, reasons: ["their birthday"] });
   for (const friend of occasion.friends.slice(0, 2)) {
     const theirs = homeOf(ctx, friend);
-    options.push({ id: `birthday:${friend}`, label: "A friend's birthday", activity: "socialize", place: theirs !== null && own(ctx.world.places, theirs) ? theirs : company, duration: 90, window: within3(dayStart, 17, 22), utility: 4 + (social?.(ctx, who, friend) ?? 0) / 50, reasons: ["a friend's birthday"] });
+    options.push({ id: `birthday:${friend}`, label: "A friend's birthday", activity: "socialize", place: theirs !== null && own(ctx.world.places, theirs) ? theirs : company2, duration: 90, window: within3(dayStart, 17, 22), utility: 4 + (social?.(ctx, who, friend) ?? 0) / 50, reasons: ["a friend's birthday"] });
   }
   return options;
 }
-function decisions(state) {
+function decisions(state2) {
   const out = {};
-  for (const [k, v] of Object.entries(objOf(sliceOf(state, "castlife").decisions)))
+  for (const [k, v] of Object.entries(objOf(sliceOf(state2, "castlife").decisions)))
     if (typeof v === "string")
       out[k] = v;
   return out;
 }
-function planFor(ctx, who, day, rng) {
+function planFor(ctx, who, day2, rng) {
   const cal = calendarOf(ctx.world);
-  const start = clockAt(cal, day, 0);
+  const start = clockAt(cal, day2, 0);
   const end = start + MINUTES_PER_DAY;
-  const plan = planDay({ agent: who, start, end, fixed: commitments(ctx, who, start, end), options: dayOptions(ctx, who, start), rng, recorded: decisions(ctx.state) });
+  const plan2 = planDay({ agent: who, start, end, fixed: commitments(ctx, who, start, end), options: dayOptions(ctx, who, start), rng, recorded: decisions(ctx.state) });
   return {
-    day,
-    blocks: plan.blocks.map((b) => {
-      const tie = plan.ties.find((t) => t.at === b.start);
+    day: day2,
+    blocks: plan2.blocks.map((b) => {
+      const tie = plan2.ties.find((t) => t.at === b.start);
       const close = tie ? [tie.via === "seed" ? "close call" : `close call, ${own(ctx.state.entities, who)?.name.split(" ")[0] ?? "they"} chose`] : [];
       return { start: b.start, end: b.end, option: b.option, label: b.label, activity: b.activity, place: b.place, reasons: b.fixed || b.utility <= 0 ? b.reasons : [...b.reasons, `utility ${Math.round(b.utility * 10) / 10}`, ...close], fixed: b.fixed };
     }),
-    ties: plan.ties.map((t) => ({ key: t.key, chosen: t.chosen, via: t.via, options: t.options.map((o) => o.id) })),
-    tieZone: plan.tieZone
+    ties: plan2.ties.map((t) => ({ key: t.key, chosen: t.chosen, via: t.via, options: t.options.map((o) => o.id) })),
+    tieZone: plan2.tieZone
   };
 }
-function dayPlan(ctx, who, day = dateAt(calendarOf(ctx.world), ctx.state.clock).dayIndex) {
-  return planFor(ctx, who, day, createRng(hashParts("castlife.plan", ctx.world.id, who, String(day))));
+function dayPlan(ctx, who, day2 = dateAt(calendarOf(ctx.world), ctx.state.clock).dayIndex) {
+  return planFor(ctx, who, day2, createRng(hashParts("castlife.plan", ctx.world.id, who, String(day2))));
 }
-function held(state, who, target, at) {
-  const until = own(objOf(own(state.entities, who)?.fields.holds), target);
+function held(state2, who, target, at) {
+  const until = own(objOf(own(state2.entities, who)?.fields.holds), target);
   return typeof until === "number" && until > at;
 }
 var ENCOUNTER_CHANCE = 0.25;
 var ACQUAINT_CHANCE = 0.15;
-function acquainted(state, a, b) {
-  return !!own(state.entities, a)?.relations.some((r) => r.type === "regard" && r.to === b) || !!own(state.entities, b)?.relations.some((r) => r.type === "regard" && r.to === a);
+function acquainted(state2, a, b) {
+  return !!own(state2.entities, a)?.relations.some((r) => r.type === "regard" && r.to === b) || !!own(state2.entities, b)?.relations.some((r) => r.type === "regard" && r.to === a);
 }
 function takeUp(ctx, who, place, activity, at, holdUntil) {
   const out = [];
@@ -23484,8 +23484,8 @@ function planInvitation(ctx, who, ask) {
   const given = sliceOf(ctx.state, "castlife").invitations;
   if (!acts2(ctx, ctx.world.pov) || Array.isArray(given) && given.some((i) => objOf(i).key === key))
     return [];
-  const text = invitationText(ctx, who, ask.place, ask.at, ctx.world.pov);
-  return [{ type: "castlife.invitation", data: { agent: who, place: ask.place, at: ask.at, text, key } }, { type: ENGINE_EVENTS.signal, data: { class: "invitation", text, entity: who } }];
+  const text3 = invitationText(ctx, who, ask.place, ask.at, ctx.world.pov);
+  return [{ type: "castlife.invitation", data: { agent: who, place: ask.place, at: ask.at, text: text3, key } }, { type: ENGINE_EVENTS.signal, data: { class: "invitation", text: text3, entity: who } }];
 }
 function planMoments(ctx, who, slot) {
   if (plansOf(ctx, who).length === 0)
@@ -23524,19 +23524,19 @@ function stepAgent(slot, ctx, rngFor, who) {
     return out;
   const level = ctx.levelOf(who, "castlife");
   const cal = calendarOf(ctx.world);
-  const day = dateAt(cal, slot.end).dayIndex;
+  const day2 = dateAt(cal, slot.end).dayIndex;
   const rng = rngFor(who);
-  const plan = dayPlan(ctx, who, day);
-  const block = plan.blocks.find((b) => b.start <= slot.end && slot.end < b.end) ?? plan.blocks[plan.blocks.length - 1];
+  const plan2 = dayPlan(ctx, who, day2);
+  const block = plan2.blocks.find((b) => b.start <= slot.end && slot.end < b.end) ?? plan2.blocks[plan2.blocks.length - 1];
   if (!block)
     return out;
   const pov = ctx.world.pov;
   if (block.activity.startsWith("retrieve:")) {
     const thing = block.activity.slice("retrieve:".length);
     const lent = own(ctx.state.entities, thing)?.fields.owner === who && Object.values(ctx.state.entities).some((x) => x.relations.some((r) => r.type === "uses" && r.to === thing));
-    const retrieve = lent ? optionalService(ctx, "gear.retrieve") : null;
-    if (retrieve) {
-      const got = retrieve(ctx, thing);
+    const retrieve2 = lent ? optionalService(ctx, "gear.retrieve") : null;
+    if (retrieve2) {
+      const got = retrieve2(ctx, thing);
       if (Array.isArray(got))
         out.push(...got, { type: ENGINE_EVENTS.note, data: { text: `${e.name} got ${own(ctx.state.entities, thing)?.name ?? thing} back.`, entity: who, visibility: "known_by" } });
     }
@@ -23545,22 +23545,22 @@ function stepAgent(slot, ctx, rngFor, who) {
   if (level < 4)
     return out;
   if (who === pov) {
-    for (const need of Object.keys(NEEDS)) {
-      if (needValue(ctx, who, need, slot.end) >= NEED_ALERT && needValue(ctx, who, need, slot.start) < NEED_ALERT)
-        out.push({ type: ENGINE_EVENTS.signal, data: { class: "needs", text: `You're getting ${own(NEEDS, need)?.label ?? need}.`, entity: pov } });
+    for (const need2 of Object.keys(NEEDS)) {
+      if (needValue(ctx, who, need2, slot.end) >= NEED_ALERT && needValue(ctx, who, need2, slot.start) < NEED_ALERT)
+        out.push({ type: ENGINE_EVENTS.signal, data: { class: "needs", text: `You're getting ${own(NEEDS, need2)?.label ?? need2}.`, entity: pov } });
     }
     return out;
   }
-  const appraise = optionalService(ctx, "relationship.appraise");
+  const appraise2 = optionalService(ctx, "relationship.appraise");
   const g = rng.fork("encounters");
-  if (appraise && block.place && g.next() < ENCOUNTER_CHANCE) {
-    const here = Object.keys(ctx.state.entities).sort().filter((other) => other !== who && other !== pov && kindIs(ctx.registry, ctx.world, own(ctx.state.entities, other)?.kind ?? "", "person") && placeOfEntity(ctx.state, other) === block.place && acts2(ctx, other));
+  if (appraise2 && block.place && g.next() < ENCOUNTER_CHANCE) {
+    const here = Object.keys(ctx.state.entities).sort().filter((other2) => other2 !== who && other2 !== pov && kindIs(ctx.registry, ctx.world, own(ctx.state.entities, other2)?.kind ?? "", "person") && placeOfEntity(ctx.state, other2) === block.place && acts2(ctx, other2));
     const other = here[Math.floor(g.next() * here.length)];
     if (other) {
       const known = acquainted(ctx.state, who, other);
       const kind = known ? g.next() < 0.1 ? "argument" : "encounter" : g.next() < ACQUAINT_CHANCE ? "greeting" : null;
       if (kind)
-        out.push(...appraise(ctx, who, other, kind, `${kind} at ${own(ctx.world.places, block.place)?.name ?? block.place}`, true));
+        out.push(...appraise2(ctx, who, other, kind, `${kind} at ${own(ctx.world.places, block.place)?.name ?? block.place}`, true));
     }
   }
   for (const a of planAsks(ctx, who))
@@ -23581,8 +23581,8 @@ function stepAgent(slot, ctx, rngFor, who) {
       out.push({ type: ENGINE_EVENTS.choice, data: { key, choice, via: recorded ? "recorded" : "seed", agent: who, options: "invite,stay" } });
     if (choice === "invite") {
       const where = block.place ?? placeOfType(ctx, "conversation", homeOf(ctx, who));
-      const text = invitationText(ctx, who, where, slot.end, pov);
-      out.push({ type: "castlife.invitation", data: { agent: who, place: where, at: slot.end, text, key } }, { type: ENGINE_EVENTS.signal, data: { class: "invitation", text, entity: who } });
+      const text3 = invitationText(ctx, who, where, slot.end, pov);
+      out.push({ type: "castlife.invitation", data: { agent: who, place: where, at: slot.end, text: text3, key } }, { type: ENGINE_EVENTS.signal, data: { class: "invitation", text: text3, entity: who } });
     }
   }
   return out;
@@ -23643,14 +23643,14 @@ var EVENTS3 = [
   {
     type: "castlife.need",
     validate: (e, ctx) => own(ctx.state.entities, strOf(e.data.entity)) && own(NEEDS, strOf(e.data.need)) && typeof e.data.delta === "number" ? null : { code: "bad_event", reason: "need needs an entity, a known need and a delta" },
-    apply: (e, state, ctx) => {
-      const who = own(state.entities, strOf(e.data.entity));
+    apply: (e, state2, ctx) => {
+      const who = own(state2.entities, strOf(e.data.entity));
       if (!who)
         return;
-      const at = numOf(e.data.at, state.clock);
-      const need = strOf(e.data.need);
-      const v = Math.max(0, Math.min(100, needValue(ctx, strOf(e.data.entity), need, at) + numOf(e.data.delta)));
-      who.fields.needs = { ...objOf(who.fields.needs), [need]: { v, t: at } };
+      const at = numOf(e.data.at, state2.clock);
+      const need2 = strOf(e.data.need);
+      const v = Math.max(0, Math.min(100, needValue(ctx, strOf(e.data.entity), need2, at) + numOf(e.data.delta)));
+      who.fields.needs = { ...objOf(who.fields.needs), [need2]: { v, t: at } };
     },
     touches: (e) => [{ entity: strOf(e.data.entity), field: "needs" }],
     describe: (e) => `${strOf(e.data.need).replace(/_/g, " ")} ${numOf(e.data.delta) < 0 ? "eased" : "rose"}`
@@ -23658,16 +23658,16 @@ var EVENTS3 = [
   {
     type: "castlife.decision",
     validate: (e) => strOf(e.data.key) !== "" && strOf(e.data.choice) !== "" ? null : { code: "bad_event", reason: "decision needs key and choice" },
-    apply: (e, state) => {
-      sliceRecord(state, "castlife", "decisions")[strOf(e.data.key)] = strOf(e.data.choice);
+    apply: (e, state2) => {
+      sliceRecord(state2, "castlife", "decisions")[strOf(e.data.key)] = strOf(e.data.choice);
     },
     describe: (e) => `decided ${strOf(e.data.choice)}`
   },
   {
     type: "castlife.invitation",
     validate: (e, ctx) => own(ctx.state.entities, strOf(e.data.agent)) ? null : { code: "missing_entity", reason: "invitation needs an agent" },
-    apply: (e, state) => {
-      const s = mutableSlice(state, "castlife");
+    apply: (e, state2) => {
+      const s = mutableSlice(state2, "castlife");
       const list = Array.isArray(s.invitations) ? s.invitations.slice(-9) : [];
       list.push({ agent: strOf(e.data.agent), place: e.data.place ?? null, at: numOf(e.data.at), text: strOf(e.data.text), ...typeof e.data.key === "string" ? { key: e.data.key } : {} });
       s.invitations = list;
@@ -23692,8 +23692,8 @@ function buildCastView(ctx) {
   const cal = calendarOf(ctx.world);
   const here = placeOfEntity(ctx.state, pov);
   const view = optionalQuery(ctx, "relationships.view");
-  const shown = (id) => canSeeEntity(ctx.registry, ctx.world, ctx.state, pov, id);
-  const groupIds = Object.keys(ctx.state.entities).sort().filter((id) => isGroup(ctx.registry, ctx.world, ctx.state, id) && shown(id));
+  const shown3 = (id) => canSeeEntity(ctx.registry, ctx.world, ctx.state, pov, id);
+  const groupIds = Object.keys(ctx.state.entities).sort().filter((id) => isGroup(ctx.registry, ctx.world, ctx.state, id) && shown3(id));
   const membershipsOf = (who) => groupIds.filter((g) => isMemberOf(ctx.state, who, g)).map((g) => {
     const direct = objOf(own(ctx.state.entities, who)?.relations.find((r) => r.type === MEMBER_OF && r.to === g)?.fields);
     return { id: g, ...typeof direct.role === "string" && direct.role !== "" ? { role: direct.role } : {}, ...typeof direct.rank === "number" ? { rank: direct.rank } : {}, ...typeof direct.since === "string" ? { since: direct.since } : {} };
@@ -23705,8 +23705,8 @@ function buildCastView(ctx) {
     if (!e || id === pov || !kindIs(ctx.registry, ctx.world, e.kind, "person") || isGone(ctx.state, id))
       continue;
     const place = placeOfEntity(ctx.state, id);
-    const present = place !== null && place === here;
-    if (!(present ? shown(id) : playerKnows(ctx.registry, ctx.world, ctx.state, pov, id)))
+    const present2 = place !== null && place === here;
+    if (!(present2 ? shown3(id) : playerKnows(ctx.registry, ctx.world, ctx.state, pov, id)))
       continue;
     const classes = {};
     for (const [facet] of facets) {
@@ -23720,7 +23720,7 @@ function buildCastView(ctx) {
       id,
       name: e.name,
       role: role !== "" ? role : sees("occupation") ? strOf(e.fields.occupation).replace(/_/g, " ") : "",
-      here: present,
+      here: present2,
       tier: e.tier,
       classes,
       groups: membershipsOf(id).map((m) => ({ id: m.id, ...m.role !== undefined ? { role: m.role } : {} }))
@@ -23729,7 +23729,7 @@ function buildCastView(ctx) {
     if (life)
       p.life = life.label;
     const still = life !== null && !life.acts;
-    if (present) {
+    if (present2) {
       if (typeof e.fields.activity === "string" && sees("activity") && !still)
         p.activity = shownActivity(ctx, id, e.fields.activity).replace(/_/g, " ");
       if (sees("place"))
@@ -23742,8 +23742,8 @@ function buildCastView(ctx) {
     const regard = view ? view(ctx, id, pov) : [];
     if (regard.length > 0)
       p.regard = regard;
-    const plan = present && e.agent && !still ? dayPlan(ctx, id) : null;
-    const blocks = plan?.blocks.map((b) => b.option.startsWith(AGENDA_OPTION) && !publicTrack(ctx.world, b.option.slice(AGENDA_OPTION.length)) ? { ...b, label: "Busy", reasons: ["their own business"] } : b);
+    const plan2 = present2 && e.agent && !still ? dayPlan(ctx, id) : null;
+    const blocks = plan2?.blocks.map((b) => b.option.startsWith(AGENDA_OPTION) && !publicTrack(ctx.world, b.option.slice(AGENDA_OPTION.length)) ? { ...b, label: "Busy", reasons: ["their own business"] } : b);
     if (blocks && level >= 3)
       p.timeline = blocks.map((b) => ({ start: formatHHMM(dateAt(cal, b.start).minuteOfDay), end: formatHHMM(dateAt(cal, b.end).minuteOfDay), label: b.label, kind: kindOfBlock(b.activity), reasons: b.reasons }));
     const agenda = agendaFor(ctx.world, ctx.state, id).filter((a) => publicTrack(ctx.world, a.track));
@@ -23754,7 +23754,7 @@ function buildCastView(ctx) {
       p.next = { at: formatClock(cal, next.start), label: next.label };
     people.push(p);
   }
-  const needs = level >= 4 ? Object.entries(NEEDS).map(([need, def]) => ({ need, value: Math.round(needValue(ctx, pov, need)), label: def.label })) : [];
+  const needs = level >= 4 ? Object.entries(NEEDS).map(([need2, def]) => ({ need: need2, value: Math.round(needValue(ctx, pov, need2)), label: def.label })) : [];
   const group = (id) => {
     const g = own(ctx.state.entities, id);
     return { id, name: g?.name ?? id, kind: kindDef(ctx.registry, ctx.world, g?.kind ?? "")?.label ?? g?.kind ?? "" };
@@ -23782,50 +23782,50 @@ function listed(label, clauses) {
 }
 function decidedBlock(ctx, who) {
   const cal = calendarOf(ctx.world);
-  const plan = dayPlan(ctx, who);
-  const dayStart = clockAt(cal, plan.day, 0);
-  const chosen = new Set(plan.ties.filter((t) => t.via === "recorded").map((t) => t.key));
-  const block = plan.blocks.find((b) => b.end > ctx.state.clock && chosen.has(tieKey(who, dayStart, b.start)));
+  const plan2 = dayPlan(ctx, who);
+  const dayStart = clockAt(cal, plan2.day, 0);
+  const chosen = new Set(plan2.ties.filter((t) => t.via === "recorded").map((t) => t.key));
+  const block = plan2.blocks.find((b) => b.end > ctx.state.clock && chosen.has(tieKey(who, dayStart, b.start)));
   if (!block)
     return null;
   const label = block.option.startsWith(AGENDA_OPTION) && !publicTrack(ctx.world, block.option.slice(AGENDA_OPTION.length)) ? "Busy" : block.label;
   return block.start <= ctx.state.clock ? label : `${label} at ${formatHHMM(dateAt(cal, block.start).minuteOfDay)}`;
 }
 function stanceCast(ctx) {
-  const { registry: reg, world, state } = ctx;
+  const { registry: reg, world, state: state2 } = ctx;
   const pov = world.pov;
-  const here = placeOfEntity(state, pov);
+  const here = placeOfEntity(state2, pov);
   const minded = new Set(optionalQuery(ctx, "minds.minded")?.(ctx) ?? []);
-  const people = here === null ? [] : Object.keys(state.entities).sort().filter((id) => id !== pov && placeOfEntity(state, id) === here && kindIs(reg, world, own(state.entities, id)?.kind ?? "", "person") && canSeeEntity(reg, world, state, pov, id) && !isGone(state, id) && povLife(world, state, id)?.acts !== false && !minded.has(id));
+  const people = here === null ? [] : Object.keys(state2.entities).sort().filter((id) => id !== pov && placeOfEntity(state2, id) === here && kindIs(reg, world, own(state2.entities, id)?.kind ?? "", "person") && canSeeEntity(reg, world, state2, pov, id) && !isGone(state2, id) && povLife(world, state2, id)?.acts !== false && !minded.has(id));
   let check = null;
-  const safe = (text) => {
+  const safe = (text3) => {
     if (!check) {
-      const secrets = unrevealedSecrets(reg, world, state);
-      const namesHidden = hiddenNameCheck(reg, world, state, pov);
+      const secrets = unrevealedSecrets(reg, world, state2);
+      const namesHidden = hiddenNameCheck(reg, world, state2, pov);
       check = (t) => findLeaks(t, secrets).length === 0 && !namesHidden(t);
     }
-    return check(text);
+    return check(text3);
   };
   return { people, safe };
 }
 function stanceLines(ctx) {
-  const { registry: reg, world, state } = ctx;
+  const { registry: reg, world, state: state2 } = ctx;
   const pov = world.pov;
   const { people, safe } = stanceCast(ctx);
   const regard = optionalQuery(ctx, "relationships.words");
   const lines = [];
   for (const id of people) {
-    const e = own(state.entities, id);
+    const e = own(state2.entities, id);
     if (!e)
       continue;
-    const known = knows(state, id, pov) || e.relations.some((r) => r.type === "regard" && r.to === pov);
-    const words = regard?.(ctx, id, pov) ?? null;
-    const parts = [`${e.name} ${known ? "knows" : "doesn't know"} you${words ? `; regard: ${words}` : ""}.`];
-    const activity = canSeeField(reg, world, state, pov, id, "activity") ? e.fields.activity : undefined;
+    const known = knows(state2, id, pov) || e.relations.some((r) => r.type === "regard" && r.to === pov);
+    const words2 = regard?.(ctx, id, pov) ?? null;
+    const parts = [`${e.name} ${known ? "knows" : "doesn't know"} you${words2 ? `; regard: ${words2}` : ""}.`];
+    const activity = canSeeField(reg, world, state2, pov, id, "activity") ? e.fields.activity : undefined;
     const doing = typeof activity === "string" && activity !== "idle" ? shownActivity(ctx, id, activity).replace(/_/g, " ") : "";
     if (doing !== "" && safe(doing))
       parts.push(listed("Doing", [doing]));
-    const agenda = agendaFor(world, state, id).filter((a) => publicTrack(world, a.track)).map((a) => {
+    const agenda = agendaFor(world, state2, id).filter((a) => publicTrack(world, a.track)).map((a) => {
       const track = own(world.tracks, a.track);
       const cue = track ? own(track.stages, a.stage)?.cue?.trim() : undefined;
       return cue ? cue : a.stageLabel;
@@ -23864,8 +23864,8 @@ var castlifePack = {
       const out = [];
       const decided = decisions(ctx.state);
       for (const id of Object.keys(ctx.state.entities).sort()) {
-        const plan = own(ctx.state.entities, id)?.agent && acts2(ctx, id) ? dayPlan(ctx, id) : null;
-        for (const t of plan?.ties ?? [])
+        const plan2 = own(ctx.state.entities, id)?.agent && acts2(ctx, id) ? dayPlan(ctx, id) : null;
+        for (const t of plan2?.ties ?? [])
           if (t.via === "seed" && !own(decided, t.key))
             out.push({ key: t.key, agent: id, options: t.options });
       }
@@ -23882,16 +23882,16 @@ var castlifePack = {
         return strOf(inv.agent) === String(host ?? "") && at >= now - 180 && at <= now + MINUTES_PER_DAY;
       });
     });
-    r.formula("need", (ctx, who, need) => needValue(ctx, String(who ?? ctx.world.pov), String(need ?? "")));
+    r.formula("need", (ctx, who, need2) => needValue(ctx, String(who ?? ctx.world.pov), String(need2 ?? "")));
     r.formula("busy", (ctx, who) => {
       const id = String(who ?? "");
       return commitments(ctx, id, ctx.state.clock, ctx.state.clock + 1).length > 0;
     });
     r.effect({ type: "castlife.satisfy", args: ["need", "entity?"], resolve: (a, ctx) => {
       const who = strOf(a.entity) || ctx.world.pov;
-      const need = strOf(a.need);
-      const v = needValue(ctx, who, need);
-      return own(NEEDS, need) && v > 0 ? [{ type: "castlife.need", data: { entity: who, need, delta: -v, at: ctx.state.clock } }] : [];
+      const need2 = strOf(a.need);
+      const v = needValue(ctx, who, need2);
+      return own(NEEDS, need2) && v > 0 ? [{ type: "castlife.need", data: { entity: who, need: need2, delta: -v, at: ctx.state.clock } }] : [];
     } });
     r.effect({ type: "castlife.decide", args: ["key", "choice"], resolve: (a) => [{ type: "castlife.decision", data: { key: strOf(a.key), choice: strOf(a.choice) } }] });
     r.effect({
@@ -23960,7 +23960,7 @@ var castlifePack = {
       check(world) {
         const issues = [];
         for (const e of Object.values(world.entities)) {
-          const owned = Object.values(world.schedules).filter((s) => s.owner === e.id && s.target === "activity");
+          const owned2 = Object.values(world.schedules).filter((s) => s.owner === e.id && s.target === "activity");
           const dated = [
             ...(Array.isArray(e.fields.appointments) ? e.fields.appointments : []).map((raw, i) => ({ path: `entities.${e.id}.fields.appointments.${i}`, label: strOf(objOf(raw).label, "an appointment"), start: numOf(objOf(raw).at, NaN), end: numOf(objOf(raw).at, NaN) + numOf(objOf(raw).minutes, 60), trip: false })),
             ...(Array.isArray(e.fields.trips) ? e.fields.trips : []).map((raw, i) => ({ path: `entities.${e.id}.fields.trips.${i}`, label: strOf(objOf(raw).label, "a trip"), start: numOf(objOf(raw).from, NaN), end: numOf(objOf(raw).until, NaN), trip: true }))
@@ -23974,9 +23974,9 @@ var castlifePack = {
                 issues.push({ severity: "warning", code: "castlife.double_booking", message: `${e.name} is double-booked: ${a.label} and ${b.label} overlap.`, path: b.path });
             if (a.trip)
               continue;
-            for (const s of owned) {
-              const edges = scheduleInstants(world, [s], a.start - MINUTES_PER_DAY, a.end + MINUTES_PER_DAY);
-              const clash = edges.some((x) => x.edge === "start" && x.at < a.end && (edges.find((y) => y.edge === "end" && y.occurrence === x.occurrence)?.at ?? x.at) > a.start);
+            for (const s of owned2) {
+              const edges2 = scheduleInstants(world, [s], a.start - MINUTES_PER_DAY, a.end + MINUTES_PER_DAY);
+              const clash = edges2.some((x) => x.edge === "start" && x.at < a.end && (edges2.find((y) => y.edge === "end" && y.occurrence === x.occurrence)?.at ?? x.at) > a.start);
               if (clash)
                 issues.push({ severity: "warning", code: "castlife.double_booking", message: `${e.name} is double-booked: ${a.label} falls in ${s.id}.`, path: a.path });
             }
@@ -24102,14 +24102,14 @@ var STAT_ALIASES = {
   toughness: "grit",
   willpower: "grit"
 };
-function statId(ctx, text) {
-  const t = text.trim().toLowerCase();
+function statId(ctx, text3) {
+  const t = text3.trim().toLowerCase();
   const stats = statsOf(ctx);
   const hit = stats.find((s) => s.id.toLowerCase() === t || s.label.toLowerCase() === t);
   if (hit)
     return hit.id;
   const alias = own(STAT_ALIASES, t);
-  return alias && stats.some((s) => s.id === alias) ? alias : text;
+  return alias && stats.some((s) => s.id === alias) ? alias : text3;
 }
 var DIFFICULTY_WORDS = { trivial: 5, easy: 8, routine: 8, simple: 8, moderate: 10, medium: 10, average: 10, normal: 10, tricky: 12, hard: 15, difficult: 15, tough: 15, "very hard": 20, "very difficult": 20, heroic: 25, "nearly impossible": 30 };
 var DEFAULT_DIFFICULTY = 10;
@@ -24135,10 +24135,10 @@ function buildSheetView(ctx) {
   const stats = level === 0 || designed ? [] : statsOf(ctx).map((s) => {
     const v = statValue(ctx, pov, s.id);
     const word = statWord(ctx, v);
-    const mod = statMod(v);
+    const mod2 = statMod(v);
     if (level === 1)
       return { label: s.label, value: word };
-    return { label: s.label, value: level >= 3 ? `${v} (${mod >= 0 ? "+" : ""}${mod})` : String(v), detail: word, fix: { entity: pov, field: s.id, type: "number", value: v, min: s.min, max: s.max } };
+    return { label: s.label, value: level >= 3 ? `${v} (${mod2 >= 0 ? "+" : ""}${mod2})` : String(v), detail: word, fix: { entity: pov, field: s.id, type: "number", value: v, min: s.min, max: s.max } };
   });
   const derived = level >= 3 && !designed ? Object.entries(derivedOf(ctx)).map(([id, d]) => ({ label: d.label, value: String(derivedValue(ctx, pov, id)) })) : [];
   const place = povPlace(ctx.registry, ctx.world, ctx.state);
@@ -24248,12 +24248,12 @@ var core_default9 = sheetsPack;
 // node_modules/lumi-rp-engine/src/engine/lore.ts
 var MIN_TERM = 3;
 var STOP_WORDS = Object.fromEntries("the and for with that this from into onto have has had was were are you your yours my mine our ours his her hers their theirs them they she him its not but all any can will would could should about then than there here what when where which who whom how why just very some more most other out over under again also like get got one two too off own same such only each both few nor yet".split(" ").map((w) => [w, true]));
-function plain(text) {
-  const words = text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  return words === "" ? "" : ` ${words} `;
+function plain(text3) {
+  const words2 = text3.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return words2 === "" ? "" : ` ${words2} `;
 }
-function wordsOf2(text) {
-  return plain(text).trim().split(" ").filter((w) => w.length >= MIN_TERM && !hasOwn(STOP_WORDS, w)).map((w) => w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+function wordsOf2(text3) {
+  return plain(text3).trim().split(" ").filter((w) => w.length >= MIN_TERM && !hasOwn(STOP_WORDS, w)).map((w) => w.length > 4 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
 }
 
 // node_modules/lumi-rp-engine/src/packs/story/core/index.ts
@@ -24286,13 +24286,13 @@ function leakyLabels(world) {
     if (p.visibility === "secret" && p.name.length > 3)
       secrets.push(p.name);
   const out = [];
-  const check = (path, text) => {
-    if (!text)
+  const check = (path, text3) => {
+    if (!text3)
       return;
-    const l = text.toLowerCase();
+    const l = text3.toLowerCase();
     for (const s of secrets)
       if (l.includes(s.toLowerCase()) && l !== s.toLowerCase())
-        out.push({ path, text, secret: s });
+        out.push({ path, text: text3, secret: s });
   };
   for (const t of Object.values(world.tracks)) {
     check(`tracks.${t.id}.label`, t.label);
@@ -24356,16 +24356,16 @@ function leakyIds(world, registry) {
   for (const e of Object.values(world.entities)) {
     if (e.visibility === "secret")
       continue;
-    const words = idWords(e.id);
+    const words2 = idWords(e.id);
     const spelt = new Set;
     const gives = [];
     for (const s of secrets) {
       const at = [];
-      for (let i = 0;s.id.length > 0 && i + s.id.length <= words.length; i++)
-        if (s.id.every((w, j) => words[i + j] === w))
+      for (let i = 0;s.id.length > 0 && i + s.id.length <= words2.length; i++)
+        if (s.id.every((w, j) => words2[i + j] === w))
           for (let j = 0;j < s.id.length; j++)
             at.push(i + j);
-      words.forEach((w, i) => {
+      words2.forEach((w, i) => {
         if (s.words.some((n) => w === n || w === `${n}s`))
           at.push(i);
       });
@@ -24377,7 +24377,7 @@ function leakyIds(world, registry) {
     }
     if (gives.length === 0)
       continue;
-    out.push({ path: `entities.${e.id}.id`, id: e.id, secrets: gives, neutral: unused(words.filter((_, i) => !spelt.has(i)).join("_") || e.kind) });
+    out.push({ path: `entities.${e.id}.id`, id: e.id, secrets: gives, neutral: unused(words2.filter((_, i) => !spelt.has(i)).join("_") || e.kind) });
   }
   return out;
 }
@@ -24389,8 +24389,8 @@ function openPuzzles(ctx) {
     const t = own(ctx.world.tracks, id);
     if (t?.kind !== "puzzle" || own(t.stages, own(ctx.state.tracks, id)?.stage ?? t.start)?.answer === undefined)
       return [];
-    const shown = playerTrack(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id);
-    return shown ? [{ id, shown }] : [];
+    const shown3 = playerTrack(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id);
+    return shown3 ? [{ id, shown: shown3 }] : [];
   }).sort((a, b) => a.shown.id < b.shown.id ? -1 : a.shown.id > b.shown.id ? 1 : 0);
 }
 function idShaped(ref) {
@@ -24413,8 +24413,8 @@ function puzzlesFor(ctx, ref) {
   const name = idShaped(ref) ? seenName(ctx, ref.trim()) : null;
   const partsOnly = idShaped(ref) && name === null;
   const want = new Set(wordsOf2(name ?? ref));
-  const scored = open.map(({ id, shown }) => {
-    const seen = new Set(wordsOf2(`${shown.label} ${shown.stage} ${shown.cue ?? ""}`));
+  const scored = open.map(({ id, shown: shown3 }) => {
+    const seen = new Set(wordsOf2(`${shown3.label} ${shown3.stage} ${shown3.cue ?? ""}`));
     return { id, n: [...want].filter((w) => seen.has(w)).length };
   });
   const best = Math.max(0, ...scored.map((s) => s.n));
@@ -24428,11 +24428,11 @@ function puzzlesFor(ctx, ref) {
 }
 function askedFor(ctx, ref) {
   const id = Object.keys(ctx.world.tracks).find((t) => shownTrackId(ctx.world, t) === ref);
-  const shown = id === undefined ? null : playerTrack(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id);
-  if (shown)
-    return shown.label;
-  const words = ref.trim();
-  return idShaped(words) || hasOwn(ctx.world.tracks, words) || hasOwn(ctx.world.tracks, ref) ? null : words;
+  const shown3 = id === undefined ? null : playerTrack(ctx.registry, ctx.world, ctx.state, ctx.world.pov, id);
+  if (shown3)
+    return shown3.label;
+  const words2 = ref.trim();
+  return idShaped(words2) || hasOwn(ctx.world.tracks, words2) || hasOwn(ctx.world.tracks, ref) ? null : words2;
 }
 function askedForGm(ctx, ref) {
   if (ref.trim() === "")
@@ -24457,8 +24457,8 @@ var storyPack = {
     r.event({
       type: "story.flag",
       validate: (e) => strOf(e.data.name) !== "" ? null : { code: "bad_flag", reason: "a flag needs a name" },
-      apply: (e, state) => {
-        const s = mutableSlice(state, "story");
+      apply: (e, state2) => {
+        const s = mutableSlice(state2, "story");
         s.flags = { ...objOf(s.flags), [strOf(e.data.name)]: e.data.value ?? true };
       },
       describe: (e) => `flag ${strOf(e.data.name)}`
@@ -24573,8 +24573,8 @@ function numbers2(v) {
       out[k] = n;
   return out;
 }
-function encounterOf(state) {
-  const raw = sliceOf(state, PACK4).encounter;
+function encounterOf(state2) {
+  const raw = sliceOf(state2, PACK4).encounter;
   if (!isRecord(raw) || typeof raw.id !== "string" || !Array.isArray(raw.order))
     return null;
   const order = [];
@@ -24592,20 +24592,20 @@ function encounterOf(state) {
   const calm = objOf(raw.calm);
   return { id: raw.id, place: typeof raw.place === "string" ? raw.place : null, round: Math.max(1, numOf(raw.round, 1)), turn: Math.max(0, numOf(raw.turn)), order, log, calm: { hp: numbers2(calm.hp), rounds: Math.max(0, numOf(calm.rounds)), struck: calm.struck === true } };
 }
-function writeEncounter(state, enc) {
-  const slice = mutableSlice(state, PACK4);
+function writeEncounter(state2, enc) {
+  const slice2 = mutableSlice(state2, PACK4);
   if (enc)
-    slice.encounter = enc;
+    slice2.encounter = enc;
   else {
-    delete slice.encounter;
-    delete slice.decisions;
+    delete slice2.encounter;
+    delete slice2.decisions;
   }
-  if (Object.keys(slice).length === 0)
-    delete state.packs[PACK4];
+  if (Object.keys(slice2).length === 0)
+    delete state2.packs[PACK4];
 }
-function decisionsOf(state) {
+function decisionsOf(state2) {
   const out = {};
-  for (const [k, v] of Object.entries(objOf(sliceOf(state, PACK4).decisions)))
+  for (const [k, v] of Object.entries(objOf(sliceOf(state2, PACK4).decisions)))
     if (typeof v === "string")
       out[k] = v;
   return out;
@@ -24616,12 +24616,12 @@ function fighterOf(enc, id) {
 function standing(at, enc, f) {
   return !f.down && !isGone(at.state, f.id) && own(at.state.entities, f.id) !== undefined && acts(at.world, at.state, f.id) && placeOfEntity(at.state, f.id) === enc.place;
 }
-function engaged(state, world, id) {
-  const enc = encounterOf(state);
-  return enc !== null && !povLeft(state, world, enc) && fighterOf(enc, id) !== undefined && !isGone(state, id) && placeOfEntity(state, id) === enc.place;
+function engaged(state2, world, id) {
+  const enc = encounterOf(state2);
+  return enc !== null && !povLeft(state2, world, enc) && fighterOf(enc, id) !== undefined && !isGone(state2, id) && placeOfEntity(state2, id) === enc.place;
 }
-function povLeft(state, world, enc) {
-  return placeOfEntity(state, world.pov) !== enc.place;
+function povLeft(state2, world, enc) {
+  return placeOfEntity(state2, world.pov) !== enc.place;
 }
 function readFor(ctx, expr, bindings, fallback) {
   if (expr === undefined || expr === null)
@@ -24690,10 +24690,10 @@ function stalemateRounds(rules) {
   const n = rules.stalemate;
   return typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : STALEMATE_ROUNDS;
 }
-function attacks(ctx, enc, actor, action, target) {
+function attacks(ctx, enc, actor2, action, target) {
   if ((own(ctx.world.actions, action) ?? ctx.registry.actions.get(action))?.combat?.role === "attack")
     return true;
-  const by = fighterOf(enc, actor);
+  const by = fighterOf(enc, actor2);
   const at = target !== null ? fighterOf(enc, target) : undefined;
   return by !== undefined && at !== undefined && by.side !== at.side;
 }
@@ -24728,7 +24728,7 @@ function targetOf(action, params) {
   const v = param ? params[param] : undefined;
   return typeof v === "string" && v !== "" ? v : null;
 }
-function spendFor(ctx, actor, action) {
+function spendFor(ctx, actor2, action) {
   if (!action.combat)
     return [];
   const rules = rulesOf(ctx.world);
@@ -24739,19 +24739,19 @@ function spendFor(ctx, actor, action) {
     return enc && !povLeft(ctx.state, ctx.world, enc) ? { code: "in_fight", reason: "a fight is already under way" } : [];
   if (!enc)
     return { code: "no_fight", reason: "no fight is under way" };
-  const you = actor === ctx.world.pov;
-  const f = fighterOf(enc, actor);
+  const you = actor2 === ctx.world.pov;
+  const f = fighterOf(enc, actor2);
   if (!f)
-    return { code: "not_fighting", reason: you ? "you aren't in this fight" : `${labelOf(ctx, actor)} isn't in this fight` };
+    return { code: "not_fighting", reason: you ? "you aren't in this fight" : `${labelOf(ctx, actor2)} isn't in this fight` };
   if (!standing(ctx, enc, f))
-    return { code: "down", reason: you ? "you are out of the fight" : `${labelOf(ctx, actor)} is out of the fight` };
+    return { code: "down", reason: you ? "you are out of the fight" : `${labelOf(ctx, actor2)} is out of the fight` };
   const cost = costOf2(action);
-  if (enc.order[enc.turn]?.id !== actor && !offTurnCost(rules, cost))
-    return { code: "not_your_turn", reason: you ? "it isn't your turn" : `it isn't ${labelOf(ctx, actor)}'s turn` };
+  if (enc.order[enc.turn]?.id !== actor2 && !offTurnCost(rules, cost))
+    return { code: "not_your_turn", reason: you ? "it isn't your turn" : `it isn't ${labelOf(ctx, actor2)}'s turn` };
   const short = Object.entries(cost).filter(([budget, n]) => (f.left[budget] ?? 0) < n).map(([budget]) => own(rules.economy, budget)?.label ?? budget);
   if (short.length > 0)
     return { code: "spent", reason: `no ${short.join(" or ")} left` };
-  return Object.keys(cost).length > 0 ? [{ type: "combat.spend", data: { encounter: enc.id, who: actor, cost } }] : [];
+  return Object.keys(cost).length > 0 ? [{ type: "combat.spend", data: { encounter: enc.id, who: actor2, cost } }] : [];
 }
 function turnRefill(ctx, rules, id) {
   const out = {};
@@ -24872,9 +24872,9 @@ function asUnit2(w, from, seed) {
       w.events[i] = { ...e, group };
   }
 }
-function record2(w, events, seed) {
+function record2(w, events2, seed) {
   const from = w.events.length;
-  const applied = w.applyAll(events);
+  const applied = w.applyAll(events2);
   if (applied.length > 0)
     runRulesOnEvents(w.reg, w, applied, { seed });
   asUnit2(w, from, seed);
@@ -24927,12 +24927,12 @@ function settle2(w, rules, rng, lines) {
   lines.push(`The fight is over${winner === "party" ? ": your side won" : winner === "foes" ? ": your side lost" : ""}.`);
   return encounterOf(w.state) === null;
 }
-function actEvents(enc, actor, action, params, res) {
-  const acts = action.combat?.start !== true && (Object.keys(costOf2(action)).length > 0 || Object.values(action.outcomes).some((list) => list.some((fx) => fx.type !== "combat.end_turn")));
-  if (!acts)
+function actEvents(enc, actor2, action, params, res) {
+  const acts3 = action.combat?.start !== true && (Object.keys(costOf2(action)).length > 0 || Object.values(action.outcomes).some((list) => list.some((fx) => fx.type !== "combat.end_turn")));
+  if (!acts3)
     return [];
   const target = targetOf(action, params);
-  return [{ type: "combat.act", data: { encounter: enc.id, actor, action: action.id, label: action.label, ...target ? { target } : {}, ...res.check && res.outcome ? { outcome: res.outcome } : {} } }];
+  return [{ type: "combat.act", data: { encounter: enc.id, actor: actor2, action: action.id, label: action.label, ...target ? { target } : {}, ...res.check && res.outcome ? { outcome: res.outcome } : {} } }];
 }
 function advance2(w, rules, rng, lines) {
   const enc = encounterOf(w.state);
@@ -24950,8 +24950,8 @@ function optionKey(o) {
 function turnKey(enc, round, id) {
   return `combat:${enc.id}:${round}:${id}`;
 }
-function fightOptions(reg, world, state, actor) {
-  const enc = encounterOf(state);
+function fightOptions(reg, world, state2, actor2) {
+  const enc = encounterOf(state2);
   if (!enc)
     return [];
   const out = [];
@@ -24959,10 +24959,10 @@ function fightOptions(reg, world, state, actor) {
     const param = targetParam(action);
     if (action.combat?.start === true || param === undefined)
       continue;
-    const targets = param === null ? [null] : enc.order.filter((f) => f.id !== actor && standing({ world, state }, enc, f)).map((f) => f.id);
+    const targets = param === null ? [null] : enc.order.filter((f) => f.id !== actor2 && standing({ world, state: state2 }, enc, f)).map((f) => f.id);
     for (const target of targets) {
       const params = param !== null && target !== null ? { [param]: target } : {};
-      const odds = actionOdds(reg, world, state, { action, actor, params });
+      const odds = actionOdds(reg, world, state2, { action, actor: actor2, params });
       if (odds.available)
         out.push({ action, target, params, odds });
     }
@@ -25005,22 +25005,22 @@ function tacticFor(ctx, rules, enc, me, options) {
   }
   return best?.o ?? null;
 }
-function act(w, rules, actor, chosen, rng, lines) {
+function act(w, rules, actor2, chosen, rng, lines) {
   const enc = encounterOf(w.state);
   if (!enc)
     return false;
   const before = hpAround(w.ctx, rules);
   const from = w.events.length;
-  const res = resolveAction(w.reg, w, { action: chosen.action, actor, params: chosen.params }, rng);
+  const res = resolveAction(w.reg, w, { action: chosen.action, actor: actor2, params: chosen.params }, rng);
   if (!res.ok)
     return false;
   if (res.events.length > 0)
     runRulesOnEvents(w.reg, w, res.events, { seed: rng.seed });
-  const recorded = actEvents(enc, actor, chosen.action, chosen.params, res);
+  const recorded = actEvents(enc, actor2, chosen.action, chosen.params, res);
   record2(w, recorded, rng.seed);
   asUnit2(w, from, rng.seed);
   if (recorded.length > 0)
-    lines.push(`${capital(nameFor2(w.ctx, actor))}: ${chosen.action.label}${chosen.target ? ` \u2192 ${nameFor2(w.ctx, chosen.target)}` : ""}${res.check && res.outcome ? ` (${res.outcome.replace(/_/g, " ")})` : ""}.`);
+    lines.push(`${capital(nameFor2(w.ctx, actor2))}: ${chosen.action.label}${chosen.target ? ` \u2192 ${nameFor2(w.ctx, chosen.target)}` : ""}${res.check && res.outcome ? ` (${res.outcome.replace(/_/g, " ")})` : ""}.`);
   lines.changes(w.ctx, before);
   return true;
 }
@@ -25031,12 +25031,12 @@ function othersTurn(w, rules, rng, lines) {
     return;
   const decided = own(decisionsOf(w.state), turnKey(start, start.round, me.id));
   for (let n = 0;n < ACTS_PER_TURN; n++) {
-    const enc = encounterOf(w.state);
-    const f = enc ? fighterOf(enc, me.id) : undefined;
-    if (!enc || !f || enc.order[enc.turn]?.id !== me.id || enc.round !== start.round || !standing(w, enc, f))
+    const enc2 = encounterOf(w.state);
+    const f = enc2 ? fighterOf(enc2, me.id) : undefined;
+    if (!enc2 || !f || enc2.order[enc2.turn]?.id !== me.id || enc2.round !== start.round || !standing(w, enc2, f))
       return;
     const options = fightOptions(w.reg, w.world, w.state, me.id);
-    const chosen = (n === 0 && decided !== undefined ? options.find((o) => optionKey(o) === decided) : undefined) ?? tacticFor(w.ctx, rules, enc, f, options);
+    const chosen = (n === 0 && decided !== undefined ? options.find((o) => optionKey(o) === decided) : undefined) ?? tacticFor(w.ctx, rules, enc2, f, options);
     if (!chosen || !act(w, rules, me.id, chosen, rng.fork(`act:${n}`), lines))
       break;
     if (settle2(w, rules, rng.fork(`settle:${n}`), lines))
@@ -25149,9 +25149,9 @@ function fightChoices(ctx) {
     const key = turnKey(enc, enc.round + Math.floor((enc.turn + k) / n), f.id);
     if (!standing(ctx, enc, f) || own(decided, key) !== undefined)
       continue;
-    const state = structuredClone(ctx.state);
-    writeEncounter(state, { ...enc, turn: index, order: enc.order.map((p) => p.id === f.id ? { ...p, left: { ...p.left, ...turnRefill(ctx, rules, p.id) } } : p) });
-    const options = fightOptions(ctx.registry, ctx.world, state, f.id);
+    const state2 = structuredClone(ctx.state);
+    writeEncounter(state2, { ...enc, turn: index, order: enc.order.map((p) => p.id === f.id ? { ...p, left: { ...p.left, ...turnRefill(ctx, rules, p.id) } } : p) });
+    const options = fightOptions(ctx.registry, ctx.world, state2, f.id);
     if (options.length < 2)
       continue;
     const labels = {};
@@ -25178,17 +25178,17 @@ function optionOf(ctx, action, params, label) {
     ...odds.available ? {} : { disabled: odds.failed?.code === "requirement" ? "Not possible here and now" : odds.failed?.reason ?? "Not available" }
   };
 }
-function fightOffers(world, state, action) {
+function fightOffers(world, state2, action) {
   if (!action.combat)
     return true;
-  const enc = encounterOf(state);
-  const fighting = enc !== null && !povLeft(state, world, enc);
+  const enc = encounterOf(state2);
+  const fighting = enc !== null && !povLeft(state2, world, enc);
   return action.combat.start === true ? !fighting : fighting;
 }
 function combatEntries(ctx) {
   const found = encounterOf(ctx.state);
   const enc = found && !povLeft(ctx.state, ctx.world, found) ? found : null;
-  const entries = [];
+  const entries2 = [];
   for (const action of combatActions(ctx.registry, ctx.world)) {
     const param = targetParam(action);
     if (!fightOffers(ctx.world, ctx.state, action) || param === undefined)
@@ -25196,9 +25196,9 @@ function combatEntries(ctx) {
     const targets = param === null ? [null] : enc ? enc.order.filter((f) => f.id !== ctx.world.pov && standing(ctx, enc, f) && canSeeEntity(ctx.registry, ctx.world, ctx.state, ctx.world.pov, f.id)).map((f) => f.id) : paramCandidates(ctx.registry, ctx.world, ctx.state, action, param).slice(0, 24);
     const options = targets.map((t) => optionOf(ctx, action, param !== null && t !== null ? { [param]: t } : {}, t !== null ? labelOf(ctx, t) : action.label));
     if (options.length > 0)
-      entries.push({ action: action.id, label: action.label, group: "combat", options });
+      entries2.push({ action: action.id, label: action.label, group: "combat", options });
   }
-  return entries;
+  return entries2;
 }
 function paletteEncounter(ctx) {
   const rules = rulesOf(ctx.world);
@@ -25374,11 +25374,11 @@ var events2 = [
         return reject15("bad_event", "a fight is the POV's side against foes");
       return null;
     },
-    apply(e, state, ctx) {
-      delete mutableSlice(state, PACK4).decisions;
+    apply(e, state2, ctx) {
+      delete mutableSlice(state2, PACK4).decisions;
       const order = orderOf(e.data.order) ?? [];
       const rules = rulesOf(ctx.world);
-      writeEncounter(state, { id: strOf(e.data.encounter), place: typeof e.data.place === "string" ? e.data.place : null, round: 1, turn: 0, order, log: [], calm: { hp: rules ? hpByFighter(ctx, rules, order) : {}, rounds: 0, struck: false } });
+      writeEncounter(state2, { id: strOf(e.data.encounter), place: typeof e.data.place === "string" ? e.data.place : null, round: 1, turn: 0, order, log: [], calm: { hp: rules ? hpByFighter(ctx, rules, order) : {}, rounds: 0, struck: false } });
     },
     describe: (e) => `A fight: ${describeSide(e, "party")} against ${describeSide(e, "foes")}`
   },
@@ -25402,8 +25402,8 @@ var events2 = [
           return reject15("bad_event", "a refill names a participant and its budgets");
       return null;
     },
-    apply(e, state, ctx) {
-      const enc = encounterOf(state);
+    apply(e, state2, ctx) {
+      const enc = encounterOf(state2);
       if (!enc)
         return;
       const round = numOf(e.data.round, enc.round);
@@ -25411,7 +25411,7 @@ var events2 = [
       const rules = rulesOf(ctx.world);
       const now = round > enc.round && rules ? hpByFighter(ctx, rules, enc.order) : null;
       const calm = !now ? enc.calm : !enc.calm.struck && sameHp(now, enc.calm.hp) ? { hp: enc.calm.hp, rounds: enc.calm.rounds + (round - enc.round), struck: false } : { hp: now, rounds: 0, struck: false };
-      writeEncounter(state, {
+      writeEncounter(state2, {
         ...enc,
         round,
         turn: numOf(e.data.turn, enc.turn),
@@ -25440,11 +25440,11 @@ var events2 = [
         return reject15("not_your_turn", `it isn't ${labelOf(ctx, who)}'s turn`);
       return fits(cost, f.left) ? null : reject15("spent", `${labelOf(ctx, who)} has nothing like that left`);
     },
-    apply(e, state) {
-      const enc = encounterOf(state);
+    apply(e, state2) {
+      const enc = encounterOf(state2);
       const cost = counts(e.data.cost) ?? {};
       if (enc)
-        writeEncounter(state, { ...enc, order: enc.order.map((f) => f.id !== strOf(e.data.who) ? f : { ...f, left: Object.fromEntries(Object.entries(f.left).map(([b, n]) => [b, n - (cost[b] ?? 0)])) }) });
+        writeEncounter(state2, { ...enc, order: enc.order.map((f) => f.id !== strOf(e.data.who) ? f : { ...f, left: Object.fromEntries(Object.entries(f.left).map(([b, n]) => [b, n - (cost[b] ?? 0)])) }) });
     },
     describe: (e) => `${strOf(e.data.who)} spends ${Object.keys(objOf(e.data.cost)).join(", ")}`
   },
@@ -25456,14 +25456,14 @@ var events2 = [
         return enc;
       return fighterOf(enc, strOf(e.data.actor)) ? null : reject15("not_fighting", `${labelOf(ctx, strOf(e.data.actor))} isn't in this fight`);
     },
-    apply(e, state, ctx) {
-      const enc = encounterOf(state);
+    apply(e, state2, ctx) {
+      const enc = encounterOf(state2);
       if (!enc)
         return;
       const target = typeof e.data.target === "string" ? e.data.target : null;
       const entry = { round: enc.round, actor: strOf(e.data.actor), action: strOf(e.data.label, strOf(e.data.action)), target, outcome: typeof e.data.outcome === "string" ? e.data.outcome : null };
       const struck = enc.calm.struck || attacks(ctx, enc, entry.actor, strOf(e.data.action), target);
-      writeEncounter(state, { ...enc, log: [...enc.log, entry].slice(-LOG_CAP), calm: { ...enc.calm, struck } });
+      writeEncounter(state2, { ...enc, log: [...enc.log, entry].slice(-LOG_CAP), calm: { ...enc.calm, struck } });
     },
     describe: (e) => `${strOf(e.data.actor)}: ${strOf(e.data.label, strOf(e.data.action))}${typeof e.data.target === "string" ? ` \u2192 ${e.data.target}` : ""}${typeof e.data.outcome === "string" ? ` (${e.data.outcome.replace(/_/g, " ")})` : ""}`
   },
@@ -25479,10 +25479,10 @@ var events2 = [
         return reject15("bad_event", "a fall names a participant");
       return downHolds(ctx, rules, who) === e.data.down ? null : reject15("not_down", e.data.down ? `${labelOf(ctx, who)} isn't down` : `${labelOf(ctx, who)} is still down`);
     },
-    apply(e, state) {
-      const enc = encounterOf(state);
+    apply(e, state2) {
+      const enc = encounterOf(state2);
       if (enc)
-        writeEncounter(state, { ...enc, order: enc.order.map((f) => f.id === strOf(e.data.entity) ? { ...f, down: e.data.down === true } : f) });
+        writeEncounter(state2, { ...enc, order: enc.order.map((f) => f.id === strOf(e.data.entity) ? { ...f, down: e.data.down === true } : f) });
     },
     describe: (e) => `${strOf(e.data.entity)}: ${e.data.down === true ? "down" : "back up"}`
   },
@@ -25501,14 +25501,14 @@ var events2 = [
         return reject15("not_stalemate", rules && stalemateRounds(rules) === 0 ? "this world's fights never peter out" : "someone has attacked or been hurt since");
       return null;
     },
-    apply: (_e, state) => writeEncounter(state, null),
+    apply: (_e, state2) => writeEncounter(state2, null),
     describe: (e) => e.data.reason === "left" ? "You left the fight" : e.data.reason === "stalemate" ? "The fight petered out" : `The fight is over${e.data.winner === "party" ? ": your side won" : e.data.winner === "foes" ? ": your side lost" : ""}`
   },
   {
     type: "combat.decision",
     validate: (e) => strOf(e.data.key) !== "" && strOf(e.data.choice) !== "" ? null : reject15("bad_event", "a decision needs a key and a choice"),
-    apply: (e, state) => {
-      sliceRecord(state, PACK4, "decisions")[strOf(e.data.key)] = strOf(e.data.choice);
+    apply: (e, state2) => {
+      sliceRecord(state2, PACK4, "decisions")[strOf(e.data.key)] = strOf(e.data.choice);
     },
     describe: (e) => `decided ${strOf(e.data.choice)}`
   }
@@ -25627,38 +25627,38 @@ var EMPTY_SLICE = { round: 0, on: false, chars: {}, presence: [] };
 function emptyCharacter() {
   return { mind: null, plans: [], notes: [], commitments: [], witness: [], summary: "", pin: null, refresh: false, lastPresent: null, consolidated: null };
 }
-function readSlice(state) {
-  const raw = state.packs[PACK5];
+function readSlice(state2) {
+  const raw = state2.packs[PACK5];
   if (!raw)
     return EMPTY_SLICE;
   const s = raw;
   return { round: s.round ?? 0, on: s.on ?? false, chars: s.chars ?? {}, presence: s.presence ?? [] };
 }
-function readCharacter(state, id) {
-  return own(readSlice(state).chars, id) ?? emptyCharacter();
+function readCharacter(state2, id) {
+  return own(readSlice(state2).chars, id) ?? emptyCharacter();
 }
-function writeSlice(state) {
-  const s = state.packs[PACK5] ?? {};
+function writeSlice(state2) {
+  const s = state2.packs[PACK5] ?? {};
   s.round ??= 0;
   s.on ??= false;
   s.chars ??= {};
   s.presence ??= [];
   const full = s;
-  state.packs[PACK5] = full;
+  state2.packs[PACK5] = full;
   return full;
 }
-function writeCharacter(state, id) {
-  const s = writeSlice(state);
+function writeCharacter(state2, id) {
+  const s = writeSlice(state2);
   const c = own(s.chars, id) ?? emptyCharacter();
   s.chars[id] = c;
   return c;
 }
-function putPlan(c, plan) {
-  const i = c.plans.findIndex((p) => p.id === plan.id);
+function putPlan(c, plan2) {
+  const i = c.plans.findIndex((p) => p.id === plan2.id);
   if (i >= 0)
-    c.plans[i] = plan;
+    c.plans[i] = plan2;
   else
-    c.plans.push(plan);
+    c.plans.push(plan2);
   boundPlans(c);
 }
 function boundPlans(c) {
@@ -25690,14 +25690,14 @@ function putNote(c, note) {
   else
     c.notes.push(note);
   while (c.notes.length > MINDS_KEEP.notes) {
-    let drop = 0;
+    let drop2 = 0;
     for (let j = 1;j < c.notes.length; j++) {
       const a = c.notes[j];
-      const b = c.notes[drop];
+      const b = c.notes[drop2];
       if (a && b && (a.salience < b.salience || a.salience === b.salience && a.at < b.at))
-        drop = j;
+        drop2 = j;
     }
-    c.notes.splice(drop, 1);
+    c.notes.splice(drop2, 1);
   }
 }
 function addWitness(c, entry) {
@@ -25756,8 +25756,8 @@ var PLAN_STATUSES = ["open", "done", "dropped"];
 var round = {
   type: MINDS_EVENTS.round,
   validate: (e) => finite2(e.data.at) && typeof e.data.on === "boolean" ? null : bad("a minds round needs its clock and whether minds are on"),
-  apply: (e, state) => {
-    const s = writeSlice(state);
+  apply: (e, state2) => {
+    const s = writeSlice(state2);
     s.round += 1;
     s.on = e.data.on === true;
   },
@@ -25776,15 +25776,15 @@ function validMind(data) {
 var mind = {
   type: MINDS_EVENTS.mind,
   validate: (e, ctx) => person(ctx, e.data) ?? validMind(e.data),
-  apply: (e, state) => {
+  apply: (e, state2) => {
     const d = e.data;
     if (!str13(d.entity))
       return;
-    const s = writeSlice(state);
-    const c = writeCharacter(state, d.entity);
+    const s = writeSlice(state2);
+    const c = writeCharacter(state2, d.entity);
     const plans = Array.isArray(d.plans) ? d.plans.filter((p) => isPlan(p)).map(planOf) : [];
-    const record = {
-      at: finite2(d.at) ? d.at : state.clock,
+    const record3 = {
+      at: finite2(d.at) ? d.at : state2.clock,
       round: s.round,
       level: isFidelity(d.level) ? d.level : "background",
       place: str13(d.place) ? d.place : null,
@@ -25799,7 +25799,7 @@ var mind = {
       interrupt: isRecord(d.interrupt) && str13(d.interrupt.reason) ? d.interrupt.reason : null,
       withheld: d.withheld === true
     };
-    c.mind = record;
+    c.mind = record3;
     c.refresh = false;
     for (const p of plans)
       putPlan(c, p);
@@ -25807,8 +25807,8 @@ var mind = {
   describe: (e, ctx, viewer) => viewer !== undefined ? "" : `${nameOf3(ctx, String(e.data.entity))}'s mind (${String(e.data.level)}): ${str13(e.data.intent) && e.data.intent !== "" ? e.data.intent : "no intent"}`
 };
 function validMemory(data) {
-  const { at, notes, commitments, resolved, plans, told, summary } = data;
-  if (!finite2(at) || !Array.isArray(notes) || !notes.every((n) => isNote(n)) || !Array.isArray(commitments) || !commitments.every((c) => isCommitment(c)))
+  const { at, notes, commitments: commitments2, resolved, plans, told, summary } = data;
+  if (!finite2(at) || !Array.isArray(notes) || !notes.every((n) => isNote(n)) || !Array.isArray(commitments2) || !commitments2.every((c) => isCommitment(c)))
     return bad("a memory needs its clock, notes and commitments");
   if (!Array.isArray(resolved) || !resolved.every((r) => isRecord(r) && str13(r.id) && (r.status === "kept" || r.status === "broken" || r.status === "released")))
     return bad("a memory's resolved commitments are malformed");
@@ -25819,13 +25819,13 @@ function validMemory(data) {
 var memory = {
   type: MINDS_EVENTS.memory,
   validate: (e, ctx) => person(ctx, e.data) ?? validMemory(e.data),
-  apply: (e, state) => {
+  apply: (e, state2) => {
     const d = e.data;
     if (!str13(d.entity))
       return;
     const who = d.entity;
-    const at = finite2(d.at) ? d.at : state.clock;
-    const c = writeCharacter(state, who);
+    const at = finite2(d.at) ? d.at : state2.clock;
+    const c = writeCharacter(state2, who);
     for (const n of Array.isArray(d.notes) ? d.notes : [])
       if (isNote(n))
         putNote(c, noteOf(n));
@@ -25848,8 +25848,8 @@ var memory = {
       if (!isRecord(t) || !ids(t.to) || !str13(t.what))
         continue;
       for (const to of t.to)
-        if (to !== who && own(state.entities, to))
-          addWitness(writeCharacter(state, to), { at, what: t.what, how: "told", by: who, place: null });
+        if (to !== who && own(state2.entities, to))
+          addWitness(writeCharacter(state2, to), { at, what: t.what, how: "told", by: who, place: null });
     }
   },
   describe: (e, ctx, viewer) => {
@@ -25863,18 +25863,18 @@ var memory = {
 var presence = {
   type: MINDS_EVENTS.presence,
   validate: (e) => finite2(e.data.at) && (e.data.msg === null || str13(e.data.msg)) && (e.data.place === null || str13(e.data.place)) && ids(e.data.who) && texts(e.data.saw) ? null : bad("a presence record needs its clock, message, place, who and what they saw"),
-  apply: (e, state) => {
+  apply: (e, state2) => {
     const d = e.data;
-    const at = finite2(d.at) ? d.at : state.clock;
+    const at = finite2(d.at) ? d.at : state2.clock;
     const place = str13(d.place) ? d.place : null;
-    const who = ids(d.who) ? d.who.filter((id) => own(state.entities, id)) : [];
-    const s = writeSlice(state);
+    const who = ids(d.who) ? d.who.filter((id) => own(state2.entities, id)) : [];
+    const s = writeSlice(state2);
     s.presence.push({ msg: str13(d.msg) ? d.msg : null, at, place, who: [...who] });
     if (s.presence.length > MINDS_KEEP.presence)
       s.presence.splice(0, s.presence.length - MINDS_KEEP.presence);
     const saw = texts(d.saw) ? d.saw : [];
     for (const id of who) {
-      const c = writeCharacter(state, id);
+      const c = writeCharacter(state2, id);
       c.lastPresent = at;
       for (const what of saw)
         addWitness(c, { at, what, how: "saw", by: null, place });
@@ -25893,20 +25893,20 @@ var planStatus = {
       return missing;
     return readCharacter(ctx.state, String(d.entity)).plans.some((p) => p.id === d.plan) ? null : { code: "missing_plan", reason: "that plan isn't theirs any more" };
   },
-  apply: (e, state) => {
+  apply: (e, state2) => {
     const d = e.data;
-    const c = writeCharacter(state, String(d.entity));
+    const c = writeCharacter(state2, String(d.entity));
     const p = c.plans.find((x) => x.id === d.plan);
     if (!p || typeof d.status !== "string" || !PLAN_STATUSES.includes(d.status))
       return;
     const status = d.status;
-    putPlan(c, { ...p, status, closed: status === "open" ? null : finite2(d.at) ? d.at : state.clock, reason: str13(d.reason) ? d.reason : null });
+    putPlan(c, { ...p, status, closed: status === "open" ? null : finite2(d.at) ? d.at : state2.clock, reason: str13(d.reason) ? d.reason : null });
   },
   describe: (e, ctx, viewer) => {
     if (viewer !== undefined)
       return "";
-    const plan = readCharacter(ctx.state, String(e.data.entity)).plans.find((p) => p.id === e.data.plan);
-    return `${nameOf3(ctx, String(e.data.entity))}'s plan ${plan ? `"${plan.what}"` : String(e.data.plan)}: ${String(e.data.status)}`;
+    const plan2 = readCharacter(ctx.state, String(e.data.entity)).plans.find((p) => p.id === e.data.plan);
+    return `${nameOf3(ctx, String(e.data.entity))}'s plan ${plan2 ? `"${plan2.what}"` : String(e.data.plan)}: ${String(e.data.status)}`;
   }
 };
 function editDef(type, key, valid, list, put, remove) {
@@ -25924,36 +25924,36 @@ function editDef(type, key, valid, list, put, remove) {
         return list(readCharacter(ctx.state, String(d.entity))).some((x) => x.id === id) ? null : { code: `missing_${key}`, reason: `that ${key} isn't theirs any more` };
       return valid(d.value) && isRecord(d.value) && d.value.id === id ? null : bad(`a ${key} edit's value is malformed`);
     },
-    apply: (e, state) => {
+    apply: (e, state2) => {
       const d = e.data;
       const who = String(d.entity);
       if (d.value === null)
-        remove(state, who, String(d[key]));
+        remove(state2, who, String(d[key]));
       else if (d.value !== undefined && valid(d.value))
-        put(state, who, d.value);
+        put(state2, who, d.value);
     },
     describe: (e, ctx, viewer) => viewer !== undefined ? "" : `${nameOf3(ctx, String(e.data.entity))}'s ${key} ${e.data.value === null ? "deleted" : "edited"}`
   };
 }
-var planEdit = editDef(MINDS_EVENTS.planEdit, "plan", isPlan, (c) => c.plans, (state, who, v) => {
+var planEdit = editDef(MINDS_EVENTS.planEdit, "plan", isPlan, (c) => c.plans, (state2, who, v) => {
   if (isPlan(v))
-    putPlan(writeCharacter(state, who), planOf(v));
-}, (state, who, id) => {
-  const c = writeCharacter(state, who);
+    putPlan(writeCharacter(state2, who), planOf(v));
+}, (state2, who, id) => {
+  const c = writeCharacter(state2, who);
   c.plans = c.plans.filter((p) => p.id !== id);
 });
-var noteEdit = editDef(MINDS_EVENTS.noteEdit, "note", isNote, (c) => c.notes, (state, who, v) => {
+var noteEdit = editDef(MINDS_EVENTS.noteEdit, "note", isNote, (c) => c.notes, (state2, who, v) => {
   if (isNote(v))
-    putNote(writeCharacter(state, who), noteOf(v));
-}, (state, who, id) => {
-  const c = writeCharacter(state, who);
+    putNote(writeCharacter(state2, who), noteOf(v));
+}, (state2, who, id) => {
+  const c = writeCharacter(state2, who);
   c.notes = c.notes.filter((n) => n.id !== id);
 });
-var commitmentEdit = editDef(MINDS_EVENTS.commitmentEdit, "commitment", isCommitment, (c) => c.commitments, (state, who, v) => {
+var commitmentEdit = editDef(MINDS_EVENTS.commitmentEdit, "commitment", isCommitment, (c) => c.commitments, (state2, who, v) => {
   if (isCommitment(v))
-    putCommitment(writeCharacter(state, who), commitmentOf(v));
-}, (state, who, id) => {
-  const c = writeCharacter(state, who);
+    putCommitment(writeCharacter(state2, who), commitmentOf(v));
+}, (state2, who, id) => {
+  const c = writeCharacter(state2, who);
   c.commitments = c.commitments.filter((x) => x.id !== id);
 });
 var commitmentStatus = {
@@ -25967,44 +25967,44 @@ var commitmentStatus = {
       return missing;
     return readCharacter(ctx.state, String(d.entity)).commitments.some((x) => x.id === d.commitment) ? null : { code: "missing_commitment", reason: "that commitment isn't theirs any more" };
   },
-  apply: (e, state) => {
+  apply: (e, state2) => {
     const d = e.data;
-    const c = writeCharacter(state, String(d.entity));
+    const c = writeCharacter(state2, String(d.entity));
     const x = c.commitments.find((y) => y.id === d.commitment);
     if (!x || typeof d.status !== "string" || !COMMITMENT_STATUSES.includes(d.status))
       return;
     const status = d.status;
-    putCommitment(c, { ...x, status, closed: status === "open" ? null : finite2(d.at) ? d.at : state.clock });
+    putCommitment(c, { ...x, status, closed: status === "open" ? null : finite2(d.at) ? d.at : state2.clock });
   },
   describe: (e, ctx, viewer) => viewer !== undefined ? "" : `${nameOf3(ctx, String(e.data.entity))}'s commitment: ${String(e.data.status)}`
 };
 var consolidated = {
   type: MINDS_EVENTS.consolidated,
   validate: (e, ctx) => person(ctx, e.data) ?? (finite2(e.data.at) && ids(e.data.notes) && str13(e.data.summary) ? null : bad("a consolidation needs its clock, the notes folded and the summary")),
-  apply: (e, state) => {
+  apply: (e, state2) => {
     const d = e.data;
-    const c = writeCharacter(state, String(d.entity));
+    const c = writeCharacter(state2, String(d.entity));
     const gone = new Set(ids(d.notes) ? d.notes : []);
     c.notes = c.notes.filter((n) => !gone.has(n.id));
     if (str13(d.summary))
       c.summary = d.summary;
-    c.consolidated = finite2(d.at) ? d.at : state.clock;
+    c.consolidated = finite2(d.at) ? d.at : state2.clock;
   },
   describe: (e, ctx, viewer) => viewer !== undefined ? "" : `${nameOf3(ctx, String(e.data.entity))}'s older notes folded into their summary`
 };
 var pin = {
   type: MINDS_EVENTS.pin,
   validate: (e, ctx) => person(ctx, e.data) ?? (e.data.level === null || isFidelity(e.data.level) ? null : bad("a pin is a fidelity level or null")),
-  apply: (e, state) => {
-    writeCharacter(state, String(e.data.entity)).pin = isFidelity(e.data.level) ? e.data.level : null;
+  apply: (e, state2) => {
+    writeCharacter(state2, String(e.data.entity)).pin = isFidelity(e.data.level) ? e.data.level : null;
   },
   describe: (e, ctx, viewer) => viewer !== undefined ? "" : `${nameOf3(ctx, String(e.data.entity))}: fidelity ${e.data.level === null ? "unpinned" : `pinned at ${String(e.data.level)}`}`
 };
 var refresh = {
   type: MINDS_EVENTS.refresh,
   validate: (e, ctx) => person(ctx, e.data),
-  apply: (e, state) => {
-    writeCharacter(state, String(e.data.entity)).refresh = true;
+  apply: (e, state2) => {
+    writeCharacter(state2, String(e.data.entity)).refresh = true;
   },
   describe: (e, ctx, viewer) => viewer !== undefined ? "" : `${nameOf3(ctx, String(e.data.entity))}: a fresh mind next turn`
 };
@@ -26025,8 +26025,8 @@ function mindsOn(ctx) {
 function reject16(code, reason) {
   return { code, reason };
 }
-function capText(text, max) {
-  const t = text.replace(/\s+/g, " ").trim();
+function capText(text3, max) {
+  const t = text3.replace(/\s+/g, " ").trim();
   if (t.length <= max)
     return t;
   const cut = t.slice(0, max + 1);
@@ -26040,15 +26040,15 @@ function peopleIn(ctx, v) {
     return [];
   if (!Array.isArray(v) || !v.every((x) => typeof x === "string"))
     return reject16("bad_value", "who it's with is a list of people");
-  const ids = v;
-  for (const id of ids) {
+  const ids2 = v;
+  for (const id of ids2) {
     const e = own(ctx.state.entities, id);
     if (!e)
       return reject16("missing_entity", `there's no ${labelOf(ctx, id)}`);
     if (!kindIs(ctx.registry, ctx.world, e.kind, "person"))
       return reject16("bad_value", `${e.name} isn't a person`);
   }
-  return [...new Set(ids)];
+  return [...new Set(ids2)];
 }
 function noteFrom(ctx, who, id, v, before) {
   const body = text3(v.text, MIND_TEXT_CAPS.note) ?? before?.text ?? null;
@@ -26082,8 +26082,8 @@ function planFrom(ctx, who, id, v, before) {
   const what = text3(v.what, MIND_TEXT_CAPS.planWhat) ?? before?.what ?? null;
   if (what === null)
     return reject16("bad_value", "a plan needs what it is");
-  const when = v.when === undefined ? before?.when ?? null : typeof v.when === "object" && v.when !== null && !Array.isArray(v.when) ? { from: minutes(v.when.from), to: minutes(v.when.to) } : null;
-  if (!when || when.from === null || when.to === null || when.to < when.from)
+  const when2 = v.when === undefined ? before?.when ?? null : typeof v.when === "object" && v.when !== null && !Array.isArray(v.when) ? { from: minutes(v.when.from), to: minutes(v.when.to) } : null;
+  if (!when2 || when2.from === null || when2.to === null || when2.to < when2.from)
     return reject16("bad_value", "a plan needs when, from and to in game minutes, to not before from");
   const kind = v.kind === undefined ? before?.kind ?? "other" : PLAN_KINDS.includes(v.kind) ? v.kind : null;
   if (kind === null)
@@ -26102,15 +26102,15 @@ function planFrom(ctx, who, id, v, before) {
   if (status === null)
     return reject16("bad_value", "a plan's status is open, done or dropped");
   const closed = status === "open" ? null : before && before.status !== "open" ? before.closed : ctx.state.clock;
-  const money = kind === "pay" || kind === "lend";
+  const money4 = kind === "pay" || kind === "lend";
   const cents = v.cents === undefined ? before?.cents : typeof v.cents === "number" && Number.isInteger(v.cents) && v.cents > 0 ? v.cents : null;
-  if (money && (cents === null || cents === undefined || withList.length === 0))
+  if (money4 && (cents === null || cents === undefined || withList.length === 0))
     return reject16("bad_value", "a pay or lend plan needs an amount in minor units and someone to hand it to");
   return {
     id: id ?? `p_${hashParts("minds.gm.plan", who, String(ctx.state.clock), what).slice(0, 10)}`,
     what,
     kind,
-    when: { from: when.from, to: when.to },
+    when: { from: when2.from, to: when2.to },
     where,
     with: withList,
     priority,
@@ -26119,12 +26119,12 @@ function planFrom(ctx, who, id, v, before) {
     source: before?.source ?? "gm",
     closed,
     reason: status === "open" ? null : before?.reason ?? "GM edit",
-    ...money && cents ? { cents } : {}
+    ...money4 && cents ? { cents } : {}
   };
 }
 function mindEdit(ctx, op) {
-  const { world, state, registry } = ctx;
-  const e = own(state.entities, op.entity);
+  const { world, state: state2, registry } = ctx;
+  const e = own(state2.entities, op.entity);
   if (!e)
     return reject16("missing_entity", `there's no ${labelOf(ctx, op.entity)}`);
   if (op.entity === world.pov || !kindIs(registry, world, e.kind, "person"))
@@ -26133,24 +26133,24 @@ function mindEdit(ctx, op) {
     return [{ type: MINDS_EVENTS.pin, data: { entity: op.entity, level: op.level } }];
   if (op.op === "mind_refresh")
     return [{ type: MINDS_EVENTS.refresh, data: { entity: op.entity } }];
-  const c = readCharacter(state, op.entity);
+  const c = readCharacter(state2, op.entity);
   const value = op.value;
   if (op.part === "note") {
-    const before = op.id === null ? undefined : c.notes.find((n) => n.id === op.id);
-    if (op.id !== null && !before)
+    const before2 = op.id === null ? undefined : c.notes.find((n) => n.id === op.id);
+    if (op.id !== null && !before2)
       return reject16("missing_note", `${e.name} has no such note`);
     if (value === null)
       return op.id === null ? reject16("bad_value", "say which note to delete") : [{ type: MINDS_EVENTS.noteEdit, data: { entity: op.entity, note: op.id, value: null } }];
-    const note = noteFrom(ctx, op.entity, op.id, value, before);
+    const note = noteFrom(ctx, op.entity, op.id, value, before2);
     return "code" in note ? note : [{ type: MINDS_EVENTS.noteEdit, data: { entity: op.entity, note: note.id, value: note } }];
   }
   if (op.part === "commitment") {
-    const before = op.id === null ? undefined : c.commitments.find((x) => x.id === op.id);
-    if (op.id !== null && !before)
+    const before2 = op.id === null ? undefined : c.commitments.find((x) => x.id === op.id);
+    if (op.id !== null && !before2)
       return reject16("missing_commitment", `${e.name} has no such commitment`);
     if (value === null)
       return op.id === null ? reject16("bad_value", "say which commitment to delete") : [{ type: MINDS_EVENTS.commitmentEdit, data: { entity: op.entity, commitment: op.id, value: null } }];
-    const commitment = commitmentFrom(ctx, op.entity, op.id, value, before);
+    const commitment = commitmentFrom(ctx, op.entity, op.id, value, before2);
     return "code" in commitment ? commitment : [{ type: MINDS_EVENTS.commitmentEdit, data: { entity: op.entity, commitment: commitment.id, value: commitment } }];
   }
   const before = op.id === null ? undefined : c.plans.find((p) => p.id === op.id);
@@ -26158,76 +26158,76 @@ function mindEdit(ctx, op) {
     return reject16("missing_plan", `${e.name} has no such plan`);
   if (value === null)
     return op.id === null ? reject16("bad_value", "say which plan to delete") : [{ type: MINDS_EVENTS.planEdit, data: { entity: op.entity, plan: op.id, value: null } }];
-  const plan = planFrom(ctx, op.entity, op.id, value, before);
-  return "code" in plan ? plan : [{ type: MINDS_EVENTS.planEdit, data: { entity: op.entity, plan: plan.id, value: plan } }];
+  const plan2 = planFrom(ctx, op.entity, op.id, value, before);
+  return "code" in plan2 ? plan2 : [{ type: MINDS_EVENTS.planEdit, data: { entity: op.entity, plan: plan2.id, value: plan2 } }];
 }
 
 // node_modules/lumi-rp-engine/src/packs/minds/core/fidelity.ts
 function mindCandidates(ctx) {
-  const { registry: reg, world, state } = ctx;
-  return Object.keys(state.entities).sort().filter((id) => id !== world.pov && kindIs(reg, world, own(state.entities, id)?.kind ?? "", "person") && !isGone(state, id) && acts(world, state, id));
+  const { registry: reg, world, state: state2 } = ctx;
+  return Object.keys(state2.entities).sort().filter((id) => id !== world.pov && kindIs(reg, world, own(state2.entities, id)?.kind ?? "", "person") && !isGone(state2, id) && acts(world, state2, id));
 }
 var NAME_FILLER = { mr: true, mrs: true, ms: true, miss: true, dr: true, sir: true, lady: true, lord: true, dame: true, the: true, of: true, de: true, van: true, von: true, la: true, le: true, old: true, young: true, captain: true, constable: true, father: true, mother: true, sister: true, brother: true, aunt: true, uncle: true };
-function words2(text) {
-  return text.toLowerCase().replace(/['\u2019]s\b/g, "").match(/[\p{L}\p{N}]+/gu) ?? [];
+function words2(text4) {
+  return text4.toLowerCase().replace(/['\u2019]s\b/g, "").match(/[\p{L}\p{N}]+/gu) ?? [];
 }
-function namedIn(name, said) {
-  const own = words2(name);
-  if (own.length === 0 || said.length === 0)
+function namedIn(name, said2) {
+  const own2 = words2(name);
+  if (own2.length === 0 || said2.length === 0)
     return false;
-  const whole = own.join(" ");
-  const joined = ` ${said.join(" ")} `;
-  if (joined.includes(` ${whole} `))
+  const whole4 = own2.join(" ");
+  const joined = ` ${said2.join(" ")} `;
+  if (joined.includes(` ${whole4} `))
     return true;
-  const present = new Set(said);
-  return own.some((w) => w.length >= 3 && !NAME_FILLER[w] && present.has(w));
+  const present2 = new Set(said2);
+  return own2.some((w) => w.length >= 3 && !NAME_FILLER[w] && present2.has(w));
 }
-function namesIn(value, ids, out) {
+function namesIn(value, ids2, out) {
   if (typeof value === "string") {
-    if (ids.has(value))
+    if (ids2.has(value))
       out.add(value);
     let found = [];
     try {
       found = identifiers(value);
     } catch {}
     for (const id of found)
-      if (ids.has(id))
+      if (ids2.has(id))
         out.add(id);
   } else if (Array.isArray(value))
     for (const v of value)
-      namesIn(v, ids, out);
+      namesIn(v, ids2, out);
   else if (isRecord(value))
     for (const v of Object.values(value))
-      namesIn(v, ids, out);
+      namesIn(v, ids2, out);
 }
 var refsCache = new WeakMap;
 function worldRefs(world) {
   const hit = refsCache.get(world);
   if (hit)
     return hit;
-  const ids = new Set(Object.keys(world.entities));
+  const ids2 = new Set(Object.keys(world.entities));
   const tracks = new Map;
   for (const [id, t] of Object.entries(world.tracks)) {
     const out = new Set;
-    namesIn(t.stages, ids, out);
+    namesIn(t.stages, ids2, out);
     if (t.knownBy?.ids) {
       for (const x of t.knownBy.ids)
-        if (ids.has(x))
+        if (ids2.has(x))
           out.add(x);
     }
     tracks.set(id, out);
   }
   const rules = new Set;
   for (const r of Object.values(world.rules))
-    namesIn(r, ids, rules);
+    namesIn(r, ids2, rules);
   const refs = { tracks, rules };
   refsCache.set(world, refs);
   return refs;
 }
-function liveTracks(world, state) {
+function liveTracks(world, state2) {
   return Object.keys(world.tracks).sort().filter((id) => {
     const t = own(world.tracks, id);
-    const stage = currentStage(world, state, id);
+    const stage = currentStage(world, state2, id);
     return t !== undefined && stage !== null && !isTerminal(t, stage);
   });
 }
@@ -26243,15 +26243,15 @@ function reason(out, label, points) {
   return points;
 }
 function pendingWith(ctx, id) {
-  const { world, state } = ctx;
+  const { world, state: state2 } = ctx;
   const pov = world.pov;
   let n = 0;
   const invited = ctx.registry.formulas.get("invited");
   if (invited && invited(ctx, id) === true)
     n++;
-  const now = state.clock;
+  const now = state2.clock;
   const appointments = (who, other) => {
-    const list = own(state.entities, who)?.fields.appointments;
+    const list = own(state2.entities, who)?.fields.appointments;
     return (Array.isArray(list) ? list : []).filter((raw) => {
       const a = objOf(raw);
       const withList = Array.isArray(a.with) ? a.with : [];
@@ -26259,51 +26259,51 @@ function pendingWith(ctx, id) {
     }).length;
   };
   n += appointments(id, pov) + appointments(pov, id);
-  const c = readCharacter(state, id);
+  const c = readCharacter(state2, id);
   n += openPlans(c).filter((p) => p.with.includes(pov) && p.when.to >= now).length;
   n += openCommitments(c).filter((x) => x.with.includes(pov)).length;
   return n;
 }
-function fidelityOf(ctx, texts, config = worldMindsOf(ctx.world)) {
-  const { registry: reg, world, state } = ctx;
+function fidelityOf(ctx, texts2, config3 = worldMindsOf(ctx.world)) {
+  const { registry: reg, world, state: state2 } = ctx;
   const pov = world.pov;
-  const w = config.weights;
-  const here = placeOfEntity(state, pov);
-  const said = words2(`${texts.user}
-${texts.reply}`);
+  const w = config3.weights;
+  const here = placeOfEntity(state2, pov);
+  const said2 = words2(`${texts2.user}
+${texts2.reply}`);
   const refs = worldRefs(world);
-  const tracks = liveTracks(world, state);
+  const tracks = liveTracks(world, state2);
   const regard = optionalQuery(ctx, "regard");
   const out = [];
   for (const id of mindCandidates(ctx)) {
-    const e = own(state.entities, id);
+    const e = own(state2.entities, id);
     if (!e)
       continue;
     const reasons = [];
     let score = 0;
-    const place = placeOfEntity(state, id);
+    const place = placeOfEntity(state2, id);
     if (here !== null && place === here)
       score += reason(reasons, "In the scene", w.here);
     else if (closeBy(world, place, here))
       score += reason(reasons, "Close by", w.nearby);
-    if (namedIn(e.name, said))
+    if (namedIn(e.name, said2))
       score += reason(reasons, "Named this turn", w.mentioned);
     if (regard) {
       const strongest = Math.max(Math.abs(regard(ctx, id, pov)), Math.abs(regard(ctx, pov, id)));
       score += reason(reasons, "Regard with you", w.regard * Math.min(1, strongest / 100));
     }
-    if (knows(state, id, pov) || knows(state, pov, id))
+    if (knows(state2, id, pov) || knows(state2, pov, id))
       score += reason(reasons, "Knows you", w.knows);
-    const owned = tracks.filter((t) => own(world.tracks, t)?.owner === id);
-    if (owned.length > 0)
+    const owned2 = tracks.filter((t2) => own(world.tracks, t2)?.owner === id);
+    if (owned2.length > 0)
       score += reason(reasons, "Owns a story track", w.owner);
-    const named = tracks.filter((t) => own(world.tracks, t)?.owner !== id && refs.tracks.get(t)?.has(id)).length;
+    const named = tracks.filter((t2) => own(world.tracks, t2)?.owner !== id && refs.tracks.get(t2)?.has(id)).length;
     if (named > 0)
       score += reason(reasons, `In ${Math.min(3, named)} story track${named === 1 ? "" : "s"}`, w.track * Math.min(3, named));
     let roles = 0;
     for (const [value, points] of Object.entries(w.roles)) {
-      const held = Object.keys(world.classifications).some((facet) => classValues(world, state, id, facet).some((v) => v === value || valueWithin(world, facet, v, value)));
-      if (held)
+      const held2 = Object.keys(world.classifications).some((facet) => classValues(world, state2, id, facet).some((v) => v === value || valueWithin(world, facet, v, value)));
+      if (held2)
         roles += points;
     }
     score += reason(reasons, "Story role", roles);
@@ -26315,15 +26315,15 @@ ${texts.reply}`);
     const band = tierBand(world, e.tier);
     if (band)
       score += reason(reasons, band === "principal" ? "Lead" : band === "supporting" ? "Supporting" : "Background tier", w.band[band]);
-    const last = Math.max(readCharacter(state, id).lastPresent ?? Number.NEGATIVE_INFINITY, lastSighting(state, id)?.at ?? Number.NEGATIVE_INFINITY);
+    const last = Math.max(readCharacter(state2, id).lastPresent ?? Number.NEGATIVE_INFINITY, lastSighting(state2, id)?.at ?? Number.NEGATIVE_INFINITY);
     if (Number.isFinite(last))
-      score += reason(reasons, "Seen with you lately", w.recent * Math.max(0, 1 - (state.clock - last) / 1440));
-    const gm = readCharacter(state, id).pin;
-    const never = config.never !== null && selectorMatches(reg, world, state, config.never, id);
-    const always = config.always !== null && selectorMatches(reg, world, state, config.always, id);
+      score += reason(reasons, "Seen with you lately", w.recent * Math.max(0, 1 - (state2.clock - last) / 1440));
+    const gm = readCharacter(state2, id).pin;
+    const never = config3.never !== null && selectorMatches(reg, world, state2, config3.never, id);
+    const always = config3.always !== null && selectorMatches(reg, world, state2, config3.always, id);
     const author = never ? "background" : always ? "live" : null;
-    const t = config.thresholds;
-    const atHand = here !== null && place === here || namedIn(e.name, said);
+    const t = config3.thresholds;
+    const atHand = here !== null && place === here || namedIn(e.name, said2);
     const scored = score >= t.live ? atHand ? "live" : "near" : score >= t.near ? "near" : score >= t.far ? "far" : "background";
     if (score >= t.live && !atHand)
       reasons.push({ label: "Not at hand, so Near at most", points: 0 });
@@ -26364,11 +26364,11 @@ function configIssues(world, registry) {
       warn(`minds.${key}`, `"${key}" isn't part of the minds config; nothing reads it.`);
   if (raw.secrecy !== undefined && raw.secrecy !== "full" && raw.secrecy !== "brief")
     err("minds.secrecy", 'Secrecy is "full" (the narrator gets each mind to depict) or "brief" (a leak-checked depiction only); "brief" plays instead.');
-  const number = (path, v, [lo, hi], whole) => {
+  const number = (path, v, [lo, hi], whole4) => {
     if (v === undefined)
       return;
-    if (typeof v !== "number" || !Number.isFinite(v) || v < lo || v > hi || whole && !Number.isInteger(v))
-      err(path, `${whole ? "A whole number" : "A number"} from ${lo} to ${hi}; the default plays instead.`);
+    if (typeof v !== "number" || !Number.isFinite(v) || v < lo || v > hi || whole4 && !Number.isInteger(v))
+      err(path, `${whole4 ? "A whole number" : "A number"} from ${lo} to ${hi}; the default plays instead.`);
   };
   const weights = raw.weights;
   if (weights !== undefined && !isRecord(weights))
@@ -26388,8 +26388,8 @@ function configIssues(world, registry) {
     if (isRecord(roles)) {
       for (const [value, points] of Object.entries(roles)) {
         number(`minds.weights.roles.${value}`, points, MINDS_RANGES.weight, false);
-        const held = Object.values(world.classifications).some((facet) => isRecord(facet.values) && hasOwn(facet.values, value));
-        if (!held)
+        const held2 = Object.values(world.classifications).some((facet) => isRecord(facet.values) && hasOwn(facet.values, value));
+        if (!held2)
           warn(`minds.weights.roles.${value}`, `No classification of this world has a value "${value}", so this weight never counts.`);
       }
     }
@@ -26423,11 +26423,11 @@ function configIssues(world, registry) {
       for (const problem of selectorProblems(registry, world, sel))
         err(`minds.${key}`, `The "${key}" selector ${problem}.`);
   }
-  const memory = raw.memory;
-  if (memory !== undefined && !isRecord(memory))
+  const memory2 = raw.memory;
+  if (memory2 !== undefined && !isRecord(memory2))
     err("minds.memory", "The memory defaults are an object; the built-in defaults play instead.");
-  if (isRecord(memory)) {
-    for (const [part, fields] of Object.entries(memory)) {
+  if (isRecord(memory2)) {
+    for (const [part, fields] of Object.entries(memory2)) {
       const spec = hasOwn(MEMORY_PARTS, part) ? MEMORY_PARTS[part] : undefined;
       if (!spec) {
         warn(`minds.memory.${part}`, `"${part}" isn't a memory layer; nothing reads it.`);
@@ -26472,38 +26472,38 @@ var MINDS_LINTS = [
 ];
 
 // node_modules/lumi-rp-engine/src/packs/minds/core/section.ts
-function clause(text) {
-  return text.replace(/\s+/g, " ").trim().replace(/[.;]+$/, "");
+function clause(text4) {
+  return text4.replace(/\s+/g, " ").trim().replace(/[.;]+$/, "");
 }
 function mindLines(ctx) {
-  const { registry: reg, world, state } = ctx;
-  const slice = readSlice(state);
-  if (!slice.on)
+  const { registry: reg, world, state: state2 } = ctx;
+  const slice2 = readSlice(state2);
+  if (!slice2.on)
     return [];
   const pov = world.pov;
-  const here = placeOfEntity(state, pov);
+  const here = placeOfEntity(state2, pov);
   const secrecy = worldMindsOf(world).secrecy;
   let check = null;
-  const safe = (text) => {
+  const safe = (text4) => {
     if (!check) {
-      const secrets = unrevealedSecrets(reg, world, state);
-      const hidden = hiddenNameCheck(reg, world, state, pov);
+      const secrets = unrevealedSecrets(reg, world, state2);
+      const hidden = hiddenNameCheck(reg, world, state2, pov);
       check = (t) => findLeaks(t, secrets).length === 0 && !hidden(t);
     }
-    return check(text);
+    return check(text4);
   };
   const out = [];
-  for (const id of Object.keys(slice.chars).sort()) {
-    const m = own(slice.chars, id)?.mind;
-    const e = own(state.entities, id);
-    if (!m || !e || m.round !== slice.round || id === pov || isGone(state, id) || !acts(world, state, id))
+  for (const id of Object.keys(slice2.chars).sort()) {
+    const m = own(slice2.chars, id)?.mind;
+    const e = own(state2.entities, id);
+    if (!m || !e || m.round !== slice2.round || id === pov || isGone(state2, id) || !acts(world, state2, id))
       continue;
-    if (m.moment === "beat" && m.at !== state.clock)
+    if (m.moment === "beat" && m.at !== state2.clock)
       continue;
-    const present = here !== null && placeOfEntity(state, id) === here && canSeeEntity(reg, world, state, pov, id);
-    if (!present && m.interrupt === null)
+    const present2 = here !== null && placeOfEntity(state2, id) === here && canSeeEntity(reg, world, state2, pov, id);
+    if (!present2 && m.interrupt === null)
       continue;
-    const name = present || playerKnows(reg, world, state, pov, id) ? e.name : "Someone";
+    const name = present2 || playerKnows(reg, world, state2, pov, id) ? e.name : "Someone";
     if (secrecy === "full") {
       const parts = [`${name}'s mind: ${clause(m.monologue)}.`];
       if (m.intent !== "")
@@ -26548,7 +26548,7 @@ var mindsPack = {
     });
     r.query("minds.minded", minded);
     r.query("minds.on", mindsOn);
-    r.query("minds.fidelity", (ctx, texts) => fidelityOf(ctx, texts));
+    r.query("minds.fidelity", (ctx, texts2) => fidelityOf(ctx, texts2));
     r.renderer({ slot: MINDS_SLOT, render: (ctx) => mindLines(ctx).map((l) => l.line) });
     for (const rule of MINDS_LINTS)
       r.lint(rule);
@@ -52278,8 +52278,8 @@ function parsePointer(pointer) {
     throw new Error(`"${pointer}" isn't a JSON Pointer (it starts with "/", or is "" for the whole draft)`);
   return pointer.slice(1).split("/").map((t) => t.replace(/~1/g, "/").replace(/~0/g, "~"));
 }
-function pointerOf(tokens) {
-  return tokens.map((t) => `/${t.replace(/~/g, "~0").replace(/\//g, "~1")}`).join("");
+function pointerOf(tokens2) {
+  return tokens2.map((t) => `/${t.replace(/~/g, "~0").replace(/\//g, "~1")}`).join("");
 }
 function arrayIndex(token, length, forAdd) {
   if (forAdd && token === "-")
@@ -52291,9 +52291,9 @@ function arrayIndex(token, length, forAdd) {
     throw new Error(`index ${index} is past the end (length ${length})`);
   return index;
 }
-function getAt(doc, tokens) {
+function getAt(doc, tokens2) {
   let at = doc;
-  for (const token of tokens) {
+  for (const token of tokens2) {
     if (Array.isArray(at)) {
       if (!/^(0|[1-9][0-9]*)$/.test(token))
         return;
@@ -52307,13 +52307,13 @@ function getAt(doc, tokens) {
   }
   return at;
 }
-function parentOf(doc, tokens, what) {
-  if (tokens.length === 0)
+function parentOf(doc, tokens2, what) {
+  if (tokens2.length === 0)
     throw new Error(`${what} needs a path inside the draft, not the whole draft`);
-  const parent = getAt(doc, tokens.slice(0, -1));
+  const parent = getAt(doc, tokens2.slice(0, -1));
   if (parent === undefined || !Array.isArray(parent) && !isRecord2(parent))
-    throw new Error(`there is no object or list at ${pointerOf(tokens.slice(0, -1)) || "the top"} to hold it`);
-  return { parent, key: tokens[tokens.length - 1] ?? "" };
+    throw new Error(`there is no object or list at ${pointerOf(tokens2.slice(0, -1)) || "the top"} to hold it`);
+  return { parent, key: tokens2[tokens2.length - 1] ?? "" };
 }
 function jsonEqual(a, b) {
   if (a === b)
@@ -52326,10 +52326,10 @@ function jsonEqual(a, b) {
   }
   return false;
 }
-function insert(doc, tokens, value, replace) {
-  if (tokens.length === 0)
+function insert(doc, tokens2, value, replace) {
+  if (tokens2.length === 0)
     return value;
-  const { parent, key } = parentOf(doc, tokens, replace ? "replace" : "add");
+  const { parent, key } = parentOf(doc, tokens2, replace ? "replace" : "add");
   if (Array.isArray(parent)) {
     const index = arrayIndex(key, parent.length, !replace);
     if (replace)
@@ -52343,18 +52343,18 @@ function insert(doc, tokens, value, replace) {
   if (UNSAFE.has(key))
     throw new Error(`"${key}" can't be a key`);
   if (replace && !hasOwn5(parent, key))
-    throw new Error(`nothing at ${pointerOf(tokens)} to replace (use add)`);
+    throw new Error(`nothing at ${pointerOf(tokens2)} to replace (use add)`);
   parent[key] = value;
   return doc;
 }
-function removeAt(doc, tokens) {
-  const { parent, key } = parentOf(doc, tokens, "remove");
+function removeAt(doc, tokens2) {
+  const { parent, key } = parentOf(doc, tokens2, "remove");
   if (Array.isArray(parent)) {
     parent.splice(arrayIndex(key, parent.length, false), 1);
     return doc;
   }
   if (!isRecord2(parent) || !hasOwn5(parent, key))
-    throw new Error(`nothing at ${pointerOf(tokens)} to remove`);
+    throw new Error(`nothing at ${pointerOf(tokens2)} to remove`);
   delete parent[key];
   return doc;
 }
@@ -52382,15 +52382,15 @@ function applyPatch(doc, ops) {
   let out = structuredClone(doc);
   ops.forEach((op, index) => {
     try {
-      const tokens = parsePointer(op.path);
+      const tokens2 = parsePointer(op.path);
       if (op.op === "add")
-        out = insert(out, tokens, structuredClone(op.value), false);
+        out = insert(out, tokens2, structuredClone(op.value), false);
       else if (op.op === "replace")
-        out = insert(out, tokens, structuredClone(op.value), true);
+        out = insert(out, tokens2, structuredClone(op.value), true);
       else if (op.op === "remove")
-        out = removeAt(out, tokens);
+        out = removeAt(out, tokens2);
       else if (op.op === "test") {
-        if (!jsonEqual(getAt(out, tokens), op.value))
+        if (!jsonEqual(getAt(out, tokens2), op.value))
           throw new Error(`the value at ${op.path || "the top"} isn't the one given`);
       } else {
         const fromTokens = parsePointer(op.from);
@@ -52402,7 +52402,7 @@ function applyPatch(doc, ops) {
             throw new Error("can't move a value into itself");
           out = removeAt(out, fromTokens);
         }
-        out = insert(out, tokens, structuredClone(value), false);
+        out = insert(out, tokens2, structuredClone(value), false);
       }
     } catch (error) {
       throw error instanceof PatchError ? error : new PatchError(index, error instanceof Error ? error.message : String(error));
@@ -52449,10 +52449,10 @@ function migrationIssues(before, world) {
       continue;
     }
     const old = parts(was);
-    const current = parts(now);
-    const keys = [...new Set([...Object.keys(old), ...Object.keys(current)])].filter((k) => !jsonEqual(old[k], current[k]));
+    const current2 = parts(now);
+    const keys = [...new Set([...Object.keys(old), ...Object.keys(current2)])].filter((k) => !jsonEqual(old[k], current2[k]));
     const pick = (from) => Object.fromEntries(keys.filter((k) => hasOwn5(from, k)).map((k) => [k, from[k]]));
-    issues.push({ severity: "warning", path, code: "migrated", message: `${now.name} is in an older shape, ${how}: written ${quote2(pick(old))}, current ${quote2(pick(current))}. Write it the current way.` });
+    issues.push({ severity: "warning", path, code: "migrated", message: `${now.name} is in an older shape, ${how}: written ${quote2(pick(old))}, current ${quote2(pick(current2))}. Write it the current way.` });
   }
   return issues;
 }
@@ -52470,8 +52470,8 @@ function readWorldDoc(input) {
 
 // src/backend/sources.ts
 function chatCharacterIds(chat) {
-  const ids = chat.metadata.group === true && Array.isArray(chat.metadata.character_ids) ? chat.metadata.character_ids.filter((id) => typeof id === "string" && id !== "") : [];
-  return ids.length > 0 ? [...new Set(ids)] : chat.characterId ? [chat.characterId] : [];
+  const ids2 = chat.metadata.group === true && Array.isArray(chat.metadata.character_ids) ? chat.metadata.character_ids.filter((id) => typeof id === "string" && id !== "") : [];
+  return ids2.length > 0 ? [...new Set(ids2)] : chat.characterId ? [chat.characterId] : [];
 }
 function isEngineBook(metadata) {
   return isRecord2(metadata) && metadata.lumi_rp_engine === true;
@@ -52506,9 +52506,9 @@ async function ownChat(host, userId, chatId) {
     throw new Error("That chat isn't one of yours, or it's gone.");
   return chat;
 }
-async function cardsOf(host, userId, ids) {
+async function cardsOf(host, userId, ids2) {
   const out = [];
-  for (const id of ids) {
+  for (const id of ids2) {
     const card = await host.characters.get(id, userId).catch(() => null);
     if (card)
       out.push(card);
@@ -52566,7 +52566,7 @@ class SourceReader {
 }
 
 // docs/ASSISTANT-GUIDE.md
-var ASSISTANT_GUIDE_default = "# Converting chats and lore into a LumiRPEngine world\n\nThis guide is what the Studio's assistant works from, and what you can read to know what it does. A LumiRPEngine world is one JSON document (`lre-world-v1`). Collections are objects keyed by id, and each item's `id` repeats its key. Money is in integer minor units of the world's currency (cents for dollars), and times are ISO local date-times (`2026-09-14T18:30`). Kinds, fields, relation types, effects and formula functions are all in the reference (`reference_lookup`); this guide says how to use them for a conversion.\n\n## The goal\n\nA converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were (the dead where they lie), everyone who has met the POV knows them, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.\n\n## Working order\n\n1. Read the sources first: skim the transcript from the start (`transcript_read` in ranges of 30 to 60), search it for names, places, money and dates (`transcript_search`), read the cards (`cards_read`) and list and read the lore (`lore_list`, `lore_search`, `lore_read`). Read the end of the chat closely: it is the present.\n2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people, then their money (accounts, flows, jobs), then relations, then tracks, lore, schedules, and last the start and calendar.\n3. Run `draft_check` after each batch and fix every error. Keep ids stable: other items refer to them.\n4. Finish with a short answer: what the world holds, what you assumed, what the user should look at.\n\n## The POV\n\n`pov` names the entity the player plays: the chat's user persona, the one the transcript calls \"you\" or the user's character. A new draft has a POV `you` at a place `home`; rename it by writing your own entity and setting `/pov` to its id (then remove `you`), or keep `you` and give it the real name. The POV is a `person` (or a kind that extends `person`) on a lead tier, and never capped by realism.\n\n```json\n{ \"id\": \"rhea\", \"kind\": \"person\", \"name\": \"Rhea Valen\", \"tier\": \"principal\", \"fields\": { \"place\": \"salt_quay\", \"wealth\": \"modest\" }, \"relations\": [] }\n```\n\n## People, tiers and classifications\n\n- **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.\n- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `\"agent\": true` on someone who pursues their own goals off-screen (a rival, a schemer). From Cast life 3 (`castlife` in `/realism/levels`), an agent also lives the plans their mind makes (to go somewhere, to meet someone); anyone else keeps to their schedules, and their mind's plans lapse. A mind's plan to pay or lend someone money is paid either way, from the character's own money.\n- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: \"tending bar\"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. What someone earns is a job (see [Money](#money)). Who someone is goes in fields of their own kind (below): a character's mind reads their entity's fields, never their character card, so move a card's description, personality and manner there. History and background can also go in lore entries linked to them.\n- **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:\n\n```json\n{ \"id\": \"character\", \"label\": \"Character\", \"extends\": \"person\", \"fields\": { \"description\": { \"type\": \"text\", \"label\": \"Description\" }, \"role\": { \"type\": \"text\", \"label\": \"Role\" }, \"traits\": { \"type\": \"list\", \"of\": \"text\", \"label\": \"Traits\" } } }\n```\n\n- **Classifications** sort people for rules and for the GM: a facet with values, optionally nested. Keep a facet hidden (no `\"shown\": true`) when its values would spoil the story (\"villain\").\n\n```json\n{ \"id\": \"role\", \"label\": \"Story role\", \"multiple\": false, \"values\": { \"ally\": { \"label\": \"Ally\" }, \"antagonist\": { \"label\": \"Antagonist\" }, \"villain\": { \"label\": \"Villain\", \"parent\": \"antagonist\" } } }\n```\n\nAn entity holds values in `class` (`\"class\": { \"role\": [\"ally\"] }`) and free tags in `tags`.\n\n- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ \"type\": \"member_of\", \"to\": \"harbor_guild\", \"fields\": { \"role\": \"Quartermaster\" } }`. A `household` can also hold money and share its bills (see [Money](#money)).\n- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `\"dying\"`, someone who died is `\"dead\"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ \"unconscious\": { \"label\": \"Unconscious\", \"acts\": false, \"reads\": \"lies unconscious\" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`. When the POV hasn't learned of a death or a dying, set `lifeKnownBy` to the ids of the people who know, including everyone who starts in the same place as the body; everyone else, the POV too, takes the person for alive until they see it or are told. Leaving `lifeKnownBy` out (or empty) means everyone knows, which tells the player; when nobody else knows yet, list the person themself. Old Bram here died in the net loft, and only Silas knows:\n\n```json\n{ \"id\": \"old_bram\", \"kind\": \"person\", \"name\": \"Old Bram\", \"tier\": \"supporting\", \"life\": \"dead\", \"lifeKnownBy\": [\"silas\"], \"fields\": { \"place\": \"net_loft\" }, \"relations\": [] }\n```\n\n- **Cues** are what the narrator sees someone do while a secret of theirs stays hidden. Each cue stands for exactly one secret: a secret `track` (while it hides something), a secret `lore` entry (until its gate holds) or a story `flag` (until it is set). Write behaviour, never the secret, and name no one the POV doesn't know.\n\n```json\n\"cues\": [{ \"text\": \"Changes the subject whenever the guild comes up.\", \"track\": \"silas_debt\" }]\n```\n\n- **Ids keep secrets too.** The player's views carry the ids of what the player acts on (an account, a flow, a job), so keep a secret entity's or place's id (`\"visibility\": \"secret\"`) out of every other entity's id, and any word of four letters or more from its name that no person or place the player can see shares: while Danny Okafor is secret, `bill_danny_rent` gives him away and `bill_rent` doesn't (`draft_check` warns, `story.leaky_id`, and suggests an id that names no one). A secret track's own id is safe: the player's quest log shows a stand-in for it.\n\n## Character minds\n\nA character can have a **mind**: a model call made as that character alone, from what they know (their entity's fields, the lore they may read, the turns they were there for, their notes and commitments, their money and their day, and their own secrets whole), which answers with their private read of the moment and what they intend, for the narrator to depict. Minds are blind to each other, and a mind reads its character's fields, never a character card, so write who each person is into their fields (see [your own kinds](#people-tiers-and-classifications)). What a mind plans is lived only by an agent (see Tiers there).\n\nEach turn a focus score puts each character on a ladder: **Live** (a mind every turn), **Near** and **Far** (a mind on their refresh) or **Background** (routine only). The score counts being in the POV's scene or close by, being named, a relation with the POV, a stake in tracks and rules under way, plans with the POV, and the person's tier. The world tunes it in `/minds`; every part is optional, and one left out reads as its default:\n\n```json\n{ \"secrecy\": \"brief\", \"weights\": { \"mentioned\": 50 }, \"thresholds\": { \"live\": 60, \"near\": 35, \"far\": 15 }, \"always\": { \"ids\": [\"silas\"] }, \"never\": { \"tag\": [\"crowd\"] }, \"memory\": { \"notes\": { \"show\": 10, \"keep\": 30 }, \"salience\": { \"halfLifeDays\": 14 } } }\n```\n\n- `secrecy` decides what reaches the narrator. `brief` (the default) gives only what anyone present could see, withheld where it would give away a secret or a name the POV can't know; `full` gives the character's thoughts and intent too. A mind knows its own character's secrets, so keep `brief` unless no one has a secret they would think about.\n- `weights` are the points each input adds, from \u2212100 to 200 (`here` 45, `nearby` 20, `mentioned` 40, `regard` 10, `knows` 10, `owner` 15, `track` 8, `rule` 5, `pending` 15, `recent` 10, `band` per tier band, and `roles` per classification value, `antagonist` 20 by default); `thresholds` are the lowest scores for Live, Near and Far (60, 35 and 15). Only someone in the POV's scene or named this turn is ever Live: anyone else, close by or not, is Near at most, whatever their score.\n- `always` and `never` are selectors (`ids`, `kind`, `tier`, `memberOf`, `tag`, `class`): `always` keeps someone Live wherever they are, and `never` keeps them in the background without a mind, winning over `always`. Name only ids, kinds, tiers, groups and classification values the world has.\n- `memory` sets what a mind is shown and how long a note lasts: `notes.show` (8) and `notes.keep` (24 before the oldest fold into a summary), `witness.show`, `recall`, `commitments.show`, `salience.halfLifeDays` (7 game days) and `consolidate`.\n\nThe defaults suit most worlds: pin the people the story turns on with `always`, and keep crowds out with `never`. A world can give minds its own voice with a step template in `/steps` of purpose `mind`, `memory`, `skip` or `consolidate`, one per purpose: `\"output\": \"text\"`, `\"signals\": []`, and a `template` holding the step's instructions only, where `{{character}}` is the character's name and `{{world}}` the world's. The engine adds the answer's format itself, so write how to think, never the JSON.\n\n```json\n{ \"id\": \"mind_port_veil\", \"purpose\": \"mind\", \"output\": \"text\", \"signals\": [], \"template\": \"You are the private mind of {{character}} in {{world}}, a salt port where debts outlive names. Think as {{character}}, from only what they know below. Decide how they read this moment and what they intend; never script anyone else.\" }\n```\n\n## Places, routes and maps\n\n- **Places** form a tree with `parent`: a region holds a town, a town its streets and buildings, a building its rooms. Give each a `name`, and a `fields.description` when the story describes it. A place the POV hasn't heard of yet gets `\"visibility\": \"discoverable\"`; a hidden one `\"secret\"`.\n\n```json\n{ \"id\": \"salt_quay\", \"name\": \"Salt Quay\", \"parent\": \"port_veil\", \"fields\": { \"description\": \"Tar-black pilings and fish crates.\" } }\n```\n\n- **Routes** join places the story travels between, with minutes per mode (`walk`, `road`, `offroad`, `water`). Estimate from the story: a few minutes across a town, an hour on foot between villages.\n\n```json\n{ \"id\": \"quay_to_market\", \"from\": \"salt_quay\", \"to\": \"market_row\", \"modes\": { \"walk\": { \"minutes\": 6 } }, \"bidirectional\": true }\n```\n\n- **Maps** draw a place's inside. A grid map's `layout` rows use `#` for walls, `.` for floor, `+` for doors and legend letters for rooms; a node map lists `places` and `links`. Draw one only when the story's space matters (a house, a ship, a dungeon). A map owns the places, grid and routes it compiles: edit the map, never what it made. `guide_lookup map` and `reference_lookup lre-map` for the details.\n\n## Money\n\nMoney is entities, a few fields and the economy pack's config. Amounts are whole minor units of the world's currency (4250 is $42.50) and percentages are percent units (22 is 22 %). Write money only in the shapes below: a `bills` list, a single `owner` or a `type` on an account, pay fields on a person (`hourly_cents`, `payday`, `deposit_to`) and `units` of a `symbol` on a brokerage account are older shapes, which `draft_check` warns about (`migrated`).\n\n- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ \"code\": \"GP\", \"symbol\": \"gp\", \"minorUnit\": \"copper\", \"decimals\": 2, \"format\": \"{sign}{amount} gp\" }`.\n- **How much runs** is `/realism/levels/money`, capped by a person's tier (never the POV's). At 1 a person's `wealth` band is all there is: set it from how the story treats them. At 2 their cash and one everyday account are real, and a payment they can't cover is declined. From 3 all their accounts run, with flows, cards, payment preferences, household shares, living costs, withholding on pay and property; from 4 statements, interest, fees, late payments, credit scores, cash only at a machine or a branch, holds, daily card limits, overdraft policies, tax brackets, sales and business tax and investments. A new draft is at 1: raise it to 2 when the story counts cash, and to 3 when it has wages, rent, cards or property.\n- **The economy config.** A new draft has no `/packs/economy`: add it whole once, `{ \"version\": 1, \"config\": {} }`. Its config holds `products` (the world's own account products), `features` (a feature switched on or off for this world by its id, `{ \"flows\": true }`: from Money 2 for `flows`, `cards`, `payment_prefs`, `households`, `living_costs`, `atm`, `daily_limits` and `overdraft`, from Money 3 for the rest), `assets` (what holdings are in), `region` (the world's region, a row of the regions data table such as `mi`, which sets its tax rates and cost of living) and `taxes` (`exempt`, the categories no sales tax falls on, and `corporatePct`). Add a map whole the first time (`/packs/economy/config/products` with its first product in it), then each further entry by its own path (`/packs/economy/config/products/<id>`): adding the whole map again replaces it, and every entry in it.\n- **Who owns money.** A party is a person, or an entity of kind `business`, `trust` or `household`. Every account, business, holding and property lists its holders in `fields.owners`, each `{ \"party\": \"rhea\", \"role\": \"owner\" }`: `owner` and `joint` spend, manage and count it; `authorized_user` only spends; `custodian` and `trustee` spend and manage it for a `beneficiary`, who counts it. A `share` (a percent) divides its worth between the holders who count it; given by none, they share equally. Managing an account is setting up and changing what it pays (its standing payments and autopay) and its cards. Whoever holds a managing role (`owner`, `joint`, `custodian` or `trustee`) on a business or a trust also manages every account that business or trust holds with a managing role, without a role on the account. Spending from it still takes a role on the account itself, such as `authorized_user`, and it counts toward their worth only through their share of the business.\n- **Money someone only manages** is run for whom it is, never for the manager. That is a business's or a trust's account they hold no spending role on, or the business or trust paying as a party. In play, LumiRPEngine holds its characters to this rule when they set up standing payments and autopay, hire, raise pay and bill, so write money as they could have set it up:\n  - No flow from such money, nor a `fallback` on it, pays the manager, even where some of the money is theirs. Nor does it pay their household or its members, or a party any of those counts the worth of (a business they own, a trust they benefit from), unless the money is for that party too: payments among whom the money is for are the money's own, such as a business's savings topping up its operating account, or a trust paying its beneficiary though she's of its trustee's household. Money wholly someone's own (a business they own outright) may pay their other businesses, though still never them or their household.\n  - Even so, it lands in no account the manager can spend by a role of their own (an authorized user's card, a custodian's or a trustee's), unless the money is wholly theirs, or every holder of that account's worth is one of the people the money ends with, other than the manager: a trust's beneficiary, or a business's owner. A business the money passes through on its way to them isn't one of them: where a caf\xE9 belongs to a company Maya owns, the caf\xE9's custodian, who holds cards on the company's till and on Maya's checking, may pay the caf\xE9's money into Maya's checking but not into the company's till. A share of the money isn't enough: the half-owner of a shop who holds a card on its till can't sweep the shop's savings into it, while its outright owner can. So a trust pays its beneficiary into her own account that its trustee is custodian of, but no one it isn't for into an account he is custodian of. A payment to someone in the world counts where it lands, in their deposit account (a business's operating account), as well as by who they are, so paying the company is paying into its till.\n  - An owner takes money out for themselves by a salary (a job at the business), its payouts (`distribution_pct`) or a draw in play, never by a flow to them or their household. A manager with no share of a business (a custodian, a trustee) puts neither themselves nor their household on its payroll; with a share, they may, as a salary is theirs to take. Unless the business is wholly theirs, they pay no one else there into an account they can spend (the worker's deposit account, or one of theirs a `splits` entry pays), unless every holder of that account's worth is one of the people the business's money ends with, such as another owner.\n  - A business someone runs for others is never billed by one that is theirs, nor by one whose operating account they can spend.\n  - A credit account's `autopay_from` is its debtor's own money: an account they can spend from, or whose worth is theirs (a business's loan from the business's account, a custodial card from the custodial savings).\n\n### Accounts and cards\n\nAn `account` is one purse, wallet, bank account, card account, loan or investment account: `owners`, `product`, `institution` (the bank's name) and `opening`, the balance **now**, at the story's present, from the holder's side (a debt is negative). Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.\n\n```json\n{ \"id\": \"rhea_checking\", \"kind\": \"account\", \"name\": \"Rhea's checking\", \"tier\": \"background\", \"fields\": { \"owners\": [{ \"party\": \"rhea\", \"role\": \"owner\" }], \"product\": \"checking\", \"institution\": \"Harbor Savings\", \"opening\": 182000 }, \"relations\": [] }\n```\n\n`product` is a class, each a built-in product (`cash`, `checking`, `business_checking`, `savings`, `money_market`, `cd`, `trust`, `escrow`, `credit_card`, `charge_card`, `line_of_credit`, `loan`, `mortgage`, `brokerage`, `retirement`), or one of the world's own products by id: a `class` with its terms (`label`, `institution`, `limit`, `apr_pct`, `apy_pct`, \u2026). An account's own `limit`, `apr_pct`, `apy_pct`, `statement_day`, `due_day`, `payment`, `months_left` and `overdraft` win over its product's, and `autopay` (`minimum`, `statement`, `full` or `fixed`) with `autopay_from` pays a credit account by itself:\n\n```json\n\"products\": { \"harbor_visa\": { \"label\": \"Harbor Savings Visa\", \"class\": \"credit_card\", \"institution\": \"Harbor Savings\", \"limit\": 300000, \"apr_pct\": 21.9 } }\n```\n\n```json\n{ \"id\": \"rhea_visa\", \"kind\": \"account\", \"name\": \"Harbor Visa\", \"tier\": \"background\", \"fields\": { \"owners\": [{ \"party\": \"rhea\", \"role\": \"owner\" }], \"product\": \"harbor_visa\", \"opening\": -12500, \"autopay\": \"statement\", \"autopay_from\": \"rhea_checking\" }, \"relations\": [] }\n```\n\nA **card** is an entity of its own, kind `card`: the `account` it draws on, its `holder` (one of that account's owners; an `authorized_user` holds a card on someone else's account), `network` (`debit`, `credit` or `charge`), `state` (`active`, `frozen`, `lost` or `cancelled`) and optionally `item`, the card in the holder's gear.\n\n```json\n{ \"id\": \"rhea_debit\", \"kind\": \"card\", \"name\": \"Rhea's debit card\", \"tier\": \"background\", \"fields\": { \"account\": \"rhea_checking\", \"holder\": \"rhea\", \"network\": \"debit\" }, \"relations\": [] }\n```\n\n### Flows\n\nA **flow** is every scheduled or one-off movement of money: rent, a bill, a transfer to savings, an allowance, a loan payment, income from outside. Each is an entity of kind `flow`:\n\n- `flow_kind`: `transfer`, `bill`, `rent`, `utility`, `subscription`, `premium`, `loan_payment`, `card_payment`, `savings`, `income`, `payroll`, `allowance`, `living`, `tax`, `distribution`, `invoice`, `draw` or `other`.\n- `from` and `to`: an account; a party (paying as their preferences choose, or paid into their account); or an outside payer or payee in words (`\"Harbor Lets\"`). An id-shaped word that names no entity (`rhea_chequing`) draws a warning: it is read as an outside party, so the money would come from or go to nowhere.\n- The amount, the first of `amount_cents`, `amount_formula`, `amount_table`, `amount_min` with `amount_max` (a draw between them), `amount_pct` of `amount_of`'s balance, and `amount_due` (`minimum`, `statement` or `balance` of the credit account it pays).\n- When: `every` (`day`, `week`, `month` or `year`) with `interval` (biweekly is `week` with 2), `weekdays` (0 is Sunday), `days` of the month (\u22121 is the last) and `months`, at `at` (`HH:MM`); or `once`, a local date-time. `start`, `end` and `count` bound it.\n- `shortfall`, when the money isn't there: `skip` (the default), `partial`, `retry` (after `retry_days`, up to `retries` times), `fallback` (from `fallback`: another account the payer may spend from, by id; nothing else is drawn on, and a `fallback` that isn't in the world is an error), `overdraft` or `defer`.\n- `link` ties it to what it belongs to (a property, a job, a loan), `splits` sends parts elsewhere, and `shares` splits a household's flow between its members.\n\n```json\n{ \"id\": \"rhea_boat_fund\", \"kind\": \"flow\", \"name\": \"Boat fund\", \"tier\": \"background\", \"fields\": { \"flow_kind\": \"savings\", \"from\": \"rhea_checking\", \"to\": \"rhea_savings\", \"amount_cents\": 4000, \"every\": \"week\", \"interval\": 2, \"weekdays\": [5] }, \"relations\": [] }\n```\n\nA **household** (kind `household`, its members holding `member_of` toward it) is a party too. Where household shares run (Money 3, or from 2 with `households` switched on), a flow from it with `shares` has each member pay their percent from their own money; below that, its payer pays it whole. This one is also a **lease**: a `rent` flow from the tenants to the owner, `link`ed to the property.\n\n```json\n{ \"id\": \"valen_rent\", \"kind\": \"flow\", \"name\": \"Rent on the Valen flat\", \"tier\": \"background\", \"fields\": { \"flow_kind\": \"rent\", \"from\": \"valen_household\", \"to\": \"silas\", \"amount_cents\": 140000, \"every\": \"month\", \"days\": [1], \"shares\": [{ \"party\": \"rhea\", \"pct\": 60 }, { \"party\": \"teo\", \"pct\": 40 }], \"shortfall\": \"retry\", \"retry_days\": 3, \"retries\": 2, \"link\": \"valen_flat_property\" }, \"relations\": [] }\n```\n\n### Work, business and tax\n\nA **job** is one person's employment, kind `job`: `worker`; `employer` (a business entity, a place, or an outside employer in words; an id-shaped one that names no one and no place draws a warning); `workplace`; `title`; `basis` (`salary`, `hourly`, `per_shift`, `commission`, `tips` or `stipend`) with `rate` (a year's salary, the hourly rate or the pay per shift); and `pay_every`: `weekly` or `biweekly` (on `pay_weekday`, or counted from the first payday, `pay_anchor`), `semimonthly` or `monthly` (on `pay_days`), `per_job` or `custom`. `hours` says what hourly and per-shift pay count: `scheduled` (the worker's scheduled shifts at the workplace), `attended` (the shifts the POV turns up for) or `contract` (`hours_per_week` or `shifts_per_week`); left out, it is `attended` for the POV and `scheduled` for anyone else with a routine at the job, else `contract`. `splits` sends pay across the worker's accounts, a `contractor` has nothing withheld, and `season_from` and `season_to` (`MM-DD`), `start` and `end` bound it.\n\n```json\n{ \"id\": \"rhea_pilot_job\", \"kind\": \"job\", \"name\": \"Harbor pilot\", \"tier\": \"background\", \"fields\": { \"worker\": \"rhea\", \"employer\": \"Port Veil Pilots\", \"workplace\": \"salt_quay\", \"title\": \"Harbor pilot\", \"basis\": \"hourly\", \"rate\": 3800, \"hours\": \"contract\", \"hours_per_week\": 30, \"pay_every\": \"biweekly\", \"pay_anchor\": \"2026-09-18\" }, \"relations\": [] }\n```\n\nA **business** is kind `business`: `owners`, the `places` it trades at (a purchase there pays it), its `operating_account` (an account it owns), `collects_sales_tax`, `margin_pct`, and what it pays its owners (`distribution_pct`, `distribution_every`). Its Money level is its tier's cap, as a person's is, so put it on the `principal` tier for all of it to run (sales tax and business taxes need Money 4). Whoever holds a managing role on it (`owner`, `joint`, `custodian` or `trustee`) runs it: hires, ends jobs and sets pay, issues and voids its invoices, pays out its profit, and manages its accounts' standing payments, autopay and cards; an `owner` or `joint` owner also takes draws, unless its `structure` is `c_corp`. An employee runs none of it. To spend the business's money themselves (its card at a shop, say), an owner needs a role on the account too, such as `authorized_user`. An **invoice** it is owed is kind `invoice`: `business`, `customer` (a party, or an outside customer in words), `cents`, `memo`, `issued`, `due` and `state` (`open`, `paid`, `late` or `void`).\n\n```json\n{ \"id\": \"chandlery\", \"kind\": \"business\", \"name\": \"Net Loft Chandlery\", \"tier\": \"principal\", \"fields\": { \"owners\": [{ \"party\": \"silas\", \"role\": \"owner\" }], \"places\": [\"net_loft\"], \"operating_account\": \"chandlery_checking\", \"collects_sales_tax\": true }, \"relations\": [] }\n```\n\n```json\n{ \"id\": \"chandlery_invoice_rhea\", \"kind\": \"invoice\", \"name\": \"Rope and fittings\", \"tier\": \"background\", \"fields\": { \"business\": \"chandlery\", \"customer\": \"rhea\", \"cents\": 18000, \"memo\": \"Rope and fittings\", \"issued\": \"2026-09-01\", \"due\": \"2026-10-01\", \"state\": \"open\" }, \"relations\": [] }\n```\n\n**Tax** reads a person's `filing_status` (`single`, `married_filing_jointly` or `head_of_household`) and `local_tax`, and their own `region` field for income tax, else the config's `region`; sales tax reads a place's `sales_tax_pct`, `tax_region` and `tax_exempt` (categories), or an enclosing place's, else the config's `region` and `taxes`. With no region anywhere, the national row's rates apply.\n\n### Holdings and property\n\nAn **asset** is defined once, in `/packs/economy/config/assets` by id: `label`, `class` (`security`, `fund`, `bond`, `option`, `property`, `business_stake`, `crypto` or `other`), an optional `symbol`, its `price` per unit at the start, and how it moves and pays (`annual_return_pct`, `annual_volatility_pct`, `yield_pct`). A **holding**, kind `holding`, is a position in one asset: in an `account` (a `brokerage` or `retirement` one) or held directly by its `owners`, with `lots` (each `qty`, its total `cost` and when it was bought, `at`) and `route` for what it pays out (an account id, or `reinvest`).\n\n```json\n\"assets\": { \"glix\": { \"label\": \"Great Lakes Index Fund\", \"class\": \"fund\", \"symbol\": \"GLIX\", \"price\": 11240, \"yield_pct\": 1.6 } }\n```\n\n```json\n{ \"id\": \"rhea_glix\", \"kind\": \"holding\", \"name\": \"Great Lakes Index Fund\", \"tier\": \"background\", \"fields\": { \"account\": \"rhea_brokerage\", \"asset\": \"glix\", \"lots\": [{ \"qty\": 20, \"cost\": 196000, \"at\": \"2025-03-02\" }], \"route\": \"reinvest\" }, \"relations\": [] }\n```\n\nA **property**, kind `property`, is real estate tied to a `place`: `owners`, its `value` now, `appreciation_pct` a year, `purchase_price` and `purchased`, and its upkeep (`tax_pct` of value a year, `insurance` a month, `upkeep_pct` a year). A **mortgage** is an account of product `mortgage` whose `secured_by` names the property, and the property's `mortgage` names the account back.\n\n```json\n{ \"id\": \"valen_flat_property\", \"kind\": \"property\", \"name\": \"The Valen flat\", \"tier\": \"background\", \"fields\": { \"place\": \"valen_flat\", \"owners\": [{ \"party\": \"silas\", \"role\": \"owner\" }], \"value\": 18500000, \"appreciation_pct\": 3, \"mortgage\": \"silas_mortgage\" }, \"relations\": [] }\n```\n\n```json\n{ \"id\": \"silas_mortgage\", \"kind\": \"account\", \"name\": \"Mortgage on the Valen flat\", \"tier\": \"background\", \"fields\": { \"owners\": [{ \"party\": \"silas\", \"role\": \"owner\" }], \"product\": \"mortgage\", \"opening\": -9200000, \"payment\": 98000, \"months_left\": 214, \"secured_by\": \"valen_flat_property\" }, \"relations\": [] }\n```\n\n### Paying\n\n- **`pay_prefs`**, a person field, orders how they pay: tiers of `use` (`cash`, `debit`, `credit`, `charge`, `checking`, `savings`, or a card or account id), each for amounts from `min` to `max` and for `categories`, but not those in `except`. Left out, they follow the person's wealth band and `traits`: a frugal or careful person keeps to cash and debit longer, an impulsive or flashy one reaches for credit first.\n\n```json\n\"pay_prefs\": [{ \"use\": \"cash\", \"max\": 2000 }, { \"use\": \"debit\", \"max\": 50000 }, { \"use\": \"rhea_visa\", \"categories\": [\"travel\"] }]\n```\n\n- **Cash machines and branches** are place fields: `atm`, `{ \"bank\": \"Harbor Savings\", \"fee\": 300, \"limit\": 40000 }` (`fee` the machine's own charge, `limit` the most one withdrawal takes, `deposits` whether it takes them), and `branch`, `{ \"bank\": \"Harbor Savings\" }`, a counter where that bank's customers withdraw and deposit. `bank` is the institution as the accounts name it. Where cash machines run (Money 4, or from 2 where the world switches `atm` on), cash comes out and goes in only at one of the two, and only once the world places at least one `atm` or `branch`: place none and cash moves freely at every level.\n\n## Calendar and the start\n\n- `/start` is where and when play begins: `{ \"place\": \"salt_quay\", \"at\": \"2026-09-14T18:30\" }`, the POV's place and the story's present. Put the POV's `fields.place` at the same place.\n- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier (with an invented calendar, exactly the start day). Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).\n- Read the present from the transcript: the last date, weekday, time of day or season it states, or what the events imply (\"the next morning\" after a night scene). If the story never says, pick a plausible date and say so.\n- An invented calendar uses `\"system\": \"custom\"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`). Set its `epoch` to midnight of the start's own day (`0412-08-25T00:00`): LumiRPEngine counts the start's clock from the epoch as an ordinary calendar would, so any day between them would shift the date the player sees in the invented months.\n- `dayParts` name the parts of the day (`{ \"id\": \"morning\", \"label\": \"Morning\", \"start\": \"06:00\" }`).\n\n## Relations and regard\n\n- **Regard** is how one person feels about another, one directed relation with three axes from \u2212100 to 100: `warmth`, `trust` and `respect`. Write both directions when both matter; they differ more often than not. Calibrate from the story: 0 is a stranger, \xB120 an acquaintance's lean, \xB150 strong feeling, \xB180 and beyond for the defining bonds and feuds.\n\n```json\n{ \"type\": \"regard\", \"to\": \"rhea\", \"fields\": { \"warmth\": 35, \"trust\": 10, \"respect\": 40 } }\n```\n\n- **Knowledge.** `{ \"type\": \"knows\", \"to\": \"harbor_guild\" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.\n- **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ \"type\": \"knows\", \"to\": \"rhea\" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger (\"Silas doesn't know you.\"), so a person the POV spent the chat with would greet them as one.\n- **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.\n- **Things** are where they are: `fields.place` for something lying somewhere, `{ \"type\": \"in\", \"to\": \"rhea\" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns. Money is owned differently, through `owners` (see [Money](#money)).\n\n## Quests and secrets as tracks\n\nA track is a small state machine: `start` names its first stage, and each stage's `next` lists `{ \"to\": stage, \"when\": formula }`. Formulas read the world: `at(pov, 'archive')`, `stage(track)`, `knows(pov, 'silas')`, `flag('vault_opened')`, `balance('rhea_purse') >= 5000`, `holds(pov, 'rhea_visa')` (any role on it, or it is theirs), `manages(pov, 'chandlery')` (a business or trust they run, or an account they manage), `hour >= 18`. `reference_lookup formula` lists them all.\n\n- **Quests** are what the POV is pursuing. Start the track at the stage the story has **reached**, not at its beginning; earlier stages can stay for completeness, but `start` is today's stage. Give that stage a `cue` (what the player knows now) and `objectives` (`{ \"label\": \"Find the ledger\", \"when\": \"flag('ledger_found')\" }`). A quest whose stage has no `next` is finished.\n\n```json\n{ \"id\": \"lost_ledger\", \"kind\": \"quest\", \"label\": \"The lost ledger\", \"visibility\": \"public\", \"start\": \"searching\", \"stages\": {\n  \"searching\": { \"label\": \"Searching the archive\", \"cue\": \"Silas swears the ledger left the archive in May.\", \"next\": [{ \"to\": \"found\", \"when\": \"flag('ledger_found')\" }] },\n  \"found\": { \"label\": \"The ledger is found\", \"next\": [] } } }\n```\n\n- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above), and make them the track's `owner`: the owner's mind, and the mind of anyone with a cue that stands for it, knows its truths whatever the player has found out.\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"cue\": \"Silas flinches whenever the guild is mentioned.\", \"next\": [{ \"to\": \"known\", \"when\": \"at(pov, 'guild_office')\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **A secret the POV has already learned** must still be revealed in play. A track starts with nothing revealed, and the engine records a reveal only when a stage is entered, so a track that starts on its truth stage stays hidden: the Journal never shows it, and the narrator is kept from saying what the player already knows. Start it one stage earlier instead, and make that stage move on at once: `\"next\": [{ \"to\": \"known\", \"when\": \"true\" }]`. The first turn enters the truth stage and reveals it. Never start a secret track on a stage that has a `truth`.\n\n```json\n{ \"id\": \"silas_debt\", \"kind\": \"secret\", \"label\": \"What Silas owes\", \"visibility\": \"secret\", \"owner\": \"silas\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"next\": [{ \"to\": \"known\", \"when\": \"true\" }] },\n  \"known\": { \"label\": \"Silas owes the guild\", \"truth\": \"Silas borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`). The player answers a puzzle through their quest log, which reaches only puzzles they can see. An action or rule of the world's that answers one names it by its own id, written out, with the `story.answer` effect's `track`: `{ \"type\": \"story.answer\", \"args\": { \"track\": \"study_safe\", \"answer\": \"1887\" } }`. Never give `track` a formula (`draft_check` warns, `story.answer_track`): the puzzle it gives is answered even where the player can't see it. To let the player say which puzzle, pass their words as `puzzle` instead, as the built-in Answer action does (`\"puzzle\": \"=params.puzzle\"`): it is read through their quest log, so it never reaches a puzzle they can't see.\n\n## Lore entries with audiences\n\nLore is what the world knows, for the engine's helpers: places' histories, people's backgrounds, customs, factions. Convert each useful lore-book entry and each fact the chat established into an entry with a title, the text, `keys`, `aliases` (other names), `topics`, and `links` (the ids of the people and places it is about).\n\n```json\n{ \"id\": \"lore_port_veil\", \"title\": \"Port Veil\", \"content\": \"A salt-trading port of nine thousand\u2026\", \"keys\": [\"Port Veil\", \"the port\"], \"aliases\": [\"the Veil\"], \"topics\": [\"places\"], \"links\": [\"port_veil\"] }\n```\n\n- `\"visibility\": \"known_by\"` keeps an entry to what the POV knows (they must know every linked person and place).\n- A **secret** entry holds a secret itself: `\"secret\": true` with a `gate` formula (`\"stage('silas_debt') == 'known'\"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator. Name in `holders` the people whose own secret it is: their minds read it, gate or no gate, and so does the mind of anyone with a cue that stands for it. No other mind ever reads a secret entry, whatever links it or opens its gate.\n- A public entry must never repeat a track's truth (lint error `secret_truth`).\n- Keep macros (`{{user}}`, `{{char}}`) out of lore unless the source used them on purpose: the engine lists them for review on install.\n\n## Schedules\n\nSchedules give people routines: where they are (`target: \"place\"`) or what they do (`target: \"activity\"`) by time of day and weekday. The owner is an entity, a group, a kind or a selector. Base them on what the story shows (\"the baker opens at dawn\"); invent plausible ones for the rest of the cast only when it helps.\n\n```json\n{ \"id\": \"mara_days\", \"owner\": \"mara\", \"target\": \"place\", \"recurrence\": { \"every\": \"week\", \"weekdays\": [1, 2, 3, 4, 5] },\n  \"slots\": [{ \"start\": \"06:00\", \"end\": \"14:00\", \"value\": \"bakery\" }, { \"start\": \"14:00\", \"end\": \"22:00\", \"value\": \"mara_house\" }] }\n```\n\n## Realism and the rest\n\n- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money when the story counts money (see [Money](#money)), Relationships when feelings drive it. A chat can change levels later.\n- Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).\n- **Data tables.** A new draft carries LumiRPEngine's seventeen default data tables (`/tables`: prices, pay, taxes, occupations, regions, gear, vehicles and the calendar's holidays, all Modern US), so a `region`, an `occupation` or an `amount_table` reads from them at once. Leave the tables as they are, with each one's `revision` and `/pins`: LumiRPEngine works a table's revision and pin out again only when Build edits it, so a table changed here would keep its old ones. When the setting needs other prices or pay, say so in your answer: the user adapts the tables in Build after installing.\n\n## Refining a world in play\n\nWhen the source chat already plays a world (`chat_state` says so), the draft starts from that world's head and becomes its **next revision**; the chat keeps running on its revision until the player chooses Upgrade in LumiRPEngine (**Settings \u2192 Pins and upgrade**), which shows every change and lets them take or keep each one. So:\n\n- Keep every id the chat uses. Renaming an id makes a new thing and strands the old one.\n- `chat_state` lists a secret quest under the stand-in id the player's quest log gives it (`~` and a hash), never its own: find the track itself with `engine_read`.\n- Add what the story introduced since the world was made: new people, places, quests, lore.\n- Fix definitions (a name, a description, a tier) freely; for state the chat has moved on (where someone is, a balance, a quest's stage), the Upgrade keeps the chat's value by default, which is usually right.\n- Don't remove what the chat still uses: the Upgrade keeps removed people unless the player picks Remove.\n- Install it as **a new revision** of the same world.\n\n## Before finishing\n\n- `draft_check` has no errors.\n- The POV exists, stands at the start place, and the start time is the story's present.\n- Every id an item names (a place, an owner, a relation target, a track in a formula) exists.\n- Everyone who has met the POV holds a `knows` or a `regard` toward them.\n- Each person's `life` is their state at the present, and the dead and dying are at the place they lie.\n- A death or dying the POV hasn't learned of sets `lifeKnownBy` to who knows, with everyone who starts where the body lies; left out, it tells the player.\n- Every thing someone owns names them in `fields.owner`, and every account, business, holding and property names its holders in `fields.owners`.\n- Every flow and job pays from and to something that exists (an id, or an outside party in words), with an amount and a schedule (`every`, or `once`).\n- No money is in an older shape: `draft_check` shows no `migrated` warning.\n- No id gives a secret away: `draft_check` shows no `story.leaky_id` warning.\n- Money someone only manages pays for whom it is, never for its manager or their household; nor, unless it's wholly theirs, does it land in an account they can spend whose worth isn't all held by the people it ends with.\n- A world whose minds run in full (`\"secrecy\": \"full\"`) has no secret a character would think about openly.\n- Openings are today's balances, and quests start at the stage the story reached.\n- No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: \"true\"`, so the first turn reveals it.\n- No public text gives a secret away, and no cue states the secret it stands for.\n";
+var ASSISTANT_GUIDE_default = "# Converting chats and lore into a LumiRPEngine world\n\nThis guide is what the Studio's assistant works from, and what you can read to know what it does. A LumiRPEngine world is one JSON document (`lre-world-v1`). Collections are objects keyed by id, and each item's `id` repeats its key. Money is in integer minor units of the world's currency (cents for dollars), and times are ISO local date-times (`2026-09-14T18:30`). Kinds, fields, relation types, effects and formula functions are all in the reference (`reference_lookup`); this guide says how to use them for a conversion.\n\n## The goal\n\nA converted world starts where the story is now. When the chat attaches it, the engine begins at the chat's latest message: the POV stands where the story left them, the clock reads the story's present, balances are what they are today, people stand where they last were (the dead where they lie), everyone who has met the POV knows them, quests sit at the stage the story reached, and secrets the POV has learned are revealed on the first turn (see [Quests and secrets as tracks](#quests-and-secrets-as-tracks)). Nothing that already happened is replayed. The world only has to be true from now on.\n\n## Working order\n\n1. Read the sources first: skim the transcript from the start (`transcript_read` in ranges of 30 to 60), search it for names, places, money and dates (`transcript_search`), read the cards (`cards_read`) and list and read the lore (`lore_list`, `lore_search`, `lore_read`). Read the end of the chat closely: it is the present.\n2. Decide the POV, the places and the cast before writing anything, then write in batches with `draft_patch`: places and routes, then people, then their money (accounts, flows, jobs), then relations, then tracks, lore, schedules, and last the start and calendar.\n3. Run `draft_check` after each batch and fix every error. Keep ids stable: other items refer to them.\n4. Finish with a short answer: what the world holds, what you assumed, what the user should look at.\n\n## The POV\n\n`pov` names the entity the player plays: the chat's user persona, the one the transcript calls \"you\" or the user's character. A new draft has a POV `you` at a place `home`; rename it by writing your own entity and setting `/pov` to its id (then remove `you`), or keep `you` and give it the real name. The POV is a `person` (or a kind that extends `person`) on a lead tier, and never capped by realism.\n\n```json\n{ \"id\": \"rhea\", \"kind\": \"person\", \"name\": \"Rhea Valen\", \"tier\": \"principal\", \"fields\": { \"place\": \"salt_quay\", \"wealth\": \"modest\" }, \"relations\": [] }\n```\n\n## People, tiers and classifications\n\n- **Who goes in.** Everyone the story names who could matter again: a lead, a recurring face, someone owed money or a favor. Leave out passers-by; the engine introduces new people as the story does.\n- **Tiers** say how deeply someone is simulated. The default tiers are `principal` (Leads), `supporting` and `background`. Put the POV and the people the story turns on in `principal`, recurring characters in `supporting`, shopkeepers and the like in `background`. Set `\"agent\": true` on someone who pursues their own goals off-screen (a rival, a schemer). From Cast life 3 (`castlife` in `/realism/levels`), an agent also lives the plans their mind makes (to go somewhere, to meet someone); anyone else keeps to their schedules, and their mind's plans lapse. A mind's plan to pay or lend someone money is paid either way, from the character's own money.\n- **Fields** a person can carry (see `reference_lookup person`): `place` (where they are now), `home` (a place id), `activity` (what they're doing: \"tending bar\"), `wealth` (a band at Money 1: `broke`, `poor`, `modest`, `comfortable`, `rich` or `wealthy`), `occupation`, and the sheet stats `might`, `agility`, `wits`, `charm`, `grit` (3 to 18) when the story gives them meaning. What someone earns is a job (see [Money](#money)). Who someone is goes in fields of their own kind (below): a character's mind reads their entity's fields, never their character card, so move a card's description, personality and manner there. History and background can also go in lore entries linked to them.\n- **Your own kinds.** When the cast needs fields the packs don't define (a description, a role, an age), add a kind that extends `person` and use it for the cast:\n\n```json\n{ \"id\": \"character\", \"label\": \"Character\", \"extends\": \"person\", \"fields\": { \"description\": { \"type\": \"text\", \"label\": \"Description\" }, \"role\": { \"type\": \"text\", \"label\": \"Role\" }, \"traits\": { \"type\": \"list\", \"of\": \"text\", \"label\": \"Traits\" } } }\n```\n\n- **Classifications** sort people for rules and for the GM: a facet with values, optionally nested. Keep a facet hidden (no `\"shown\": true`) when its values would spoil the story (\"villain\").\n\n```json\n{ \"id\": \"role\", \"label\": \"Story role\", \"multiple\": false, \"values\": { \"ally\": { \"label\": \"Ally\" }, \"antagonist\": { \"label\": \"Antagonist\" }, \"villain\": { \"label\": \"Villain\", \"parent\": \"antagonist\" } } }\n```\n\nAn entity holds values in `class` (`\"class\": { \"role\": [\"ally\"] }`) and free tags in `tags`.\n\n- **Groups** are entities of kind `group`, `faction`, `family`, `household` or `company`; members hold `{ \"type\": \"member_of\", \"to\": \"harbor_guild\", \"fields\": { \"role\": \"Quartermaster\" } }`. A `household` can also hold money and share its bills (see [Money](#money)).\n- **Life and death.** Everyone is alive unless the story says otherwise; set each person's `life` as it is at the present. Someone the story left dying is `\"dying\"`, someone who died is `\"dead\"`. Keep the dead in the world, with `fields.place` where the body lies: it stays there to be found, and someone who doesn't act keeps no routine or plans, so give them no schedule. A state the story needs beyond those three goes in `/lifeStates` (`{ \"unconscious\": { \"label\": \"Unconscious\", \"acts\": false, \"reads\": \"lies unconscious\" } }`) and an entity names it in `life`; never redefine `alive`, `dying` or `dead`. When the POV hasn't learned of a death or a dying, set `lifeKnownBy` to the ids of the people who know, including everyone who starts in the same place as the body; everyone else, the POV too, takes the person for alive until they see it or are told. Leaving `lifeKnownBy` out (or empty) means everyone knows, which tells the player; when nobody else knows yet, list the person themself. Old Bram here died in the net loft, and only Corin knows:\n\n```json\n{ \"id\": \"old_bram\", \"kind\": \"person\", \"name\": \"Old Bram\", \"tier\": \"supporting\", \"life\": \"dead\", \"lifeKnownBy\": [\"corin\"], \"fields\": { \"place\": \"net_loft\" }, \"relations\": [] }\n```\n\n- **Cues** are what the narrator sees someone do while a secret of theirs stays hidden. Each cue stands for exactly one secret: a secret `track` (while it hides something), a secret `lore` entry (until its gate holds) or a story `flag` (until it is set). Write behaviour, never the secret, and name no one the POV doesn't know.\n\n```json\n\"cues\": [{ \"text\": \"Changes the subject whenever the guild comes up.\", \"track\": \"corin_debt\" }]\n```\n\n- **Ids keep secrets too.** The player's views carry the ids of what the player acts on (an account, a flow, a job), so keep a secret entity's or place's id (`\"visibility\": \"secret\"`) out of every other entity's id, and any word of four letters or more from its name that no person or place the player can see shares: while Danny Okafor is secret, `bill_danny_rent` gives him away and `bill_rent` doesn't (`draft_check` warns, `story.leaky_id`, and suggests an id that names no one). A secret track's own id is safe: the player's quest log shows a stand-in for it.\n\n## Character minds\n\nA character can have a **mind**: a model call made as that character alone, from what they know (their entity's fields, the lore they may read, the turns they were there for, their notes and commitments, their money and their day, and their own secrets whole), which answers with their private read of the moment and what they intend, for the narrator to depict. Minds are blind to each other, and a mind reads its character's fields, never a character card, so write who each person is into their fields (see [your own kinds](#people-tiers-and-classifications)). What a mind plans is lived only by an agent (see Tiers there).\n\nEach turn a focus score puts each character on a ladder: **Live** (a mind every turn), **Near** and **Far** (a mind on their refresh) or **Background** (routine only). The score counts being in the POV's scene or close by, being named, a relation with the POV, a stake in tracks and rules under way, plans with the POV, and the person's tier. The world tunes it in `/minds`; every part is optional, and one left out reads as its default:\n\n```json\n{ \"secrecy\": \"brief\", \"weights\": { \"mentioned\": 50 }, \"thresholds\": { \"live\": 60, \"near\": 35, \"far\": 15 }, \"always\": { \"ids\": [\"corin\"] }, \"never\": { \"tag\": [\"crowd\"] }, \"memory\": { \"notes\": { \"show\": 10, \"keep\": 30 }, \"salience\": { \"halfLifeDays\": 14 } } }\n```\n\n- `secrecy` decides what reaches the narrator. `brief` (the default) gives only what anyone present could see, withheld where it would give away a secret or a name the POV can't know; `full` gives the character's thoughts and intent too. A mind knows its own character's secrets, so keep `brief` unless no one has a secret they would think about.\n- `weights` are the points each input adds, from \u2212100 to 200 (`here` 45, `nearby` 20, `mentioned` 40, `regard` 10, `knows` 10, `owner` 15, `track` 8, `rule` 5, `pending` 15, `recent` 10, `band` per tier band, and `roles` per classification value, `antagonist` 20 by default); `thresholds` are the lowest scores for Live, Near and Far (60, 35 and 15). Only someone in the POV's scene or named this turn is ever Live: anyone else, close by or not, is Near at most, whatever their score.\n- `always` and `never` are selectors (`ids`, `kind`, `tier`, `memberOf`, `tag`, `class`): `always` keeps someone Live wherever they are, and `never` keeps them in the background without a mind, winning over `always`. Name only ids, kinds, tiers, groups and classification values the world has.\n- `memory` sets what a mind is shown and how long a note lasts: `notes.show` (8) and `notes.keep` (24 before the oldest fold into a summary), `witness.show`, `recall`, `commitments.show`, `salience.halfLifeDays` (7 game days) and `consolidate`.\n\nThe defaults suit most worlds: pin the people the story turns on with `always`, and keep crowds out with `never`. A world can give minds its own voice with a step template in `/steps` of purpose `mind`, `memory`, `skip` or `consolidate`, one per purpose: `\"output\": \"text\"`, `\"signals\": []`, and a `template` holding the step's instructions only, where `{{character}}` is the character's name and `{{world}}` the world's. The engine adds the answer's format itself, so write how to think, never the JSON.\n\n```json\n{ \"id\": \"mind_port_veil\", \"purpose\": \"mind\", \"output\": \"text\", \"signals\": [], \"template\": \"You are the private mind of {{character}} in {{world}}, a salt port where debts outlive names. Think as {{character}}, from only what they know below. Decide how they read this moment and what they intend; never script anyone else.\" }\n```\n\n## Places, routes and maps\n\n- **Places** form a tree with `parent`: a region holds a town, a town its streets and buildings, a building its rooms. Give each a `name`, and a `fields.description` when the story describes it. A place the POV hasn't heard of yet gets `\"visibility\": \"discoverable\"`; a hidden one `\"secret\"`.\n\n```json\n{ \"id\": \"salt_quay\", \"name\": \"Salt Quay\", \"parent\": \"port_veil\", \"fields\": { \"description\": \"Tar-black pilings and fish crates.\" } }\n```\n\n- **Routes** join places the story travels between, with minutes per mode (`walk`, `road`, `offroad`, `water`). Estimate from the story: a few minutes across a town, an hour on foot between villages.\n\n```json\n{ \"id\": \"quay_to_market\", \"from\": \"salt_quay\", \"to\": \"market_row\", \"modes\": { \"walk\": { \"minutes\": 6 } }, \"bidirectional\": true }\n```\n\n- **Maps** draw a place's inside. A grid map's `layout` rows use `#` for walls, `.` for floor, `+` for doors and legend letters for rooms; a node map lists `places` and `links`. Draw one only when the story's space matters (a house, a ship, a dungeon). A map owns the places, grid and routes it compiles: edit the map, never what it made. `guide_lookup map` and `reference_lookup lre-map` for the details.\n\n## Money\n\nMoney is entities, a few fields and the economy pack's config. Amounts are whole minor units of the world's currency (4250 is $42.50) and percentages are percent units (22 is 22 %). Write money only in the shapes below: a `bills` list, a single `owner` or a `type` on an account, pay fields on a person (`hourly_cents`, `payday`, `deposit_to`) and `units` of a `symbol` on a brokerage account are older shapes, which `draft_check` warns about (`migrated`).\n\n- **The currency.** Set `/currency` when the story doesn't use US dollars: `{ \"code\": \"GP\", \"symbol\": \"gp\", \"minorUnit\": \"copper\", \"decimals\": 2, \"format\": \"{sign}{amount} gp\" }`.\n- **How much runs** is `/realism/levels/money`, capped by a person's tier (never the POV's). At 1 a person's `wealth` band is all there is: set it from how the story treats them. At 2 their cash and one everyday account are real, and a payment they can't cover is declined. From 3 all their accounts run, with flows, cards, payment preferences, household shares, living costs, withholding on pay and property; from 4 statements, interest, fees, late payments, credit scores, cash only at a machine or a branch, holds, daily card limits, overdraft policies, tax brackets, sales and business tax and investments. A new draft is at 1: raise it to 2 when the story counts cash, and to 3 when it has wages, rent, cards or property.\n- **The economy config.** A new draft has no `/packs/economy`: add it whole once, `{ \"version\": 1, \"config\": {} }`. Its config holds `products` (the world's own account products), `features` (a feature switched on or off for this world by its id, `{ \"flows\": true }`: from Money 2 for `flows`, `cards`, `payment_prefs`, `households`, `living_costs`, `atm`, `daily_limits` and `overdraft`, from Money 3 for the rest), `assets` (what holdings are in), `region` (the world's region, a row of the regions data table such as `mi`, which sets its tax rates and cost of living) and `taxes` (`exempt`, the categories no sales tax falls on, and `corporatePct`). Add a map whole the first time (`/packs/economy/config/products` with its first product in it), then each further entry by its own path (`/packs/economy/config/products/<id>`): adding the whole map again replaces it, and every entry in it.\n- **Who owns money.** A party is a person, or an entity of kind `business`, `trust` or `household`. Every account, business, holding and property lists its holders in `fields.owners`, each `{ \"party\": \"rhea\", \"role\": \"owner\" }`: `owner` and `joint` spend, manage and count it; `authorized_user` only spends; `custodian` and `trustee` spend and manage it for a `beneficiary`, who counts it. A `share` (a percent) divides its worth between the holders who count it; given by none, they share equally. Managing an account is setting up and changing what it pays (its standing payments and autopay) and its cards. Whoever holds a managing role (`owner`, `joint`, `custodian` or `trustee`) on a business or a trust also manages every account that business or trust holds with a managing role, without a role on the account. Spending from it still takes a role on the account itself, such as `authorized_user`, and it counts toward their worth only through their share of the business.\n- **Money someone only manages** is run for whom it is, never for the manager. That is a business's or a trust's account they hold no spending role on, or the business or trust paying as a party. In play, LumiRPEngine holds its characters to this rule when they set up standing payments and autopay, hire, raise pay and bill, so write money as they could have set it up:\n  - No flow from such money, nor a `fallback` on it, pays the manager, even where some of the money is theirs. Nor does it pay their household or its members, or a party any of those counts the worth of (a business they own, a trust they benefit from), unless the money is for that party too: payments among whom the money is for are the money's own, such as a business's savings topping up its operating account, or a trust paying its beneficiary though she's of its trustee's household. Money wholly someone's own (a business they own outright) may pay their other businesses, though still never them or their household.\n  - Even so, it lands in no account the manager can spend by a role of their own (an authorized user's card, a custodian's or a trustee's), unless the money is wholly theirs, or every holder of that account's worth is one of the people the money ends with, other than the manager: a trust's beneficiary, or a business's owner. A business the money passes through on its way to them isn't one of them: where a caf\xE9 belongs to a company Maya owns, the caf\xE9's custodian, who holds cards on the company's till and on Maya's checking, may pay the caf\xE9's money into Maya's checking but not into the company's till. A share of the money isn't enough: the half-owner of a shop who holds a card on its till can't sweep the shop's savings into it, while its outright owner can. So a trust pays its beneficiary into her own account that its trustee is custodian of, but no one it isn't for into an account he is custodian of. A payment to someone in the world counts where it lands, in their deposit account (a business's operating account), as well as by who they are, so paying the company is paying into its till.\n  - An owner takes money out for themselves by a salary (a job at the business), its payouts (`distribution_pct`) or a draw in play, never by a flow to them or their household. A manager with no share of a business (a custodian, a trustee) puts neither themselves nor their household on its payroll; with a share, they may, as a salary is theirs to take. Unless the business is wholly theirs, they pay no one else there into an account they can spend (the worker's deposit account, or one of theirs a `splits` entry pays), unless every holder of that account's worth is one of the people the business's money ends with, such as another owner.\n  - A business someone runs for others is never billed by one that is theirs, nor by one whose operating account they can spend.\n  - A credit account's `autopay_from` is its debtor's own money: an account they can spend from, or whose worth is theirs (a business's loan from the business's account, a custodial card from the custodial savings).\n\n### Accounts and cards\n\nAn `account` is one purse, wallet, bank account, card account, loan or investment account: `owners`, `product`, `institution` (the bank's name) and `opening`, the balance **now**, at the story's present, from the holder's side (a debt is negative). Read the transcript for the last mention of money: what they paid, what they were paid, what they have left.\n\n```json\n{ \"id\": \"rhea_checking\", \"kind\": \"account\", \"name\": \"Rhea's checking\", \"tier\": \"background\", \"fields\": { \"owners\": [{ \"party\": \"rhea\", \"role\": \"owner\" }], \"product\": \"checking\", \"institution\": \"Harbor Savings\", \"opening\": 182000 }, \"relations\": [] }\n```\n\n`product` is a class, each a built-in product (`cash`, `checking`, `business_checking`, `savings`, `money_market`, `cd`, `trust`, `escrow`, `credit_card`, `charge_card`, `line_of_credit`, `loan`, `mortgage`, `brokerage`, `retirement`), or one of the world's own products by id: a `class` with its terms (`label`, `institution`, `limit`, `apr_pct`, `apy_pct`, \u2026). An account's own `limit`, `apr_pct`, `apy_pct`, `statement_day`, `due_day`, `payment`, `months_left` and `overdraft` win over its product's, and `autopay` (`minimum`, `statement`, `full` or `fixed`) with `autopay_from` pays a credit account by itself:\n\n```json\n\"products\": { \"harbor_visa\": { \"label\": \"Harbor Savings Visa\", \"class\": \"credit_card\", \"institution\": \"Harbor Savings\", \"limit\": 300000, \"apr_pct\": 21.9 } }\n```\n\n```json\n{ \"id\": \"rhea_visa\", \"kind\": \"account\", \"name\": \"Harbor Visa\", \"tier\": \"background\", \"fields\": { \"owners\": [{ \"party\": \"rhea\", \"role\": \"owner\" }], \"product\": \"harbor_visa\", \"opening\": -12500, \"autopay\": \"statement\", \"autopay_from\": \"rhea_checking\" }, \"relations\": [] }\n```\n\nA **card** is an entity of its own, kind `card`: the `account` it draws on, its `holder` (one of that account's owners; an `authorized_user` holds a card on someone else's account), `network` (`debit`, `credit` or `charge`), `state` (`active`, `frozen`, `lost` or `cancelled`) and optionally `item`, the card in the holder's gear.\n\n```json\n{ \"id\": \"rhea_debit\", \"kind\": \"card\", \"name\": \"Rhea's debit card\", \"tier\": \"background\", \"fields\": { \"account\": \"rhea_checking\", \"holder\": \"rhea\", \"network\": \"debit\" }, \"relations\": [] }\n```\n\n### Flows\n\nA **flow** is every scheduled or one-off movement of money: rent, a bill, a transfer to savings, an allowance, a loan payment, income from outside. Each is an entity of kind `flow`:\n\n- `flow_kind`: `transfer`, `bill`, `rent`, `utility`, `subscription`, `premium`, `loan_payment`, `card_payment`, `savings`, `income`, `payroll`, `allowance`, `living`, `tax`, `distribution`, `invoice`, `draw` or `other`.\n- `from` and `to`: an account; a party (paying as their preferences choose, or paid into their account); or an outside payer or payee in words (`\"Harbor Lets\"`). An id-shaped word that names no entity (`rhea_chequing`) draws a warning: it is read as an outside party, so the money would come from or go to nowhere.\n- The amount, the first of `amount_cents`, `amount_formula`, `amount_table`, `amount_min` with `amount_max` (a draw between them), `amount_pct` of `amount_of`'s balance, and `amount_due` (`minimum`, `statement` or `balance` of the credit account it pays).\n- When: `every` (`day`, `week`, `month` or `year`) with `interval` (biweekly is `week` with 2), `weekdays` (0 is Sunday), `days` of the month (\u22121 is the last) and `months`, at `at` (`HH:MM`); or `once`, a local date-time. `start`, `end` and `count` bound it.\n- `shortfall`, when the money isn't there: `skip` (the default), `partial`, `retry` (after `retry_days`, up to `retries` times), `fallback` (from `fallback`: another account the payer may spend from, by id; nothing else is drawn on, and a `fallback` that isn't in the world is an error), `overdraft` or `defer`.\n- `link` ties it to what it belongs to (a property, a job, a loan), `splits` sends parts elsewhere, and `shares` splits a household's flow between its members.\n\n```json\n{ \"id\": \"rhea_boat_fund\", \"kind\": \"flow\", \"name\": \"Boat fund\", \"tier\": \"background\", \"fields\": { \"flow_kind\": \"savings\", \"from\": \"rhea_checking\", \"to\": \"rhea_savings\", \"amount_cents\": 4000, \"every\": \"week\", \"interval\": 2, \"weekdays\": [5] }, \"relations\": [] }\n```\n\nA **household** (kind `household`, its members holding `member_of` toward it) is a party too. Where household shares run (Money 3, or from 2 with `households` switched on), a flow from it with `shares` has each member pay their percent from their own money; below that, its payer pays it whole. This one is also a **lease**: a `rent` flow from the tenants to the owner, `link`ed to the property.\n\n```json\n{ \"id\": \"valen_rent\", \"kind\": \"flow\", \"name\": \"Rent on the Valen flat\", \"tier\": \"background\", \"fields\": { \"flow_kind\": \"rent\", \"from\": \"valen_household\", \"to\": \"corin\", \"amount_cents\": 140000, \"every\": \"month\", \"days\": [1], \"shares\": [{ \"party\": \"rhea\", \"pct\": 60 }, { \"party\": \"teo\", \"pct\": 40 }], \"shortfall\": \"retry\", \"retry_days\": 3, \"retries\": 2, \"link\": \"valen_flat_property\" }, \"relations\": [] }\n```\n\n### Work, business and tax\n\nA **job** is one person's employment, kind `job`: `worker`; `employer` (a business entity, a place, or an outside employer in words; an id-shaped one that names no one and no place draws a warning); `workplace`; `title`; `basis` (`salary`, `hourly`, `per_shift`, `commission`, `tips` or `stipend`) with `rate` (a year's salary, the hourly rate or the pay per shift); and `pay_every`: `weekly` or `biweekly` (on `pay_weekday`, or counted from the first payday, `pay_anchor`), `semimonthly` or `monthly` (on `pay_days`), `per_job` or `custom`. `hours` says what hourly and per-shift pay count: `scheduled` (the worker's scheduled shifts at the workplace), `attended` (the shifts the POV turns up for) or `contract` (`hours_per_week` or `shifts_per_week`); left out, it is `attended` for the POV and `scheduled` for anyone else with a routine at the job, else `contract`. `splits` sends pay across the worker's accounts, a `contractor` has nothing withheld, and `season_from` and `season_to` (`MM-DD`), `start` and `end` bound it.\n\n```json\n{ \"id\": \"rhea_pilot_job\", \"kind\": \"job\", \"name\": \"Harbor pilot\", \"tier\": \"background\", \"fields\": { \"worker\": \"rhea\", \"employer\": \"Port Veil Pilots\", \"workplace\": \"salt_quay\", \"title\": \"Harbor pilot\", \"basis\": \"hourly\", \"rate\": 3800, \"hours\": \"contract\", \"hours_per_week\": 30, \"pay_every\": \"biweekly\", \"pay_anchor\": \"2026-09-18\" }, \"relations\": [] }\n```\n\nA **business** is kind `business`: `owners`, the `places` it trades at (a purchase there pays it), its `operating_account` (an account it owns), `collects_sales_tax`, `margin_pct`, and what it pays its owners (`distribution_pct`, `distribution_every`). Its Money level is its tier's cap, as a person's is, so put it on the `principal` tier for all of it to run (sales tax and business taxes need Money 4). Whoever holds a managing role on it (`owner`, `joint`, `custodian` or `trustee`) runs it: hires, ends jobs and sets pay, issues and voids its invoices, pays out its profit, and manages its accounts' standing payments, autopay and cards; an `owner` or `joint` owner also takes draws, unless its `structure` is `c_corp`. An employee runs none of it. To spend the business's money themselves (its card at a shop, say), an owner needs a role on the account too, such as `authorized_user`. An **invoice** it is owed is kind `invoice`: `business`, `customer` (a party, or an outside customer in words), `cents`, `memo`, `issued`, `due` and `state` (`open`, `paid`, `late` or `void`).\n\n```json\n{ \"id\": \"chandlery\", \"kind\": \"business\", \"name\": \"Net Loft Chandlery\", \"tier\": \"principal\", \"fields\": { \"owners\": [{ \"party\": \"corin\", \"role\": \"owner\" }], \"places\": [\"net_loft\"], \"operating_account\": \"chandlery_checking\", \"collects_sales_tax\": true }, \"relations\": [] }\n```\n\n```json\n{ \"id\": \"chandlery_invoice_rhea\", \"kind\": \"invoice\", \"name\": \"Rope and fittings\", \"tier\": \"background\", \"fields\": { \"business\": \"chandlery\", \"customer\": \"rhea\", \"cents\": 18000, \"memo\": \"Rope and fittings\", \"issued\": \"2026-09-01\", \"due\": \"2026-10-01\", \"state\": \"open\" }, \"relations\": [] }\n```\n\n**Tax** reads a person's `filing_status` (`single`, `married_filing_jointly` or `head_of_household`) and `local_tax`, and their own `region` field for income tax, else the config's `region`; sales tax reads a place's `sales_tax_pct`, `tax_region` and `tax_exempt` (categories), or an enclosing place's, else the config's `region` and `taxes`. With no region anywhere, the national row's rates apply.\n\n### Holdings and property\n\nAn **asset** is defined once, in `/packs/economy/config/assets` by id: `label`, `class` (`security`, `fund`, `bond`, `option`, `property`, `business_stake`, `crypto` or `other`), an optional `symbol`, its `price` per unit at the start, and how it moves and pays (`annual_return_pct`, `annual_volatility_pct`, `yield_pct`). A **holding**, kind `holding`, is a position in one asset: in an `account` (a `brokerage` or `retirement` one) or held directly by its `owners`, with `lots` (each `qty`, its total `cost` and when it was bought, `at`) and `route` for what it pays out (an account id, or `reinvest`).\n\n```json\n\"assets\": { \"glix\": { \"label\": \"Great Lakes Index Fund\", \"class\": \"fund\", \"symbol\": \"GLIX\", \"price\": 11240, \"yield_pct\": 1.6 } }\n```\n\n```json\n{ \"id\": \"rhea_glix\", \"kind\": \"holding\", \"name\": \"Great Lakes Index Fund\", \"tier\": \"background\", \"fields\": { \"account\": \"rhea_brokerage\", \"asset\": \"glix\", \"lots\": [{ \"qty\": 20, \"cost\": 196000, \"at\": \"2025-03-02\" }], \"route\": \"reinvest\" }, \"relations\": [] }\n```\n\nA **property**, kind `property`, is real estate tied to a `place`: `owners`, its `value` now, `appreciation_pct` a year, `purchase_price` and `purchased`, and its upkeep (`tax_pct` of value a year, `insurance` a month, `upkeep_pct` a year). A **mortgage** is an account of product `mortgage` whose `secured_by` names the property, and the property's `mortgage` names the account back.\n\n```json\n{ \"id\": \"valen_flat_property\", \"kind\": \"property\", \"name\": \"The Valen flat\", \"tier\": \"background\", \"fields\": { \"place\": \"valen_flat\", \"owners\": [{ \"party\": \"corin\", \"role\": \"owner\" }], \"value\": 18500000, \"appreciation_pct\": 3, \"mortgage\": \"corin_mortgage\" }, \"relations\": [] }\n```\n\n```json\n{ \"id\": \"corin_mortgage\", \"kind\": \"account\", \"name\": \"Mortgage on the Valen flat\", \"tier\": \"background\", \"fields\": { \"owners\": [{ \"party\": \"corin\", \"role\": \"owner\" }], \"product\": \"mortgage\", \"opening\": -9200000, \"payment\": 98000, \"months_left\": 214, \"secured_by\": \"valen_flat_property\" }, \"relations\": [] }\n```\n\n### Paying\n\n- **`pay_prefs`**, a person field, orders how they pay: tiers of `use` (`cash`, `debit`, `credit`, `charge`, `checking`, `savings`, or a card or account id), each for amounts from `min` to `max` and for `categories`, but not those in `except`. Left out, they follow the person's wealth band and `traits`: a frugal or careful person keeps to cash and debit longer, an impulsive or flashy one reaches for credit first.\n\n```json\n\"pay_prefs\": [{ \"use\": \"cash\", \"max\": 2000 }, { \"use\": \"debit\", \"max\": 50000 }, { \"use\": \"rhea_visa\", \"categories\": [\"travel\"] }]\n```\n\n- **Cash machines and branches** are place fields: `atm`, `{ \"bank\": \"Harbor Savings\", \"fee\": 300, \"limit\": 40000 }` (`fee` the machine's own charge, `limit` the most one withdrawal takes, `deposits` whether it takes them), and `branch`, `{ \"bank\": \"Harbor Savings\" }`, a counter where that bank's customers withdraw and deposit. `bank` is the institution as the accounts name it. Where cash machines run (Money 4, or from 2 where the world switches `atm` on), cash comes out and goes in only at one of the two, and only once the world places at least one `atm` or `branch`: place none and cash moves freely at every level.\n\n## Calendar and the start\n\n- `/start` is where and when play begins: `{ \"place\": \"salt_quay\", \"at\": \"2026-09-14T18:30\" }`, the POV's place and the story's present. Put the POV's `fields.place` at the same place.\n- `/calendar/epoch` is the zero of the game clock: midnight of the start day, or earlier (with an invented calendar, exactly the start day). Keep `timeZone` to the setting's (`America/New_York`, or `Etc/UTC` for an invented world).\n- Read the present from the transcript: the last date, weekday, time of day or season it states, or what the events imply (\"the next morning\" after a night scene). If the story never says, pick a plausible date and say so.\n- An invented calendar uses `\"system\": \"custom\"` with `custom: { monthLengths, monthNames, weekdayNames }`, and dates in its own years (`0412-08-25T07:30`). Set its `epoch` to midnight of the start's own day (`0412-08-25T00:00`): LumiRPEngine counts the start's clock from the epoch as an ordinary calendar would, so any day between them would shift the date the player sees in the invented months.\n- `dayParts` name the parts of the day (`{ \"id\": \"morning\", \"label\": \"Morning\", \"start\": \"06:00\" }`).\n\n## Relations and regard\n\n- **Regard** is how one person feels about another, one directed relation with three axes from \u2212100 to 100: `warmth`, `trust` and `respect`. Write both directions when both matter; they differ more often than not. Calibrate from the story: 0 is a stranger, \xB120 an acquaintance's lean, \xB150 strong feeling, \xB180 and beyond for the defining bonds and feuds.\n\n```json\n{ \"type\": \"regard\", \"to\": \"rhea\", \"fields\": { \"warmth\": 35, \"trust\": 10, \"respect\": 40 } }\n```\n\n- **Knowledge.** `{ \"type\": \"knows\", \"to\": \"harbor_guild\" }` on the POV marks what they know of: people they've met, places they've heard of, a secret they've learned. The POV knows everyone the chat has introduced to them.\n- **Who knows the POV.** Everyone who has met the POV holds a `knows` toward the POV (`{ \"type\": \"knows\", \"to\": \"rhea\" }`), or a `regard` toward them. LumiRPEngine tells the narrator how each person present stands toward the POV, and reads someone with neither as a stranger (\"Corin doesn't know you.\"), so a person the POV spent the chat with would greet them as one.\n- **Kinship and bonds:** `parent_of`/`child_of` (each other's inverse), `sibling_of`, `spouse_of`, `partner_of` (symmetric). Write both sides.\n- **Things** are where they are: `fields.place` for something lying somewhere, `{ \"type\": \"in\", \"to\": \"rhea\" }` for something carried. Whose a thing is lives in its `fields.owner` (the owner's id): that puts it on their gear, a vehicle in their garage, and lets them drive it. An `owns` relation only changes how the Journal words it, so set `fields.owner` on everything someone owns. Money is owned differently, through `owners` (see [Money](#money)).\n\n## Quests and secrets as tracks\n\nA track is a small state machine: `start` names its first stage, and each stage's `next` lists `{ \"to\": stage, \"when\": formula }`. Formulas read the world: `at(pov, 'archive')`, `stage(track)`, `knows(pov, 'corin')`, `flag('vault_opened')`, `balance('rhea_purse') >= 5000`, `holds(pov, 'rhea_visa')` (any role on it, or it is theirs), `manages(pov, 'chandlery')` (a business or trust they run, or an account they manage), `hour >= 18`. `reference_lookup formula` lists them all.\n\n- **Quests** are what the POV is pursuing. Start the track at the stage the story has **reached**, not at its beginning; earlier stages can stay for completeness, but `start` is today's stage. Give that stage a `cue` (what the player knows now) and `objectives` (`{ \"label\": \"Find the ledger\", \"when\": \"flag('ledger_found')\" }`). A quest whose stage has no `next` is finished.\n\n```json\n{ \"id\": \"lost_ledger\", \"kind\": \"quest\", \"label\": \"The lost ledger\", \"visibility\": \"public\", \"start\": \"searching\", \"stages\": {\n  \"searching\": { \"label\": \"Searching the archive\", \"cue\": \"Corin swears the ledger left the archive in May.\", \"next\": [{ \"to\": \"found\", \"when\": \"flag('ledger_found')\" }] },\n  \"found\": { \"label\": \"The ledger is found\", \"next\": [] } } }\n```\n\n- **Secrets** are what the story hides. A secret track's stages carry a `cue` (what the POV can notice: the hint the narrator may use) and a `truth` (what is really so, kept from the player until the stage is reached). Cue versus truth is the whole point: the cue never states the truth. Secrets advance only by their conditions, so write conditions the story can meet. Give the person who keeps the secret a cue for it (see Cues above), and make them the track's `owner`: the owner's mind, and the mind of anyone with a cue that stands for it, knows its truths whatever the player has found out.\n\n```json\n{ \"id\": \"corin_debt\", \"kind\": \"secret\", \"label\": \"What Corin owes\", \"visibility\": \"secret\", \"owner\": \"corin\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"cue\": \"Corin flinches whenever the guild is mentioned.\", \"next\": [{ \"to\": \"known\", \"when\": \"at(pov, 'guild_office')\" }] },\n  \"known\": { \"label\": \"Corin owes the guild\", \"truth\": \"Corin borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **A secret the POV has already learned** must still be revealed in play. A track starts with nothing revealed, and the engine records a reveal only when a stage is entered, so a track that starts on its truth stage stays hidden: the Journal never shows it, and the narrator is kept from saying what the player already knows. Start it one stage earlier instead, and make that stage move on at once: `\"next\": [{ \"to\": \"known\", \"when\": \"true\" }]`. The first turn enters the truth stage and reveals it. Never start a secret track on a stage that has a `truth`.\n\n```json\n{ \"id\": \"corin_debt\", \"kind\": \"secret\", \"label\": \"What Corin owes\", \"visibility\": \"secret\", \"owner\": \"corin\", \"start\": \"rumor\", \"stages\": {\n  \"rumor\": { \"label\": \"Something is off\", \"next\": [{ \"to\": \"known\", \"when\": \"true\" }] },\n  \"known\": { \"label\": \"Corin owes the guild\", \"truth\": \"Corin borrowed the guild's harbor dues to pay a gambling debt.\", \"next\": [] } } }\n```\n\n- **Puzzles** take attempts and answers; **agendas** are an agent's plans (`owner`, stages with `priority`). The player answers a puzzle through their quest log, which reaches only puzzles they can see. An action or rule of the world's that answers one names it by its own id, written out, with the `story.answer` effect's `track`: `{ \"type\": \"story.answer\", \"args\": { \"track\": \"study_safe\", \"answer\": \"1887\" } }`. Never give `track` a formula (`draft_check` warns, `story.answer_track`): the puzzle it gives is answered even where the player can't see it. To let the player say which puzzle, pass their words as `puzzle` instead, as the built-in Answer action does (`\"puzzle\": \"=params.puzzle\"`): it is read through their quest log, so it never reaches a puzzle they can't see.\n\n## Lore entries with audiences\n\nLore is what the world knows, for the engine's helpers: places' histories, people's backgrounds, customs, factions. Convert each useful lore-book entry and each fact the chat established into an entry with a title, the text, `keys`, `aliases` (other names), `topics`, and `links` (the ids of the people and places it is about).\n\n```json\n{ \"id\": \"lore_port_veil\", \"title\": \"Port Veil\", \"content\": \"A salt-trading port of nine thousand\u2026\", \"keys\": [\"Port Veil\", \"the port\"], \"aliases\": [\"the Veil\"], \"topics\": [\"places\"], \"links\": [\"port_veil\"] }\n```\n\n- `\"visibility\": \"known_by\"` keeps an entry to what the POV knows (they must know every linked person and place).\n- A **secret** entry holds a secret itself: `\"secret\": true` with a `gate` formula (`\"stage('corin_debt') == 'known'\"`), and an `audience` listing the helpers that may read it before the gate opens (`npc.choose`, `contradiction`, `puzzle.answer`, `judge`, `interpret`). Never put `brief`, `outline`, `choices` or `extract` in an audience: what they write reaches the narrator. Name in `holders` the people whose own secret it is: their minds read it, gate or no gate, and so does the mind of anyone with a cue that stands for it. No other mind ever reads a secret entry, whatever links it or opens its gate.\n- A public entry must never repeat a track's truth (lint error `secret_truth`).\n- Keep macros (`{{user}}`, `{{char}}`) out of lore unless the source used them on purpose: the engine lists them for review on install.\n\n## Schedules\n\nSchedules give people routines: where they are (`target: \"place\"`) or what they do (`target: \"activity\"`) by time of day and weekday. The owner is an entity, a group, a kind or a selector. Base them on what the story shows (\"the baker opens at dawn\"); invent plausible ones for the rest of the cast only when it helps.\n\n```json\n{ \"id\": \"mara_days\", \"owner\": \"mara\", \"target\": \"place\", \"recurrence\": { \"every\": \"week\", \"weekdays\": [1, 2, 3, 4, 5] },\n  \"slots\": [{ \"start\": \"06:00\", \"end\": \"14:00\", \"value\": \"bakery\" }, { \"start\": \"14:00\", \"end\": \"22:00\", \"value\": \"mara_house\" }] }\n```\n\n## Realism and the rest\n\n- `/realism` sets how much is simulated per domain (0 to 4): Story keeps most at 1 and Space and Calendar at 2. Raise Money when the story counts money (see [Money](#money)), Relationships when feelings drive it. A chat can change levels later.\n- Rules (`when this happens, do that`), actions, checks and a ruleset are optional; add them when the story has mechanics the player will use again (a skill check to pick locks, a curfew rule).\n- **Data tables.** A new draft carries LumiRPEngine's seventeen default data tables (`/tables`: prices, pay, taxes, occupations, regions, gear, vehicles and the calendar's holidays, all Modern US), so a `region`, an `occupation` or an `amount_table` reads from them at once. Leave the tables as they are, with each one's `revision` and `/pins`: LumiRPEngine works a table's revision and pin out again only when Build edits it, so a table changed here would keep its old ones. When the setting needs other prices or pay, say so in your answer: the user adapts the tables in Build after installing.\n\n## Refining a world in play\n\nWhen the source chat already plays a world (`chat_state` says so), the draft starts from that world's head and becomes its **next revision**; the chat keeps running on its revision until the player chooses Upgrade in LumiRPEngine (**Settings \u2192 Pins and upgrade**), which shows every change and lets them take or keep each one. So:\n\n- Keep every id the chat uses. Renaming an id makes a new thing and strands the old one.\n- `chat_state` lists a secret quest under the stand-in id the player's quest log gives it (`~` and a hash), never its own: find the track itself with `engine_read`.\n- Add what the story introduced since the world was made: new people, places, quests, lore.\n- Fix definitions (a name, a description, a tier) freely; for state the chat has moved on (where someone is, a balance, a quest's stage), the Upgrade keeps the chat's value by default, which is usually right.\n- Don't remove what the chat still uses: the Upgrade keeps removed people unless the player picks Remove.\n- Install it as **a new revision** of the same world.\n\n## Before finishing\n\n- `draft_check` has no errors.\n- The POV exists, stands at the start place, and the start time is the story's present.\n- Every id an item names (a place, an owner, a relation target, a track in a formula) exists.\n- Everyone who has met the POV holds a `knows` or a `regard` toward them.\n- Each person's `life` is their state at the present, and the dead and dying are at the place they lie.\n- A death or dying the POV hasn't learned of sets `lifeKnownBy` to who knows, with everyone who starts where the body lies; left out, it tells the player.\n- Every thing someone owns names them in `fields.owner`, and every account, business, holding and property names its holders in `fields.owners`.\n- Every flow and job pays from and to something that exists (an id, or an outside party in words), with an amount and a schedule (`every`, or `once`).\n- No money is in an older shape: `draft_check` shows no `migrated` warning.\n- No id gives a secret away: `draft_check` shows no `story.leaky_id` warning.\n- Money someone only manages pays for whom it is, never for its manager or their household; nor, unless it's wholly theirs, does it land in an account they can spend whose worth isn't all held by the people it ends with.\n- A world whose minds run in full (`\"secrecy\": \"full\"`) has no secret a character would think about openly.\n- Openings are today's balances, and quests start at the stage the story reached.\n- No secret track starts on a stage with a `truth`: a secret the POV has learned starts one stage earlier, moving on `when: \"true\"`, so the first turn reveals it.\n- No public text gives a secret away, and no cue states the secret it stands for.\n";
 
 // assets/REFERENCE.md
 var REFERENCE_default = "# LumiRPEngine reference\n\n<!-- Generated by `bun run reference` (scripts/reference/build.ts). Edit the packs, then run it again. -->\n\nWhat the engine and its packs register, as the registry has it: kinds and their fields, effects and the arguments they read, formula functions, actions, events, proposal channels, panels, slots, data tables and lint codes. Arguments and parameters marked `?` may be left out. The formula language is in [EXPRESSIONS.md](EXPRESSIONS.md), worked examples are in [RECIPES.md](RECIPES.md), and the [user guide](USER-GUIDE.md#authoring) shows the editors.\n\nEngine `0.1.0` \xB7 world format `lre-world-v1` \xB7 packs `engine` 1, `calendar` 1, `space` 1, `economy` 1, `gear` 1, `vehicles` 1, `weather` 1, `relationships` 1, `castlife` 1, `sheets` 1, `story` 1, `combat` 1, `minds` 1.\n\n## Contents\n\n- [Engine built-ins](#engine-built-ins)\n- [Calendar & time pack](#calendar--time-pack-calendar)\n- [Cast life pack](#cast-life-pack-castlife)\n- [Combat pack](#combat-pack-combat)\n- [Economy pack](#economy-pack-economy)\n- [Gear & containers pack](#gear--containers-pack-gear)\n- [Minds pack](#minds-pack-minds)\n- [Relationships pack](#relationships-pack-relationships)\n- [Character sheets pack](#character-sheets-pack-sheets)\n- [Space & travel pack](#space--travel-pack-space)\n- [Story pack](#story-pack-story)\n- [Vehicles pack](#vehicles-pack-vehicles)\n- [Weather pack](#weather-pack-weather)\n\n## Engine built-ins\n\n### Core effects\n\n| Effect | Arguments |\n|---|---|\n| `add` | `entity`, `field`, `delta` |\n| `award` | `entity`, `progression`, `amount` |\n| `beat` | `hint` |\n| `check` | `check`, `actor?`, `target?`, `outcomes` |\n| `life` | `entity`, `to?`, `tell?` |\n| `link` | `rel`, `from`, `to`, `until?`, `fields?` |\n| `move` | `entity`, `to` |\n| `note` | `text`, `visibility?` |\n| `post` | `lines`, `memo?` |\n| `recover` | `entity`, `field`, `amount?`, `full?` |\n| `set` | `entity`, `field`, `value` |\n| `signal` | `class`, `text`, `entity?`, `visibility?` |\n| `spawn` | `kind`, `name`, `id?`, `tier?`, `fields?`, `relations?`, `agent?`, `place?`, `class?`, `tags?` |\n| `stage` | `track`, `to` |\n| `unlink` | `rel`, `from`, `to` |\n\n### Formula functions\n\nMath: `abs`, `ceil`, `clamp`, `floor`, `max`, `min`, `round`. `min` and `max` take any number of arguments.\n\nThe engine's own:\n\n- `at(entity, place)`\n- `attempts(track)`\n- `band(entity, field)`\n- `count_at(place, kind?)`\n- `days(n)`\n- `field(entity, field)`\n- `fired(rule)`\n- `has_rel(entity, type, to?)`\n- `holiday()`\n- `hours(n)`\n- `knows(entity, subject)`\n- `level(entity, domain)`\n- `next_time(time)`\n- `place(entity)`\n- `rel(entity, type, to?)`\n- `rel_count(entity, type)`\n- `rel_field(from, type, to, field)`\n- `revealed(track, stage?)`\n- `roll(notation)`: effect arguments only\n- `since(track)`\n- `stage(track)`\n- `table(table, key, column)`\n- `table_step(table, value, column)`\n- `today_at(time)`\n\nTaxonomy and life states:\n\n- `band_of(entity)`\n- `has_tag(entity, tag)`\n- `in_class(entity, facet, value)`\n- `kind_is(entity, kind)`\n- `life_of(entity)`\n- `member_of(entity, group)`\n- `tier_of(entity)`\n\n### Events\n\nCore: `add`, `clock`, `link`, `materialize`, `post`, `set`, `spawn`, `stage`, `timelapse`, `unlink`.\n\nEngine bookkeeping: `engine.adjudged`, `engine.attempt`, `engine.beat`, `engine.caught`, `engine.check`, `engine.choice`, `engine.class`, `engine.cursor`, `engine.entity`, `engine.fired`, `engine.life`, `engine.note`, `engine.observed`, `engine.pause`, `engine.revealed`, `engine.signal`, `engine.told`.\n\n### Relation types\n\nBuilt in: `in`, `owns`, `uses`, `worn_by`, `equipped`, `knows`, `member_of`, `regard`, `route`. Packs add the typed ones below.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `knows` | `knows` |\n| `life` | `life` |\n| `spawn` | `spawn` |\n\n### Step purposes\n\n| Purpose | Outputs a world template may declare |\n|---|---|\n| `brief` | `text` |\n| `choices` | `text`, `effects` |\n| `consolidate` | `text` |\n| `contradiction` | `decision`, `text`, `effects` |\n| `extract` | `text`, `effects` |\n| `interpret` | `decision`, `text` |\n| `judge` | `decision`, `text` |\n| `memory` | `text` |\n| `mind` | `text` |\n| `npc.choose` | `decision`, `text` |\n| `outline` | `text` |\n| `puzzle.answer` | `decision`, `text` |\n| `skip` | `text` |\n\nSignals: `agents_present`, `always`, `beat`, `classifier`, `conflict`, `day_start`, `invitation`, `never`, `offscreen`, `present`, `reply`, `scene_change`, `slot_crossed`, `tie_zone`, `timelapse`, `typed_input`, and `every_n:<k>`.\n\nTemplate placeholders: `beats`, `brief`, `character`, `clock`, `facts`, `outcome`, `place`, `pov`, `present`, `recent`, `reply`, `scene`, `user`, `world`.\n\n### Sections\n\nThe slots a world gets when it defines none, kept in rank order on the section budget.\n\n| Slot | Label | Rank |\n|---|---|---|\n| `outcome` | Outcome | 0 |\n| `montage` | Montage | 1 |\n| `scene` | Scene | 2 |\n| `people` | People | 3 |\n| `money` | Money | 4 |\n| `gear` | Gear | 5 |\n| `vehicles` | Vehicles | 6 |\n| `quest` | Quest | 7 |\n| `outline` | Outline | 8 |\n| `stance` | Stance | 9 |\n| `minds` | Minds | 10 |\n\n### Realism\n\nDomains: `money`, `gear`, `vehicles`, `castlife`, `relationships`, `space`, `calendar`, `weather`, `sheets`; each at a level from 0 to 4.\n\nDetail bands: `principal` (Leads), `supporting` (Supporting), `background` (Background).\n\nInterrupt classes: `invitation`, `bill`, `decline`, `incident`, `quest`, `rule`, `arrival`, `overdue`, `needs`, `weather`.\n\n### Adjudication presets\n\n| Value | `narrative` | `balanced` | `crunchy` |\n|---|---|---|---|\n| `checks` | `\"risky\"` | `\"every\"` | `\"every\"` |\n| `riskyAt` | `0.75` | `0.75` | `0.75` |\n| `trivialAt` | `null` | `0.95` | `null` |\n| `impossibleAt` | `null` | `0.05` | `null` |\n| `description` | `{\"weight\":\"none\",\"max\":3,\"advantageAt\":2}` | `{\"weight\":\"bonus\",\"max\":2,\"advantageAt\":2}` | `{\"weight\":\"none\",\"max\":2,\"advantageAt\":2}` |\n| `authority` | `\"narrative\"` | `\"hybrid\"` | `\"mechanics\"` |\n| `closeBy` | `2` | `2` | `2` |\n| `retry` | `\"changed\"` | `\"changed\"` | `\"free\"` |\n| `retryAfter` | `60` | `60` | `60` |\n\n## Calendar & time pack (`calendar`)\n\nVersion 1 \xB7 realism domain `calendar` \xB7 requires none.\n\n### Formula functions\n\n- `days_until(date)`\n- `is_day_off()`\n- `is_weekend()`\n- `minutes_until(at)`\n- `weekday_name()`\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `time_advance` | `duration` |\n\n### Panels and slots\n\nPanels: `calendar.calendar`. Slots it writes: `scene`.\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `calendar.dst` | Daylight saving time, time zones and daylight hours | `lre-table/calendar.dst/v1` | start (json), end (json), duration_weeks_approx (int), exceptions (list), standard_offsets_h (json), note (text), daylight_hours (json) | 1 |\n| `calendar.holidays` | Federal holidays | `lre-table/calendar.holidays/v1` | name (text), rule_type (enum), month (int), day (int, optional), weekday (enum, optional), n (int, optional), federal_paid_day_off (bool), private_sector_paid_day_off (enum), observed_if_weekend (text, optional) | 11 |\n| `calendar.observances` | Common observances | `lre-table/calendar.observances/v1` | name (text), rule_type (enum), month (int, optional), day (int, optional), weekday (enum, optional), n (int, optional), base (ref, optional), offset_days (int, optional), algorithm (text, optional), window (text, optional), start (text, optional), end (text, optional), rule_text (text, optional), rule_note (text, optional) | 30 |\n| `calendar.school` | School year | `lre-table/calendar.school/v1` | title (text), values (json) | 2 |\n| `calendar.shifts` | Work shift patterns | `lre-table/calendar.shifts/v1` | name (text), description (text), days_per_week (number), typical_start (text), typical_shift_h (number), typical_hours_per_week (int), weekend_work (enum), notes (text) | 24 |\n| `calendar.work` | Work norms | `lre-table/calendar.work/v1` | full_time_hours_per_week (number), standard_work_year_h (int), overtime (text), vacation_days_after_1_year (int), vacation_days_after_5_years (int), vacation_days_after_10_years (int), sick_days_per_year (int), paid_time_off_note (text), paid_holidays_per_year (int), meal_break (text) | 1 |\n\n### Lint codes\n\n`calendar.epoch`, `calendar.schedule_times`, `calendar.unit_cap`.\n\n## Cast life pack (`castlife`)\n\nVersion 1 \xB7 realism domain `castlife` \xB7 requires `gear`, `relationships`, `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `castlife.decide` | `key`, `choice` |\n| `castlife.override` | `who`, `minutes?`, `place?`, `activity?` |\n| `castlife.satisfy` | `need`, `entity?` |\n\n### Formula functions\n\n- `busy(who)`\n- `invited(host)`\n- `need(who, need)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `accept_invitation` | Accept invitation | `host: ref \u2192 person` |  | `default` | `1` | accept, sure, let's, count me in |\n| `eat` | Eat |  |  | `default` | `30` | eat, have lunch, have dinner, grab a bite |\n| `rest` | Rest |  |  | `default` | `30` | rest, relax, take a break |\n| `sleep` | Go to bed |  |  | `default` | `5` | go to bed, sleep, turn in, hit the sack |\n\n### Events\n\nIts own: `castlife.decision`, `castlife.invitation`, `castlife.need`.\n\n### Panels and slots\n\nPanels: `castlife.cast`. Slots it writes: `people`, `stance`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `castlife.agents` | `castlife` | 3 | each agent |\n| `castlife.plans` | `castlife` | 0 | the world |\n| `castlife.trips` | `castlife` | 1 | the world |\n\n### Lint codes\n\n`castlife.birthday`, `castlife.cues`, `castlife.double_booking`.\n\n## Combat pack (`combat`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `hostile` | Hostile to | `*` | `*` | many_many | yes |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `combat.end` | `winner?` |\n| `combat.end_turn` | `who?` |\n| `combat.spend` | `who?`, `cost` |\n| `combat.start` | `foes?` |\n\n### Formula functions\n\n- `budget_left(e, budget)`\n- `can_fight(e)`\n- `encounter_round()`\n- `has_turn(e)`\n- `in_encounter(e)`\n- `is_ally(a, b)`\n- `is_down(e)`\n- `is_foe(a, b)`\n- `standing(side)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `end_turn` | End turn |  |  | `default` | `0` | end my turn, end turn |\n| `fight` | Fight | `target: ref` |  | `default` | `0` | start a fight, pick a fight, draw my weapon |\n\n### Events\n\nIts own: `combat.act`, `combat.decision`, `combat.down`, `combat.end`, `combat.spend`, `combat.start`, `combat.turn`.\n\n### Panels and slots\n\nPanels: `combat.encounter`. Slots it writes: none.\n\n## Economy pack (`economy`)\n\nVersion 1 \xB7 realism domain `money` \xB7 requires `space`.\n\n### Kinds\n\n#### `account`: Account\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `apr_pct` | APR % | number | \u2265 0 |  |  |  | live from money 4 |\n| `apy_pct` | APY % | number | \u2265 0 |  |  |  | live from money 4 |\n| `autopay` | Autopay | enum: none, minimum, statement, full, fixed |  | `\"none\"` |  |  | live from money 3 |\n| `autopay_cents` | Autopay amount (fixed) | money | \u2265 0 |  |  |  | live from money 3 |\n| `autopay_from` | Autopay from | ref \u2192 account |  |  |  |  | live from money 3 |\n| `due_day` | Due day of month | number | 1 \u2026 31 |  |  |  | live from money 3 |\n| `institution` | Institution | text |  |  |  |  | live from money 3 |\n| `limit` | Credit limit | money | \u2265 0 |  |  |  | live from money 3 |\n| `min_floor` | Minimum payment floor | money | \u2265 0 |  |  |  | live from money 4 |\n| `min_pct` | Minimum payment % of balance | number | 0 \u2026 100 |  |  |  | live from money 4 |\n| `months_left` | Months left (loans) | number | \u2265 0 |  |  |  | live from money 3 |\n| `opened` | Opened | date |  |  |  |  | live from money 4 |\n| `opening` | Opening balance | money |  |  |  |  | locked |\n| `overdraft` | Overdraft policy | enum: decline, fee, linked |  |  |  |  | live from money 2 |\n| `overdraft_limit` | Overdraft limit | money | \u2265 0 |  |  |  | live from money 2 |\n| `overdraft_link` | Overdraft from | ref \u2192 account |  |  |  |  | live from money 2 |\n| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |\n| `payment` | Monthly payment (loans) | money | \u2265 0 |  |  |  | live from money 3 |\n| `product` | Product (a world product, or a class: cash, checking, business_checking, savings, money_market, cd, trust, escrow, credit_card, charge_card, line_of_credit, loan, mortgage, brokerage, retirement) | text |  |  |  |  | live from money 2 |\n| `secured_by` | Secured by | ref |  |  |  |  | live from money 3 |\n| `statement_day` | Statement day | number | 1 \u2026 28 |  |  |  | live from money 3 |\n| `status` | Status | enum: open, frozen, collections, charged_off, closed, paid_off, matured |  | `\"open\"` |  |  | live from money 2 |\n| `term_months` | Term in months | number | \u2265 0 |  |  |  | live from money 3 |\n\n#### `business`: Business\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `collects_sales_tax` | Collects sales tax | bool |  |  |  |  | live from money 4 |\n| `daily_sales` | Walk-in takings a trading day | money | \u2265 0 |  |  |  | live from money 3 |\n| `distribution_every` | Paid out every | enum: month, quarter, year |  |  |  |  | live from money 4 |\n| `distribution_pct` | Profit paid out % | number | 0 \u2026 100 |  |  |  | live from money 4 |\n| `industry` | Industry | text |  |  |  |  | live from money 3 |\n| `invoice_days` | Invoice terms (days) | number | \u2265 0 |  |  |  | live from money 3 |\n| `late_fee_pct` | Late fee % | number | \u2265 0 |  |  |  | live from money 4 |\n| `margin_pct` | Margin % | number | 0 \u2026 100 |  |  |  | live from money 4 |\n| `operating_account` | Operating account | ref \u2192 account |  |  |  |  | live from money 3 |\n| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |\n| `places` | Places it trades at | list of ref |  |  |  |  | live from money 3 |\n| `sales_spread_pct` | Takings vary by up to \xB1 % | number | 0 \u2026 100 | `30` |  |  | live from money 3 |\n| `structure` | Structure | enum: sole_proprietorship, partnership, llc, s_corp, c_corp |  |  |  |  | live from money 4 |\n| `trading_days` | Trading days (0 is Sunday) | list of number |  |  |  |  | live from money 3 |\n| `valuation_multiple` | Valued at this many years of profit, over its books | number | \u2265 0 | `3` |  |  | live from money 4 |\n| `value` | Value (set: overrides the books) | money | \u2265 0 |  |  |  | live from money 3 |\n\n#### `card`: Payment card\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `account` | Account | ref \u2192 account |  |  |  |  | live from money 2 |\n| `daily_atm_limit` | Daily cash machine limit | money | \u2265 0 |  |  |  | live from money 4 |\n| `daily_purchase_limit` | Daily purchase limit | money | \u2265 0 |  |  |  | live from money 4 |\n| `holder` | Holder | ref |  |  |  |  | live from money 2 |\n| `item` | The card in gear | ref |  |  |  |  | live from money 2 |\n| `last4` | Last four digits | text |  |  |  |  | live from money 3 |\n| `network` | Card type | enum: debit, credit, charge |  |  |  |  | live from money 2 |\n| `replaced_by` | Replaced by | ref \u2192 card |  |  |  |  | live from money 2 |\n| `replaces` | Replaces | ref \u2192 card |  |  |  |  | live from money 2 |\n| `state` | State | enum: active, frozen, lost, cancelled |  | `\"active\"` |  |  | live from money 2 |\n\n#### `flow`: Money flow\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `amount_cents` | Amount | money | \u2265 0 |  |  |  | live from money 2 |\n| `amount_due` | What's due on the credit account it pays | enum: minimum, statement, balance |  |  |  |  | live from money 3 |\n| `amount_formula` | Amount formula | text |  |  |  |  | live from money 3 |\n| `amount_max` | Amount at most | money | \u2265 0 |  |  |  | live from money 3 |\n| `amount_min` | Amount at least | money | \u2265 0 |  |  |  | live from money 3 |\n| `amount_of` | Percent of this account's balance | ref \u2192 account |  |  |  |  | live from money 3 |\n| `amount_pct` | Percent of a balance | number | 0 \u2026 100 |  |  |  | live from money 3 |\n| `amount_table` | Amount from a table (table.row.column) | text |  |  |  |  | live from money 3 |\n| `at` | Time of day (HH:MM) | text |  |  |  |  | live from money 2 |\n| `category` | Category | text |  |  |  |  | live from money 2 |\n| `count` | Times at most | number | \u2265 1 |  |  |  | live from money 2 |\n| `days` | Days of the month (-1 = the last) | list of number |  |  |  |  | live from money 2 |\n| `end` | Ends | date |  |  |  |  | live from money 2 |\n| `every` | Every | enum: day, week, month, year |  |  |  |  | live from money 2 |\n| `except` | Except holidays | list of text |  |  |  |  | live from money 3 |\n| `fallback` | Fallback (an account or a party) | text |  |  |  |  | live from money 3 |\n| `flow_kind` | Kind | enum: transfer, bill, rent, utility, subscription, premium, loan_payment, card_payment, savings, income, payroll, allowance, living, tax, distribution, invoice, draw, other |  | `\"bill\"` |  |  | live from money 2 |\n| `from` | From (an account, a party, or an outside payer) | text |  |  |  |  | live from money 2 |\n| `interval` | Every Nth period | number | \u2265 1 |  |  |  | live from money 2 |\n| `link` | Belongs to | ref |  |  |  |  | live from money 2 |\n| `method` | Paid by (cash, card, checking, savings) | text |  |  |  |  | live from money 3 |\n| `months` | Months (yearly) | list of number |  |  |  |  | live from money 2 |\n| `once` | Once, at (YYYY-MM-DDTHH:MM) | text |  |  |  |  | live from money 2 |\n| `retries` | Retries | number | \u2265 0 |  |  |  | live from money 3 |\n| `retry_days` | Retry after days | number | \u2265 1 |  |  |  | live from money 3 |\n| `roll` | Off a business day | enum: none, before, after |  | `\"none\"` |  |  | live from money 3 |\n| `shares` | Shares ({party, pct, from?}) | list |  |  |  |  | live from money 3 |\n| `shortfall` | When the money isn't there | enum: skip, partial, retry, fallback, overdraft, defer |  | `\"skip\"` |  |  | live from money 3 |\n| `splits` | Splits ({to, cents?, pct?}) | list |  |  |  |  | live from money 3 |\n| `start` | Starts | date |  |  |  |  | live from money 2 |\n| `status` | Status | enum: active, paused, ended |  | `\"active\"` |  |  | live from money 2 |\n| `to` | To (an account, a party, or an outside payee) | text |  |  |  |  | live from money 2 |\n| `weekdays` | Weekdays (0 = Sunday) | list of number |  |  |  |  | live from money 2 |\n\n#### `holding`: Holding\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `account` | Account | ref \u2192 account |  |  |  |  | live from money 4 |\n| `asset` | Asset | text |  |  |  |  | live from money 4 |\n| `lots` | Lots ({qty, cost, at}) | list |  |  |  |  | live from money 4 |\n| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |\n| `route` | Distributions go to (an account, or reinvest) | text |  |  |  |  | live from money 4 |\n\n#### `invoice`: Invoice\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `business` | Business | ref \u2192 business |  |  |  |  | live from money 3 |\n| `cents` | Amount | money | \u2265 0 |  |  |  | live from money 3 |\n| `customer` | Customer (a party, or an outside customer) | text |  |  |  |  | live from money 3 |\n| `days_late` | Days late | number | \u2265 0 |  |  |  | live from money 4 |\n| `due` | Due | date |  |  |  |  | live from money 3 |\n| `fees` | Late fees charged | number | \u2265 0 |  |  |  | live from money 4; locked |\n| `flow` | Paid by flow | text |  |  |  |  | live from money 3 |\n| `issued` | Issued | date |  |  |  |  | live from money 3 |\n| `late_fee` | Late fee charged | money | \u2265 0 |  |  |  | live from money 4 |\n| `memo` | For | text |  |  |  |  | live from money 3 |\n| `paid` | Paid | money | \u2265 0 |  |  |  | live from money 3 |\n| `state` | State | enum: open, paid, late, void |  | `\"open\"` |  |  | live from money 3 |\n\n#### `job`: Job\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `basis` | Paid by | enum: salary, hourly, per_shift, commission, tips, stipend |  | `\"hourly\"` |  |  | live from money 3 |\n| `commission_pct` | Commission % | number | \u2265 0 |  |  |  | live from money 3 |\n| `contractor` | Contractor (nothing withheld) | bool |  |  |  |  | live from money 4 |\n| `deductions` | Deductions ({label, pretax, cents?, pct?, kind?, match_pct?, to?}) | list |  |  |  |  | live from money 4 |\n| `employer` | Employer (a business, or an outside employer) | text |  |  |  |  | live from money 3 |\n| `end` | Ends | date |  |  |  |  | live from money 3 |\n| `hours` | Hours counted | enum: scheduled, attended, contract |  |  |  |  | live from money 3 |\n| `hours_per_week` | Hours a week | number | \u2265 0 |  |  |  | live from money 3 |\n| `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |\n| `pay_anchor` | First payday | date |  |  |  |  | live from money 3 |\n| `pay_days` | Paydays of the month | list of number |  |  |  |  | live from money 3 |\n| `pay_every` | Paid | enum: weekly, biweekly, semimonthly, monthly, per_job, custom |  | `\"monthly\"` |  |  | live from money 3 |\n| `pay_except` | Custom pay: except holidays | list of text |  |  |  |  | live from money 3 |\n| `pay_interval` | Custom pay: every Nth | number | \u2265 1 |  |  |  | live from money 3 |\n| `pay_months` | Custom pay: months | list of number |  |  |  |  | live from money 3 |\n| `pay_roll` | Payday off a business day | enum: none, before, after |  | `\"before\"` |  |  | live from money 3 |\n| `pay_unit` | Custom pay: every | enum: day, week, month, year |  |  |  |  | live from money 3 |\n| `pay_weekday` | Payday weekday (0 = Sunday) | number | 0 \u2026 6 |  |  |  | live from money 3 |\n| `pay_weekdays` | Custom pay: weekdays | list of number |  |  |  |  | live from money 3 |\n| `rate` | Rate (a year, an hour or a shift) | money | \u2265 0 |  |  |  | live from money 3 |\n| `season_from` | Season from (MM-DD) | text |  |  |  |  | live from money 3 |\n| `season_to` | Season to (MM-DD) | text |  |  |  |  | live from money 3 |\n| `shift_pattern` | Shift pattern | text (row of calendar.shifts) |  |  |  |  | live from money 3 |\n| `shifts_per_week` | Shifts a week | number | \u2265 0 |  |  |  | live from money 3 |\n| `splits` | Pay goes to ({to, cents?, pct?}) | list |  |  |  |  | live from money 3 |\n| `start` | Started | date |  |  |  |  | live from money 3 |\n| `status` | Status | enum: active, leave, ended |  | `\"active\"` |  |  | live from money 3 |\n| `tips_per_hour` | Tips an hour | money | \u2265 0 |  |  |  | live from money 3 |\n| `title` | Title | text |  |  |  |  | live from money 3 |\n| `weeks_per_year` | Weeks a year | number | 0 \u2026 53 |  |  |  | live from money 3 |\n| `worker` | Worker | ref \u2192 person |  |  |  |  | live from money 3 |\n| `workplace` | Workplace | ref |  |  |  |  | live from money 3 |\n\n#### `property`: Property\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `appreciation_pct` | Appreciation % a year | number |  |  |  |  | live from money 4 |\n| `asking_price` | Asking price (for sale) | money | \u2265 0 |  |  |  | live from money 3 |\n| `insurance` | Insurance a month | money | \u2265 0 |  |  |  | live from money 4 |\n| `lease_months` | Lease term, months | number | \u2265 1 | `12` |  |  | live from money 3 |\n| `let_from` | Let since | date |  |  |  |  | live from money 3 |\n| `managed` | Let to outside tenants | bool |  | `false` |  |  | live from money 3 |\n| `market_rent` | Market rent, a unit a month | money | \u2265 0 |  |  |  | live from money 3 |\n| `mortgage` | Mortgage | ref \u2192 account |  |  |  |  | live from money 3 |\n| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |\n| `place` | Place | ref |  |  |  |  | live from money 3 |\n| `purchase_price` | Purchase price | money | \u2265 0 |  |  |  | live from money 4 |\n| `purchased` | Purchased | date |  |  |  |  | live from money 4 |\n| `region` | Region (for its property tax) | text (row of economy.regions) |  |  |  |  | live from money 3 |\n| `rent_to` | Rent paid into | ref \u2192 account |  |  |  |  | live from money 3 |\n| `tax_installments` | Property tax bills a year | number | 1 \u2026 12 | `2` |  |  | live from money 3 |\n| `tax_pct` | Property tax % a year | number | \u2265 0 |  |  |  | live from money 4 |\n| `units` | Units to let | number | \u2265 1 | `1` |  |  | live from money 3 |\n| `upkeep_pct` | Upkeep % a year | number | \u2265 0 |  |  |  | live from money 4 |\n| `vacancy_months` | Months empty between tenants, on average | number | \u2265 0 | `1` |  |  | live from money 3 |\n| `value` | Value | money | \u2265 0 |  |  |  | live from money 3 |\n| `volatility_pct` | Value swings, % a year | number | \u2265 0 |  |  |  | live from money 4 |\n\n#### `trust`: Trust\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `owners` | Owners ({party, role, share?}) | list |  |  |  |  | live from money 1 |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `economy.apply_credit` | `product`, `cents?`, `term?`, `secured_by?`, `who?` |\n| `economy.buy` | `item?`, `category?`, `qty?`, `price?`, `exact?`, `stated?`, `name?`, `payer?`, `method?`, `from?`, `payee?`, `keep?`, `cashback?` |\n| `economy.card_replace` | `card`, `who?` |\n| `economy.card_state` | `card`, `state`, `who?` |\n| `economy.close_account` | `account` |\n| `economy.deposit` | `account`, `cents`, `who?` |\n| `economy.distribute` | `business`, `cents?`, `by?` |\n| `economy.exercise` | `holding`, `qty?`, `from?`, `to?`, `party?` |\n| `economy.flow_create` | `label?`, `kind?`, `from?`, `to?`, `amount?`, `every?`, `interval?`, `weekday?`, `day?`, `month?`, `at?`, `once?`, `start?`, `end?`, `count?`, `shortfall?`, `retry_days?`, `retries?`, `fallback?`, `roll?`, `category?`, `who?` |\n| `economy.flow_edit` | `flow`, `name?`, `clear?` |\n| `economy.flow_status` | `flow`, `status`, `who?` |\n| `economy.flow_update` | `flow`, `label?`, `kind?`, `from?`, `to?`, `amount?`, `every?`, `interval?`, `weekday?`, `day?`, `month?`, `at?`, `once?`, `start?`, `end?`, `count?`, `shortfall?`, `retry_days?`, `retries?`, `fallback?`, `roll?`, `category?`, `who?`, `clear?` |\n| `economy.hire` | `business`, `worker`, `title?`, `occupation?`, `basis?`, `rate?`, `hours?`, `hours_per_week?`, `pay_every?`, `start?`, `by?` |\n| `economy.invoice_issue` | `business`, `customer?`, `customer_name?`, `cents`, `memo?`, `days?`, `by?` |\n| `economy.invoice_pay` | `invoice`, `by?` |\n| `economy.invoice_void` | `invoice`, `by?` |\n| `economy.job_end` | `job`, `end?`, `by?` |\n| `economy.job_raise` | `job`, `rate?`, `pct?`, `by?` |\n| `economy.lease_end` | `lease`, `on?`, `party?` |\n| `economy.lease_start` | `property`, `tenant`, `rent`, `months?`, `day?`, `unit?`, `from?`, `party?` |\n| `economy.lose` | `item`, `thief?` |\n| `economy.move` | `from`, `to`, `cents`, `memo?` |\n| `economy.owner_draw` | `business`, `cents`, `owner?`, `by?` |\n| `economy.pay_card` | `card`, `from?`, `cents?`, `who?` |\n| `economy.price_modifier` | `percent`, `scope?`, `place?`, `minutes?`, `id?`, `clear?` |\n| `economy.property_buy` | `property`, `price?`, `from?`, `down?`, `term_months?`, `party?` |\n| `economy.property_sell` | `property`, `price`, `buyer?`, `to?`, `party?` |\n| `economy.release_hold` | `account`, `hold` |\n| `economy.route` | `holding?`, `property?`, `business?`, `to?`, `party?` |\n| `economy.set_autopay` | `account`, `mode`, `from?`, `cents?`, `who?` |\n| `economy.set_pay_prefs` | `tiers`, `who?` |\n| `economy.set_price` | `asset`, `price` |\n| `economy.set_status` | `account`, `status` |\n| `economy.stake_sell` | `business`, `share`, `price`, `buyer?`, `to?`, `party?` |\n| `economy.trade` | `side?`, `party?`, `holding?`, `asset?`, `account?`, `qty?`, `amount?`, `from?`, `to?`, `right?`, `strike?`, `expiry?` |\n| `economy.transfer` | `to`, `cents`, `from?`, `memo?`, `method?` |\n| `economy.withdraw` | `account`, `cents`, `who?` |\n\n### Formula functions\n\n- `asset_price(id)`\n- `balance(account)`\n- `business_value(id)`\n- `can_afford(who, cents)`\n- `credit_score(who)`\n- `employs(business, who)`\n- `holding_units(id)`\n- `holding_value(id)`\n- `holds(who, thing)`\n- `is_credit(account)`\n- `manages(who, thing)`\n- `may_draw(who, business)`\n- `money_feature(feature, who)`\n- `net_worth(who)`\n- `price(item)`\n- `property_value(id)`\n- `spends(who, account)`\n- `wealth(who)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `apply_credit` | Apply for credit | `product: text`, `amount?: money`, `term?: number` |  | `default` | `15` | apply for a credit card, apply for a loan, take out a loan |\n| `buy` | Buy | `item: text`, `qty?: number`, `price?: money`, `method?: text`, `cashback?: money` |  | `default` | `5` | buy, purchase, order, pick up a |\n| `card_freeze` | Freeze card | `card: ref \u2192 card` |  | `default` | `2` | freeze my card, lock my card |\n| `card_replace` | Replace card | `card: ref \u2192 card` |  | `default` | `2` | replace my card, order a new card |\n| `card_report_lost` | Report card lost | `card: ref \u2192 card` |  | `default` | `2` | report my card lost, my card was stolen, cancel my card |\n| `card_unfreeze` | Unfreeze card | `card: ref \u2192 card` |  | `default` | `2` | unfreeze my card, unlock my card |\n| `deposit_cash` | Deposit cash | `account: ref \u2192 account`, `amount: money` |  | `default` | `3` | deposit, pay in cash, bank the cash |\n| `distribute_profit` | Distribute profit | `business: ref \u2192 business`, `amount?: money` |  | `default` | `10` | distribute profit, pay dividends, pay out the owners |\n| `exercise_option` | Exercise an option | `holding: ref \u2192 holding`, `qty?: number`, `from?: ref \u2192 account`, `to?: ref \u2192 account` |  | `default` | `2` | exercise the option, exercise my calls, exercise my puts |\n| `flow_create` | Set up a standing payment | `label?: text`, `kind?: text`, `from?: ref \u2192 account`, `to?: text`, `amount?: money`, `every?: text`, `interval?: number`, `weekday?: number`, `day?: number`, `month?: number`, `at?: text`, `once?: text`, `start?: text`, `end?: text`, `count?: number`, `shortfall?: text`, `retry_days?: number`, `retries?: number`, `fallback?: text`, `roll?: text`, `category?: text` |  | `default` | `2` | set up a standing order, schedule a payment, set up a recurring transfer |\n| `flow_delete` | Cancel a standing payment | `flow: ref \u2192 flow` |  | `default` | `2` | cancel the standing order, stop the recurring payment |\n| `flow_pause` | Pause a standing payment | `flow: ref \u2192 flow` |  | `default` | `2` | pause the standing order |\n| `flow_resume` | Resume a standing payment | `flow: ref \u2192 flow` |  | `default` | `2` | resume the standing order |\n| `flow_update` | Change a standing payment | `flow: ref \u2192 flow`, `label?: text`, `kind?: text`, `from?: ref \u2192 account`, `to?: text`, `amount?: money`, `every?: text`, `interval?: number`, `weekday?: number`, `day?: number`, `month?: number`, `at?: text`, `once?: text`, `start?: text`, `end?: text`, `count?: number`, `shortfall?: text`, `retry_days?: number`, `retries?: number`, `fallback?: text`, `roll?: text`, `category?: text`, `clear?: text` |  | `default` | `2` | change the standing order, change the recurring payment |\n| `invoice_issue` | Send an invoice | `business: ref \u2192 business`, `customer?: ref`, `customer_name?: text`, `amount: money`, `memo?: text`, `days?: number` |  | `default` | `10` | send an invoice, invoice, bill them |\n| `invoice_pay` | Pay an invoice | `invoice: ref \u2192 invoice` |  | `default` | `5` | pay the invoice, settle the bill |\n| `invoice_void` | Void an invoice | `invoice: ref \u2192 invoice` |  | `default` | `5` | void the invoice, cancel the invoice, write it off |\n| `job_end` | End a job | `job: ref \u2192 job` |  | `default` | `10` | fire, let go, quit, resign, hand in my notice |\n| `job_hire` | Hire | `business: ref \u2192 business`, `worker: ref \u2192 person`, `title?: text`, `basis?: text`, `rate?: money`, `hours_per_week?: number`, `pay_every?: text` |  | `default` | `15` | hire, take on, give a job to |\n| `job_raise` | Give a raise | `job: ref \u2192 job`, `rate: money` |  | `default` | `5` | give a raise, raise the pay, pay more |\n| `lease_end` | End a lease | `lease: ref \u2192 flow`, `on?: text` |  | `default` | `10` | end the lease, give notice, move out |\n| `lease_start` | Let a unit | `property: ref \u2192 property`, `tenant: ref \u2192 person`, `rent: money`, `months?: number`, `day?: number`, `unit?: text` |  | `default` | `20` | rent out, sign a lease, let the apartment |\n| `move_money` | Transfer between accounts | `from: ref \u2192 account`, `to: ref \u2192 account`, `amount: money` |  | `default` | `2` | transfer, move money, put into savings |\n| `owner_draw` | Take an owner's draw | `business: ref \u2192 business`, `amount: money` |  | `default` | `5` | take a draw, pay myself, take money out of the business |\n| `pay` | Pay | `to: ref \u2192 person`, `amount: money` |  | `default` | `1` | pay, give money, send money, venmo |\n| `pay_card` | Pay card or loan | `card: ref \u2192 account`, `from?: ref \u2192 account`, `amount?: money` |  | `default` | `2` | pay off the card, pay the card, pay my credit card, make a loan payment |\n| `property_buy` | Buy a property | `property: ref \u2192 property`, `price?: money`, `from?: ref \u2192 account`, `down?: money`, `term_months?: number` |  | `default` | `60` | buy the house, buy the property, make an offer on |\n| `property_sell` | Sell a property | `property: ref \u2192 property`, `price: money`, `buyer?: ref \u2192 person`, `to?: ref \u2192 account` |  | `default` | `60` | sell the house, sell the property |\n| `route_distributions` | Route dividends, rent or profits | `holding?: ref \u2192 holding`, `property?: ref \u2192 property`, `business?: ref \u2192 business`, `to?: text` |  | `default` | `1` | reinvest dividends, send dividends to, send the rent to |\n| `set_autopay` | Set autopay | `account: ref \u2192 account`, `mode: text`, `from?: ref \u2192 account`, `amount?: money` |  | `default` | `2` | set up autopay, turn on autopay, turn off autopay |\n| `set_pay_prefs` | Set how I pay | `tiers: text` |  | `default` | `2` | i'd rather pay with |\n| `stake_sell` | Sell a share of a business | `business: ref \u2192 business`, `share: number`, `price: money`, `buyer?: ref \u2192 person`, `to?: ref \u2192 account` |  | `default` | `60` | sell my share of the business, sell the shop |\n| `trade` | Buy or sell investments | `side?: text`, `holding?: ref \u2192 holding`, `asset?: text`, `account?: ref \u2192 account`, `qty?: number`, `amount?: money`, `from?: ref \u2192 account`, `to?: ref \u2192 account`, `right?: text`, `strike?: money`, `expiry?: text` |  | `default` | `2` | invest, buy stocks, buy shares, sell stocks, sell shares, cash out, buy an option |\n| `withdraw_cash` | Withdraw cash | `account: ref \u2192 account`, `amount: money` |  | `default` | `3` | withdraw, take out cash, hit the atm, get cash |\n\n### Events\n\nIts own: `economy.accrue`, `economy.acquire`, `economy.anchor`, `economy.card_paid`, `economy.commission`, `economy.credit`, `economy.decline`, `economy.delinquency`, `economy.dispose`, `economy.estimated_tax`, `economy.exercise`, `economy.flow_renamed`, `economy.flow_run`, `economy.hold`, `economy.income`, `economy.invoice_paid`, `economy.lots`, `economy.mint`, `economy.modifier`, `economy.note`, `economy.open`, `economy.payout`, `economy.payslip`, `economy.price`, `economy.quote`, `economy.remit`, `economy.sale`, `economy.score`, `economy.settle`, `economy.spend`, `economy.stake_route`, `economy.statement`, `economy.status`, `economy.timesheet`, `economy.txn`.\n\nChecks it adds to: `post`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `purchase` | `money` |\n| `transfer` | `money` |\n\n### Panels and slots\n\nPanels: `economy.money`. Slots it writes: `money`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `economy.accounts` | `money` | 3 | the world |\n| `economy.invoices` | `money` | 3 | the world |\n| `economy.markets` | `money` | 3 | the world |\n| `economy.money` | `money` | 2 | the world |\n| `economy.plans` | `money` | 0 | the world |\n| `economy.property_values` | `money` | 3 | the world |\n| `economy.settlements` | `money` | 3 | the world |\n| `economy.timesheet` | `money` | 3 | the world |\n\nDetail on demand: `money` (version 2).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `economy.catalog` | Price catalog | `lre-table/economy.catalog/v1` | name (text), category (ref), unit (text), price_cents (band), notes (text, optional) | 340 |\n| `economy.categories` | Price categories | `lre-table/economy.categories/v1` | name (text), basis (text), notes (text, optional), price_unit_note (text, optional), item_count (int), price_cents (band) | 19 |\n| `economy.finance` | Finance parameters | `lre-table/economy.finance/v1` | title (text), values (json) | 7 |\n| `economy.occupations` | Occupations and pay | `lre-table/economy.occupations/v1` | title (text), category (enum), median_cents_per_h (int), median_cents_per_year (int), typical_earnings_cents_per_year (int), schedule_pattern (ref), typical_hours_per_week (number), weeks_per_year (number), weekend_work (enum), shifts (list), pay_frequency (enum), benefits (enum), benefits_note (text), withholding_rate_pct (number), description (text), wage_basis (text), tipped (bool, optional), tipped_cash_wage_cents_per_h (int, optional), self_employed (bool, optional), fica_exempt (bool, optional), estimated_tax_set_aside_pct (number, optional), withholding_note (text, optional) | 56 |\n| `economy.regions` | Regions (US states, DC and the national baseline) | `lre-table/economy.regions/v1` | name (text), abbr (text), scope (enum), census_region (enum, optional), census_division (enum, optional), time_zones (list, optional), observes_dst (bool, optional), state_income_tax_effective_pct (number, optional), local_income_tax_pct_typical (number, optional), sales_tax_combined_avg_pct (number), property_tax_effective_pct (number, optional), cost_of_living_multiplier (number), median_rent_1br_cents_per_month (int), median_rent_2br_cents_per_month (int), residential_electricity_cents_per_kwh (number), minimum_wage_cents_per_h (int), tipped_minimum_wage_cents_per_h (int, optional), notes (text, optional) | 52 |\n\n### Lint codes\n\n`economy.accounts`, `economy.assets`, `economy.business`, `economy.holdings`, `economy.property`, `economy.unpriced_cap`.\n\n## Gear & containers pack (`gear`)\n\nVersion 1 \xB7 realism domain `gear` \xB7 requires `space`.\n\n### Kinds\n\n#### `container`: Container\n\nExtends `item`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `capacity_l` | Capacity (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `max_load_kg` | Max load (kg) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `stock` | Contents category (sampled when first opened) | text |  |  |  |  |  |\n\n#### `item`: Item\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `catalog` | Catalog item | text (row of economy.catalog) |  |  |  |  |  |\n| `category` | Category | text |  |  |  |  |  |\n| `condition` | Condition | number | 0 \u2026 100 | `100` |  |  | live from gear 3; bound auto, \xB125 a turn; bands: broken, worn, good, like new |\n| `consumable` | Consumable | bool |  |  |  |  | live from gear 4 |\n| `from_kit` | From kit | ref |  |  |  |  | locked |\n| `notable` | Notable | bool |  |  |  |  | live from gear 1 |\n| `overdue` | Overdue | bool |  |  |  |  | locked |\n| `piece` | Kit piece | text |  |  |  |  | locked |\n| `qty` | Quantity | number | \u2265 0 | `1` |  |  | live from gear 2; bound confirm, \xB110 a turn |\n| `slot` | Equip slot | text |  |  |  |  | live from gear 3 |\n| `uses` | Uses left | number | \u2265 0 |  |  |  | live from gear 4 |\n| `volume_l` | Volume (l) | number | \u2265 0 |  |  |  | live from gear 2 |\n| `weight_g` | Weight (g) | number | \u2265 0 |  |  |  | live from gear 2 |\n\n#### `kit`: Kit\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `kit` | Kit template | text |  |  |  |  | live from gear 3 |\n| `piece_count` | Piece count | number |  |  |  |  | live from gear 3 |\n| `pieces` | Pieces | list |  |  |  |  | live from gear 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `equipped` | Equipped by | `item` | `*` | many_one |  |  | `slot` |\n| `uses` | Uses (granted until) | `*` | `*` | many_many |  |  | none |\n| `worn_by` | Worn by | `item` | `*` | many_one |  |  | `slot` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `gear.drop` | `item`, `place?` |\n| `gear.give` | `item`, `from`, `to` |\n| `gear.lend` | `item`, `to`, `until?`, `said?` |\n| `gear.lose` | `item`, `thief?` |\n| `gear.receive` | `name`, `to`, `from?` |\n| `gear.remove` | `item` |\n| `gear.retrieve` | `item` |\n| `gear.take_piece` | `kit`, `piece`, `to` |\n| `gear.transfer` | `item`, `to` |\n| `gear.use` | `item`, `user?` |\n| `gear.wear` | `item`, `wearer`, `slot?` |\n\n### Formula functions\n\n- `carried_kg(holder)`\n- `carries(holder, item)`\n- `has_item(holder, what)`\n- `kit_complete(kit)`\n- `kit_present(kit)`\n- `lent_out(thing)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drop` | Drop | `item: ref \u2192 item` |  | `default` | `1` | drop, put down, leave |\n| `give` | Give | `item: ref \u2192 item`, `to: ref \u2192 person` |  | `default` | `1` | give, hand, pass |\n| `lend` | Lend | `item: ref \u2192 item`, `to: ref \u2192 person`, `days?: number`, `until?: text` |  | `default` | `2` | lend, loan, let borrow |\n| `lose` | Lose something | `item: ref \u2192 item` |  | `default` | `1` | lost my, lose, can't find my, is gone, is missing |\n| `reclaim` | Take back | `item: ref \u2192 item` |  | `default` | `5` | take back, get back, reclaim |\n| `remove` | Take off | `item: ref \u2192 item` |  | `default` | `2` | take off, remove, unequip |\n| `take` | Take | `item: ref \u2192 item` |  | `default` | `1` | take, pick up, grab |\n| `take_piece` | Take from a kit | `kit: ref \u2192 kit`, `piece: text` |  | `default` | `1` | take the, grab a, get a |\n| `use` | Use | `item: ref \u2192 item` |  | `default` | `5` | use, apply |\n| `wear` | Wear or equip | `item: ref \u2192 item` |  | `default` | `2` | wear, put on, equip |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `give` | `ref` |\n| `quantity` | `number` |\n\n### Panels and slots\n\nPanels: `gear.gear`. Slots it writes: `gear`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `gear.grants` | `gear` | 1 | the world |\n\nDetail on demand: `gear` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `gear.containers` | Containers | `lre-table/gear.containers/v1` | name (text), capacity_l (number), max_load_kg (number), empty_weight_g (int), location (enum), equip_slot (ref), price_cents (band), notes (text, optional) | 34 |\n| `gear.items` | Gear items | `lre-table/gear.items/v1` | name (text), category (enum), equip_slot (ref), weight_g (int), volume_l (number), price_cents (band), notes (text, optional) | 90 |\n| `gear.kits` | Kits | `lre-table/gear.kits/v1` | name (text), recommended_container (ref), description (text), piece_count (int), pieces_total_weight_g (number), packed_volume_l (number), price_cents (band), pieces (list), notes (text, optional) | 5 |\n| `gear.slots` | Equip slots | `lre-table/gear.slots/v1` | description (text) | 20 |\n\n### Lint codes\n\n`gear.kits`.\n\n## Minds pack (`minds`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Events\n\nIts own: `minds.commitment`, `minds.commitment_edit`, `minds.consolidated`, `minds.memory`, `minds.mind`, `minds.note_edit`, `minds.pin`, `minds.plan`, `minds.plan_edit`, `minds.presence`, `minds.refresh`, `minds.round`, `minds.skip`.\n\n### Panels and slots\n\nPanels: none. Slots it writes: `minds`.\n\n### Lint codes\n\n`minds.config`, `minds.steps`.\n\n## Relationships pack (`relationships`)\n\nVersion 1 \xB7 realism domain `relationships` \xB7 requires `space`.\n\n### Kinds\n\n#### `company`: Company\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `faction`: Faction\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `family`: Family\n\nExtends `group`.\n\nNo fields of its own.\n\n#### `group`: Group\n\nExtends `thing`.\n\nNo fields of its own.\n\n#### `household`: Household\n\nExtends `group`.\n\nNo fields of its own.\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `child_of` | Child of | `person` | `person` | many_many |  | `parent_of` | none |\n| `knows` | Knows | `*` | `*` | many_many |  |  | none |\n| `member_of` | Member of | `*` | `group` | many_many |  |  | `rank`, `role`, `since` |\n| `parent_of` | Parent of | `person` | `person` | many_many |  | `child_of` | none |\n| `partner_of` | Partner of | `person` | `person` | many_many | yes |  | `since` |\n| `regard` | Regard | `*` | `*` | many_many |  |  | `respect`, `trust`, `warmth` |\n| `sibling_of` | Sibling of | `person` | `person` | many_many | yes |  | none |\n| `spouse_of` | Spouse of | `person` | `person` | many_many | yes |  | `since` |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `relationships.adjust` | `from`, `to`, `delta`, `axis?`, `why?` |\n| `relationships.appraise` | `from`, `to`, `appraisal`, `why?`, `mutual?` |\n\n### Formula functions\n\n- `faction_regard(group, to)`\n- `regard(from, to, axis)`\n- `regard_band(from, to)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `chat_with` | Chat with | `target: ref \u2192 person` |  | `default` | `15` | chat with, talk to, catch up with |\n| `give_gift` | Give a gift | `target: ref \u2192 person` |  | `default` | `5` | give a gift, surprise |\n\n### Events\n\nIts own: `relationships.regard`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `regard` | `number` |\n\n### Panels and slots\n\nPanels: none. Slots it writes: `people`.\n\n### Lint codes\n\n`relationships.axes`.\n\n## Character sheets pack (`sheets`)\n\nVersion 1 \xB7 realism domain `sheets` \xB7 requires `space`.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `sheets.condition` | `condition`, `who?`, `label?`, `mod?`, `minutes?`, `clear?` |\n\n### Formula functions\n\n- `condition_mod(who)`\n- `derived(who, id)`\n- `difficulty_of(v)`\n- `has_condition(who, id)`\n- `stat(who, stat)`\n- `stat_mod(who, stat)`\n- `stat_word(who, stat)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `attempt` | Attempt | `stat: text`, `difficulty?: text` | `1d20` | `failure`, `great`, `success` | `5` | try to, attempt, check |\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `condition` | `list` |\n\n### Panels and slots\n\nPanels: `sheets.you`. Slots it writes: `outcome`.\n\n### Lint codes\n\n`sheets.stat_range`.\n\n## Space & travel pack (`space`)\n\nVersion 1 \xB7 realism domain `space` \xB7 requires `calendar`.\n\n### Kinds\n\n#### `person`: Person\n\nExtends `thing`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `activity` | Activity | text |  | `\"idle\"` |  |  | live from castlife 1 |\n| `activity_until` | Activity ends | number |  |  |  |  | live from castlife 1; locked |\n| `agility` | Agility | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `appointments` | Appointments | list |  |  |  |  | live from castlife 2 |\n| `birthday` | Birthday (MM-DD or YYYY-MM-DD) | date |  |  |  |  | live from castlife 3 |\n| `charm` | Charm | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `chores` | Chores | list |  |  |  |  | live from castlife 3 |\n| `conditions` | Conditions | list |  |  |  |  | live from sheets 4 |\n| `employer` | Employer | ref |  |  |  |  | live from money 3 |\n| `filing_status` | Tax filing status | enum: single, married_filing_jointly, head_of_household |  |  |  |  | live from money 4 |\n| `grit` | Grit | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `home` | Home | ref |  |  |  |  | live from space 1 |\n| `local_tax` | Pays local income tax | bool |  |  |  |  | live from money 4 |\n| `might` | Might | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n| `needs` | Needs | list |  |  |  |  | live from castlife 4; locked |\n| `occupation` | Occupation | text (row of economy.occupations) |  |  |  |  | live from money 3 |\n| `pay_prefs` | Pays with, in order ({use, min?, max?, categories?, except?}) | list |  |  |  |  | live from money 3 |\n| `region` | Region | text (row of economy.regions) |  |  |  |  | live from money 3 |\n| `scene` | Scene type | text |  |  |  |  |  |\n| `trips` | Trips | list |  |  |  |  | live from castlife 1 |\n| `wealth` | Wealth | text |  |  |  |  | live from money 1 |\n| `wits` | Wits | number | 3 \u2026 18 |  |  |  | live from sheets 1 |\n\n#### `thing`: Thing\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `owner` | Owner | ref |  |  |  |  |  |\n| `place` | Place | ref |  |  |  |  | live from space 1 |\n| `x` | Grid x | number |  |  |  |  | live from space 3 |\n| `y` | Grid y | number |  |  |  |  | live from space 3 |\n\n### Relation types\n\n| Relation | Label | From | To | Cardinality | Symmetric | Inverse | Fields |\n|---|---|---|---|---|---|---|---|\n| `in` | In | `*` | `*` | many_one |  |  | none |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `space.set_route` | `route`, `open?` |\n| `space.step` | `x`, `y`, `entity?` |\n\n### Formula functions\n\n- `distance_km(from, to, mode)`\n- `grid_minutes(place, x, y)`\n- `grid_reachable(place, x, y)`\n- `on_grid(thing)`\n- `reach(a, b)`\n- `route_exists(from, to, mode)`\n- `route_open(route)`\n- `travel_minutes(from, to, mode)`\n- `within(place, ancestor)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `go` | Go to | `to: ref \u2192 place` |  | `default` | `level.space < 2 ? (level.space < 1 ? 0 : 15) : travel_minutes(here, to, 'walk')` | go to, walk to, head to, head over to, leave for |\n| `step` | Move on the map | `x: number`, `y: number` |  | `default` | `grid_minutes(here, x, y)` | walk over to, cross to, move to |\n\n### Events\n\nIts own: `space.pos`, `space.route`.\n\n### Proposals\n\n| Proposal | Bound by |\n|---|---|\n| `location` | `ref` |\n\n### Panels and slots\n\nPanels: `space.map`. Slots it writes: `scene`.\n\n### Lint codes\n\n`space.grid`, `space.maps`, `space.references`.\n\n## Story pack (`story`)\n\nVersion 1 \xB7 realism domain none \xB7 requires none.\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `story.answer` | `track?`, `puzzle?`, `answer`, `decision?` |\n| `story.flag` | `name`, `value?` |\n\n### Formula functions\n\n- `flag(name)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `answer` | Answer | `puzzle?: text`, `answer: text`, `decision?: number` |  | `default` | `1` | the answer is, i think it's, solve, answer, the code is, the combination is, try the combination, dial, enter the code |\n\n### Events\n\nIts own: `story.flag`.\n\n### Panels and slots\n\nPanels: `story.quests`. Slots it writes: `quest`.\n\n### Lint codes\n\n`story.answer_track`, `story.leaky_id`, `story.leaky_label`.\n\n## Vehicles pack (`vehicles`)\n\nVersion 1 \xB7 realism domain `vehicles` \xB7 requires `economy`, `gear`, `space`.\n\n### Kinds\n\n#### `vehicle`: Vehicle\n\nExtends `container`.\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `class` | Vehicle class | text |  |  |  |  |  |\n| `engine_hours` | Engine hours | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `fuel_pct` | Fuel % | number | 0 \u2026 100 |  |  |  | live from vehicles 2; bound auto, \xB130 a turn |\n| `home` | Home base | ref |  |  |  |  | live from vehicles 3 |\n| `last_service` | Last service (mi or h) | number | \u2265 0 |  |  |  | live from vehicles 4 |\n| `odometer_mi` | Odometer (mi) | number | \u2265 0 |  |  |  | live from vehicles 3; locked |\n| `status` | Status | enum: ok, needs_service, broken |  | `\"ok\"` |  |  | live from vehicles 1; bound confirm |\n| `value` | Value | money | \u2265 0 |  |  |  | live from money 3 |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `vehicles.drive` | `vehicle`, `to`, `driver?`, `riders?` |\n| `vehicles.refuel` | `vehicle`, `payer?`, `pct?` |\n| `vehicles.service` | `vehicle`, `payer?`, `repair?` |\n\n### Formula functions\n\n- `drive_minutes(vehicle, to)`\n- `fuel_ok(vehicle, to)`\n- `fuel_pct(vehicle)`\n\n### Actions\n\n| Action | Label | Parameters | Check | Outcomes | Minutes | Lexicon |\n|---|---|---|---|---|---|---|\n| `drive` | Drive | `vehicle: ref \u2192 vehicle`, `to: ref \u2192 place` |  | `default` | `drive_minutes(vehicle, to)` | drive to, drive over to, take the truck, take the car, sail to, ride to |\n| `refuel` | Refuel | `vehicle: ref \u2192 vehicle` |  | `default` | `10` | refuel, fill up, gas up, charge the car |\n| `repair_vehicle` | Repair | `vehicle: ref \u2192 vehicle` |  | `default` | `180` | repair, fix the truck, fix the car, get it towed |\n| `service_vehicle` | Service | `vehicle: ref \u2192 vehicle` |  | `default` | `60` | service, oil change, tune up |\n\n### Panels and slots\n\nPanels: `vehicles.garage`. Slots it writes: `vehicles`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `vehicles.upkeep` | `vehicles` | 4 | the world |\n\nDetail on demand: `vehicles` (version 1).\n\n### Data tables\n\n| Table | Label | Schema | Columns | Default rows |\n|---|---|---|---|---|\n| `vehicles.classes` | Vehicle classes | `lre-table/vehicles.classes/v1` | name (text), domain (enum), fuel_type (enum), factor_guide (ref), tank_capacity_gal (number, optional), tank_capacity_l (number, optional), usable_battery_kwh (number, optional), consumption_unit (enum), consumption (json), range_mi (int, optional), range_h (number, optional), price_new_cents (band), price_used_cents (band), insurance_liability_cents_per_month (int), insurance_full_cents_per_month (int), registration_cents_per_year (band), annual_maintenance_cents_per_year (int), maintenance (json), passengers (int), cargo_l (number), payload_kg (number), towing_kg (number, optional), charging (json, optional), notes (text) | 19 |\n| `vehicles.factors` | Consumption factor guides | `lre-table/vehicles.factors/v1` | basis (text), factors (json), note (text, optional) | 3 |\n\n### Lint codes\n\n`vehicles.classes`.\n\n## Weather pack (`weather`)\n\nVersion 1 \xB7 realism domain `weather` \xB7 requires `space`.\n\n### Kinds\n\n#### `region`: Weather region\n\n| Field | Label | Type | Bounds | Default | Derived | Visibility | Notes |\n|---|---|---|---|---|---|---|---|\n| `climate` | Climate | text |  | `\"temperate\"` |  |  |  |\n| `temp_c` | Temperature (\xB0C) | number |  |  |  |  | live from weather 3; bound never |\n| `weather` | Weather | text |  | `\"clear\"` |  |  | live from weather 2; bound never |\n| `weather_hold` | Weather held until | number |  |  |  |  | live from weather 2; locked |\n| `weather_hold_until` | Weather held until (condition) | text |  |  |  |  | live from weather 2; locked |\n\n### Effects\n\n| Effect | Arguments |\n|---|---|\n| `weather.clear` | `region`, `state?` |\n| `weather.set` | `region`, `state`, `minutes?`, `until?` |\n\n### Formula functions\n\n- `season()`\n- `weather(place)`\n\n### Panels and slots\n\nPanels: `weather.now`. Slots it writes: `scene`.\n\n### Simulation\n\n| Process | Domain | From level | Steps |\n|---|---|---|---|\n| `weather.climate` | `weather` | 2 | the world |\n\n### Lint codes\n\n`weather.climates`.\n";
@@ -52579,10 +52579,10 @@ function sectionsOf(markdown) {
   let body = [];
   let fenced = false;
   const flush = () => {
-    const text = body.join(`
+    const text4 = body.join(`
 `).trim();
-    if (trail.length > 0 && text !== "")
-      out.push({ title: trail.filter((t) => t !== "").join(" \u203A "), body: text });
+    if (trail.length > 0 && text4 !== "")
+      out.push({ title: trail.filter((t) => t !== "").join(" \u203A "), body: text4 });
     body = [];
   };
   for (const line of markdown.split(`
@@ -52615,20 +52615,20 @@ function count(haystack, needle) {
   return n;
 }
 function lookup(sections, query, limit = 4, budget = 9000) {
-  const words = terms2(query);
-  if (words.length === 0)
+  const words3 = terms2(query);
+  if (words3.length === 0)
     return "Give a few words to look up.";
   const phrase = query.toLowerCase().trim();
   const scored = sections.map((s, i) => {
     const title = s.title.toLowerCase();
     const body = s.body.toLowerCase();
     let score = 0;
-    for (const w of words)
+    for (const w of words3)
       score += 6 * count(title, w) + Math.min(8, count(body, w));
     if (phrase.length > 3 && (title.includes(phrase) || body.includes(phrase)))
       score += 10;
-    if (words.every((w) => title.includes(w) || body.includes(w)))
-      score += 4 * words.length;
+    if (words3.every((w) => title.includes(w) || body.includes(w)))
+      score += 4 * words3.length;
     return { s, i, score };
   }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score || a.i - b.i).slice(0, limit);
   if (scored.length === 0)
@@ -52753,22 +52753,22 @@ function int(v, min, max, fallback) {
 function str14(v) {
   return typeof v === "string" ? v.trim() : "";
 }
-function clip(text, max) {
-  return text.length > max ? `${text.slice(0, max)} \u2026[${text.length - max} more characters]` : text;
+function clip(text4, max) {
+  return text4.length > max ? `${text4.slice(0, max)} \u2026[${text4.length - max} more characters]` : text4;
 }
-function piece(text, offset, room = BODY_LIMIT) {
-  const end = Math.min(text.length, offset + Math.max(1, room));
-  return { body: text.slice(offset, end), end };
+function piece(text4, offset, room = BODY_LIMIT) {
+  const end = Math.min(text4.length, offset + Math.max(1, room));
+  return { body: text4.slice(offset, end), end };
 }
 function words3(query) {
   return [...new Set(query.toLowerCase().split(/\s+/).filter((w) => w.length > 0))];
 }
-function snippet(text, query) {
-  const lower = text.toLowerCase();
-  const terms = words3(query);
-  const at = Math.max(0, Math.min(...terms.map((t) => lower.indexOf(t)).filter((i) => i >= 0), lower.length));
+function snippet(text4, query) {
+  const lower = text4.toLowerCase();
+  const terms3 = words3(query);
+  const at = Math.max(0, Math.min(...terms3.map((t) => lower.indexOf(t)).filter((i) => i >= 0), lower.length));
   const start = Math.max(0, at - 140);
-  return `${start > 0 ? "\u2026" : ""}${text.slice(start, start + 320).replace(/\s+/g, " ")}${start + 320 < text.length ? "\u2026" : ""}`;
+  return `${start > 0 ? "\u2026" : ""}${text4.slice(start, start + 320).replace(/\s+/g, " ")}${start + 320 < text4.length ? "\u2026" : ""}`;
 }
 function done(content, summary, changed = false) {
   return { content, error: false, summary, changed };
@@ -52777,21 +52777,21 @@ function refused(content, summary) {
   return { content, error: true, summary, changed: false };
 }
 function cardText(c) {
-  const parts = [`# ${c.name} (${c.id})`];
+  const parts2 = [`# ${c.name} (${c.id})`];
   for (const [key, field] of Object.entries(CARD_FIELDS2)) {
-    const text = field.text(c);
-    if (!text)
+    const text4 = field.text(c);
+    if (!text4)
       continue;
     const more = `cards_read name="${c.name}" field="${key}"`;
     if (field.preview === 0)
-      parts.push(`${field.label}: ${c.alternateGreetings.length} (read them with ${more})`);
+      parts2.push(`${field.label}: ${c.alternateGreetings.length} (read them with ${more})`);
     else
-      parts.push(`${field.label}:
-${text.length > field.preview ? `${text.slice(0, field.preview)} \u2026[${text.length - field.preview} more characters: ${more} offset=${field.preview}]` : text}`);
+      parts2.push(`${field.label}:
+${text4.length > field.preview ? `${text4.slice(0, field.preview)} \u2026[${text4.length - field.preview} more characters: ${more} offset=${field.preview}]` : text4}`);
   }
   if (c.tags.length > 0)
-    parts.push(`Tags: ${c.tags.join(", ")}`);
-  return parts.join(`
+    parts2.push(`Tags: ${c.tags.join(", ")}`);
+  return parts2.join(`
 
 `);
 }
@@ -52805,18 +52805,18 @@ function readable(value, path) {
     return clip(json, DRAFT_READ_LIMIT);
   const lines = [`Outline of ${path || "the draft"} (read a deeper path for an item):`];
   let used = lines[0]?.length ?? 0;
-  const entries = Object.entries(value);
-  for (const [i, [key, v]] of entries.entries()) {
+  const entries2 = Object.entries(value);
+  for (const [i, [key, v]] of entries2.entries()) {
     let line;
     if (isRecord2(v)) {
-      const ids = Object.keys(v);
-      line = `- ${key}: ${ids.length} item${ids.length === 1 ? "" : "s"}${ids.length > 0 ? ` (${ids.slice(0, 80).join(", ")}${ids.length > 80 ? ", \u2026" : ""})` : ""}`;
+      const ids2 = Object.keys(v);
+      line = `- ${key}: ${ids2.length} item${ids2.length === 1 ? "" : "s"}${ids2.length > 0 ? ` (${ids2.slice(0, 80).join(", ")}${ids2.length > 80 ? ", \u2026" : ""})` : ""}`;
     } else if (Array.isArray(v))
       line = `- ${key}: a list of ${v.length}`;
     else
       line = `- ${key}: ${clip(JSON.stringify(v), 300)}`;
     if (used + line.length > DRAFT_READ_LIMIT) {
-      lines.push(`(${entries.length - i} more keys: read ${path}/<key>)`);
+      lines.push(`(${entries2.length - i} more keys: read ${path}/<key>)`);
       break;
     }
     lines.push(line);
@@ -52829,8 +52829,8 @@ function problemLines(world, limit) {
   const issues = readWorldDoc(world).issues;
   const errors = issues.filter((i) => i.severity === "error").length;
   const warnings = issues.filter((i) => i.severity === "warning").length;
-  const shown = issues.filter((i) => i.severity !== "info").slice(0, limit).map((i) => `- ${i.severity} at ${i.path || "(the world)"}: ${i.message} [${i.code}]`);
-  return { text: [`${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}.`, ...shown, ...issues.length > shown.length ? [`(${issues.length - shown.length} more; run draft_check for the full list)`] : []].join(`
+  const shown3 = issues.filter((i) => i.severity !== "info").slice(0, limit).map((i) => `- ${i.severity} at ${i.path || "(the world)"}: ${i.message} [${i.code}]`);
+  return { text: [`${errors} error${errors === 1 ? "" : "s"}, ${warnings} warning${warnings === 1 ? "" : "s"}.`, ...shown3, ...issues.length > shown3.length ? [`(${issues.length - shown3.length} more; run draft_check for the full list)`] : []].join(`
 `), errors, warnings };
 }
 async function run(name, args, ctx) {
@@ -52846,15 +52846,15 @@ async function run(name, args, ctx) {
         if (!m)
           return refused(`There is no message #${from}.`, "No such message");
         const offset = int(args.offset, 0, Math.max(0, m.content.length - 1), 0);
-        const { body, end } = piece(m.content, offset);
-        const more = end < m.content.length ? `
+        const { body, end: end2 } = piece(m.content, offset);
+        const more2 = end2 < m.content.length ? `
 
-(Message #${from} continues: read on with from=${from} offset=${end}.)` : from + 1 < messages.length ? `
+(Message #${from} continues: read on with from=${from} offset=${end2}.)` : from + 1 < messages.length ? `
 
 (That is the end of #${from}; the next message is from=${from + 1}.)` : "";
-        return done(`Message #${from} [${m.role}] ${m.name}, characters ${offset}\u2013${end} of ${m.content.length}:
+        return done(`Message #${from} [${m.role}] ${m.name}, characters ${offset}\u2013${end2} of ${m.content.length}:
 
-${body}${more}`, `Read message ${from}, characters ${offset}\u2013${end}`);
+${body}${more2}`, `Read message ${from}, characters ${offset}\u2013${end2}`);
       }
       const end = Math.min(messages.length, from + int(args.count, 1, 60, 30));
       const lines = [];
@@ -52900,10 +52900,10 @@ ${lines.join(`
       if (!query)
         return refused("Give words to search for.", "Empty search");
       const messages = await reader.transcript();
-      const terms = words3(query);
+      const terms3 = words3(query);
       const hits = messages.flatMap((m, i) => {
         const lower = m.content.toLowerCase();
-        const found = terms.filter((t) => lower.includes(t)).length;
+        const found = terms3.filter((t) => lower.includes(t)).length;
         return found > 0 ? [{ i, m, found }] : [];
       });
       const best = hits.sort((a, b) => b.found - a.found || a.i - b.i).slice(0, int(args.limit, 1, 30, 12));
@@ -52913,44 +52913,44 @@ ${lines.join(`
 `), `Searched the chat for "${query}": ${hits.length} message${hits.length === 1 ? "" : "s"}`);
     }
     case "cards_read": {
-      const name = str14(args.name).toLowerCase();
-      const cards = (await reader.cards()).filter((c) => !name || c.name.toLowerCase().includes(name));
+      const name2 = str14(args.name).toLowerCase();
+      const cards = (await reader.cards()).filter((c) => !name2 || c.name.toLowerCase().includes(name2));
       const first = cards[0];
       if (!first)
-        return refused(name ? `No source card is named like "${args.name}".` : "This draft has no character cards.", "No cards");
+        return refused(name2 ? `No source card is named like "${args.name}".` : "This draft has no character cards.", "No cards");
       const key = str14(args.field);
       if (key) {
         const field = hasOwn5(CARD_FIELDS2, key) ? CARD_FIELDS2[key] : undefined;
         if (!field)
           return refused(`A card has no field "${key}"; the fields are ${Object.keys(CARD_FIELDS2).join(", ")}.`, "No such field");
-        const text = field.text(first);
-        if (!text)
+        const text4 = field.text(first);
+        if (!text4)
           return done(`${first.name} has no ${field.label.toLowerCase()}.`, `${first.name}: no ${field.label.toLowerCase()}`);
-        const offset = int(args.offset, 0, Math.max(0, text.length - 1), 0);
-        const { body, end } = piece(text, offset);
-        const more = end < text.length ? `
+        const offset = int(args.offset, 0, Math.max(0, text4.length - 1), 0);
+        const { body, end } = piece(text4, offset);
+        const more = end < text4.length ? `
 
 (Read on with offset=${end}.)` : "";
-        return done(`${first.name} \xB7 ${field.label}, characters ${offset}\u2013${end} of ${text.length}:
+        return done(`${first.name} \xB7 ${field.label}, characters ${offset}\u2013${end} of ${text4.length}:
 
 ${body}${more}`, `Read ${first.name}'s ${field.label.toLowerCase()}`);
       }
-      const parts = [];
-      const shown = [];
+      const parts2 = [];
+      const shown3 = [];
       let used = 0;
       for (const [i, c] of cards.entries()) {
-        const text = cardText(c);
-        if (parts.length > 0 && used + text.length > BODY_LIMIT) {
-          parts.push(`(Not shown, to keep this answer whole: ${cards.slice(i).map((x) => x.name).join(", ")}. Read each by name.)`);
+        const text4 = cardText(c);
+        if (parts2.length > 0 && used + text4.length > BODY_LIMIT) {
+          parts2.push(`(Not shown, to keep this answer whole: ${cards.slice(i).map((x) => x.name).join(", ")}. Read each by name.)`);
           break;
         }
-        parts.push(clip(text, BODY_LIMIT));
-        shown.push(c.name);
-        used += Math.min(text.length, BODY_LIMIT) + 2;
+        parts2.push(clip(text4, BODY_LIMIT));
+        shown3.push(c.name);
+        used += Math.min(text4.length, BODY_LIMIT) + 2;
       }
-      return done(parts.join(`
+      return done(parts2.join(`
 
-`), `Read ${shown.join(", ")}`);
+`), `Read ${shown3.join(", ")}`);
     }
     case "lore_list": {
       const want = str14(args.book).toLowerCase();
@@ -52958,39 +52958,39 @@ ${body}${more}`, `Read ${first.name}'s ${field.label.toLowerCase()}`);
       if (books.length === 0)
         return refused("This draft reads no lore books.", "No lore books");
       if (!want) {
-        const lines = [];
+        const lines2 = [];
         for (const b of books)
-          lines.push(`- ${b.name} [${b.id}] (${b.scope}): ${(await reader.entries(b.id)).length} entries`);
-        return done(lines.join(`
+          lines2.push(`- ${b.name} [${b.id}] (${b.scope}): ${(await reader.entries(b.id)).length} entries`);
+        return done(lines2.join(`
 `), `Listed ${books.length} book${books.length === 1 ? "" : "s"}`);
       }
       const book = books.find((b) => b.id.toLowerCase() === want) ?? books.find((b) => b.name.toLowerCase().includes(want));
       if (!book)
         return refused(`No source book matches "${args.book}".`, "No such book");
-      const entries = await reader.entries(book.id);
+      const entries2 = await reader.entries(book.id);
       const lines = [];
       let used = 0;
-      for (const e of entries) {
+      for (const e of entries2) {
         const line = `- [${e.id}] ${e.comment || "(untitled)"}${e.keys.length > 0 ? ` (keys: ${e.keys.slice(0, 8).join(", ")})` : ""}, ${e.content.length} chars${e.disabled ? ", switched off" : ""}${e.constant ? ", always on" : ""}`;
         if (used + line.length > BODY_LIMIT)
           break;
         lines.push(line);
         used += line.length + 1;
       }
-      const rest = entries.length - lines.length;
-      return done(`${book.name}: ${entries.length} entries${rest > 0 ? `; the first ${lines.length} are listed here (find the other ${rest} with lore_search)` : ""}
+      const rest = entries2.length - lines.length;
+      return done(`${book.name}: ${entries2.length} entries${rest > 0 ? `; the first ${lines.length} are listed here (find the other ${rest} with lore_search)` : ""}
 ${lines.join(`
-`)}`, `Listed ${book.name} (${entries.length} entries)`);
+`)}`, `Listed ${book.name} (${entries2.length} entries)`);
     }
     case "lore_search": {
       const query = str14(args.query);
       if (!query)
         return refused("Give words to search for.", "Empty search");
-      const terms = words3(query);
+      const terms3 = words3(query);
       const scored = (await reader.allEntries()).map(({ book, entry }) => {
         const head = `${entry.comment} ${entry.keys.join(" ")}`.toLowerCase();
         const body = entry.content.toLowerCase();
-        const score = terms.reduce((s, t) => s + (head.includes(t) ? 3 : 0) + (body.includes(t) ? 1 : 0), 0);
+        const score = terms3.reduce((s, t) => s + (head.includes(t) ? 3 : 0) + (body.includes(t) ? 1 : 0), 0);
         return { book, entry, score };
       }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
       const best = scored.slice(0, int(args.limit, 1, 30, 12));
@@ -53000,57 +53000,57 @@ ${lines.join(`
 `), `Searched the lore for "${query}": ${scored.length} entr${scored.length === 1 ? "y" : "ies"}`);
     }
     case "lore_read": {
-      const ids = Array.isArray(args.ids) ? args.ids.filter((x) => typeof x === "string").slice(0, 12) : [];
-      if (ids.length === 0)
+      const ids2 = Array.isArray(args.ids) ? args.ids.filter((x) => typeof x === "string").slice(0, 12) : [];
+      if (ids2.length === 0)
         return refused("Give the ids of the entries to read (from lore_list or lore_search).", "No entries named");
-      const all = await reader.allEntries();
+      const all2 = await reader.allEntries();
       const head = (id) => {
-        const found = all.find((x) => x.entry.id === id);
+        const found = all2.find((x) => x.entry.id === id);
         return found ? `# ${found.entry.comment || "(untitled)"} [${id}] \xB7 ${found.book.name}${found.entry.keys.length > 0 ? `
 Keys: ${found.entry.keys.join(", ")}` : ""}
 ` : null;
       };
       if (args.offset !== undefined) {
-        const id = ids[0] ?? "";
-        const text = all.find((x) => x.entry.id === id)?.entry.content;
-        if (text === undefined)
+        const id = ids2[0] ?? "";
+        const text4 = all2.find((x) => x.entry.id === id)?.entry.content;
+        if (text4 === undefined)
           return refused(`[${id}] isn't an entry of the source books.`, "No such entry");
-        const offset = int(args.offset, 0, Math.max(0, text.length - 1), 0);
-        const { body, end } = piece(text, offset);
-        const more = end < text.length ? `
+        const offset = int(args.offset, 0, Math.max(0, text4.length - 1), 0);
+        const { body, end } = piece(text4, offset);
+        const more = end < text4.length ? `
 
 (Read on with ids=["${id}"] offset=${end}.)` : "";
-        return done(`${head(id) ?? ""}Characters ${offset}\u2013${end} of ${text.length}:
+        return done(`${head(id) ?? ""}Characters ${offset}\u2013${end} of ${text4.length}:
 
 ${body}${more}`, `Read part of lore entry ${id}`);
       }
-      const parts = [];
+      const parts2 = [];
       let used = 0;
       let read = 0;
-      for (const [i, id] of ids.entries()) {
+      for (const [i, id] of ids2.entries()) {
         const top = head(id);
-        const content = all.find((x) => x.entry.id === id)?.entry.content ?? "";
-        const text = top === null ? `# [${id}]: not an entry of the source books` : `${top}${content}`;
-        if (top !== null && parts.length === 0 && text.length > BODY_LIMIT) {
+        const content = all2.find((x) => x.entry.id === id)?.entry.content ?? "";
+        const text4 = top === null ? `# [${id}]: not an entry of the source books` : `${top}${content}`;
+        if (top !== null && parts2.length === 0 && text4.length > BODY_LIMIT) {
           const { body, end } = piece(content, 0, BODY_LIMIT - top.length);
-          parts.push(`${top}${body}
+          parts2.push(`${top}${body}
 
 (Entry ${id} continues: read on with ids=["${id}"] offset=${end}.)`);
           read++;
-          if (i + 1 < ids.length)
-            parts.push(`(Not read, to keep this answer whole: ${ids.slice(i + 1).join(", ")}. Read them in another call.)`);
+          if (i + 1 < ids2.length)
+            parts2.push(`(Not read, to keep this answer whole: ${ids2.slice(i + 1).join(", ")}. Read them in another call.)`);
           break;
         }
-        if (parts.length > 0 && used + text.length > BODY_LIMIT) {
-          parts.push(`(Not read, to keep this answer whole: ${ids.slice(i).join(", ")}. Read them in another call.)`);
+        if (parts2.length > 0 && used + text4.length > BODY_LIMIT) {
+          parts2.push(`(Not read, to keep this answer whole: ${ids2.slice(i).join(", ")}. Read them in another call.)`);
           break;
         }
-        parts.push(text);
-        used += text.length + 2;
+        parts2.push(text4);
+        used += text4.length + 2;
         if (top !== null)
           read++;
       }
-      return done(parts.join(`
+      return done(parts2.join(`
 
 `), `Read ${read} lore entr${read === 1 ? "y" : "ies"}`);
     }
@@ -53077,21 +53077,21 @@ ${body}${more}`, `Read ${item.title}`);
       const chatId = reader.source.chatId;
       if (!chatId)
         return refused("This draft has no chat.", "No chat");
-      const state = await ctx.bridge.chatState(ctx.userId, chatId);
-      if (!state)
+      const state2 = await ctx.bridge.chatState(ctx.userId, chatId);
+      if (!state2)
         return done("The source chat plays no LumiRPEngine world (or LumiRPEngine hasn't shown it since it started).", "The chat plays no world");
       const lines = [
-        `World ${state.worldId}, revision ${state.revision}${state.definitionsFrom ? ` (entity definitions still from ${state.definitionsFrom})` : ""}; status ${state.status}.`,
-        state.place ? `The POV is at ${state.place.name}${state.place.id ? ` (${state.place.id})` : ""}.` : "The POV's place isn't shown.",
-        state.clock ? `Clock: ${state.clock.label} (${state.clock.dayPart}, minute ${state.clock.minutes} of the calendar).` : "",
-        state.cash ? `Cash: ${state.cash}.` : "",
-        state.present.length > 0 ? `Present: ${state.present.map((p) => `${p.name} (${p.id}${p.life ? `, ${p.life.toLowerCase()}` : ""})`).join(", ")}.` : "Nobody else is present.",
-        state.quests.length > 0 ? `Open quests:
-${state.quests.map((q) => `- ${q.label} (${q.id}, ${q.kind}) at "${q.stage}"${q.cue ? `: ${q.cue}` : ""}`).join(`
+        `World ${state2.worldId}, revision ${state2.revision}${state2.definitionsFrom ? ` (entity definitions still from ${state2.definitionsFrom})` : ""}; status ${state2.status}.`,
+        state2.place ? `The POV is at ${state2.place.name}${state2.place.id ? ` (${state2.place.id})` : ""}.` : "The POV's place isn't shown.",
+        state2.clock ? `Clock: ${state2.clock.label} (${state2.clock.dayPart}, minute ${state2.clock.minutes} of the calendar).` : "",
+        state2.cash ? `Cash: ${state2.cash}.` : "",
+        state2.present.length > 0 ? `Present: ${state2.present.map((p) => `${p.name} (${p.id}${p.life ? `, ${p.life.toLowerCase()}` : ""})`).join(", ")}.` : "Nobody else is present.",
+        state2.quests.length > 0 ? `Open quests:
+${state2.quests.map((q) => `- ${q.label} (${q.id}, ${q.kind}) at "${q.stage}"${q.cue ? `: ${q.cue}` : ""}`).join(`
 `)}` : "No open quests."
       ];
       return done(lines.filter(Boolean).join(`
-`), `Read the chat's state in ${state.worldId}`);
+`), `Read the chat's state in ${state2.worldId}`);
     }
     case "engine_read": {
       const draft = await ctx.drafts.get(ctx.userId, ctx.draftId);
@@ -53188,8 +53188,8 @@ How you work:
 - When you finish, answer in a few sentences: what the world holds now, what you assumed, and what the user should check.`;
 function systemPrompt(draft, sources, chatState) {
   const doc = draft.doc;
-  const counts = Object.entries(doc).flatMap(([key, value]) => value && typeof value === "object" && !Array.isArray(value) && ["entities", "places", "routes", "maps", "tracks", "lore", "schedules", "rules", "actions", "classifications", "kinds"].includes(key) ? [`${key} ${Object.keys(value).length}`] : []).join(", ");
-  const state = chatState ? `
+  const counts2 = Object.entries(doc).flatMap(([key, value]) => value && typeof value === "object" && !Array.isArray(value) && ["entities", "places", "routes", "maps", "tracks", "lore", "schedules", "rules", "actions", "classifications", "kinds"].includes(key) ? [`${key} ${Object.keys(value).length}`] : []).join(", ");
+  const state2 = chatState ? `
 The source chat already plays LumiRPEngine world ${chatState.worldId} at revision ${chatState.revision}: the POV is at ${chatState.place?.name ?? "an unknown place"}, ${chatState.clock?.label ?? "at an unknown time"}${chatState.cash ? `, with ${chatState.cash}` : ""}; present: ${chatState.present.map((p) => p.life ? `${p.name} (${p.life.toLowerCase()})` : p.name).join(", ") || "nobody"}; open quests: ${chatState.quests.map((q) => q.label).join(", ") || "none"}.${draft.link?.worldId === chatState.worldId ? ` This draft started from that world: refine it as a new revision (see the guide's "Refining a world in play").` : " This draft didn't start from that world, so it builds a world of its own."}` : "";
   return [
     INSTRUCTIONS,
@@ -53198,8 +53198,8 @@ The source chat already plays LumiRPEngine world ${chatState.worldId} at revisio
 ${GUIDE}`,
     `# This draft
 
-Draft "${draft.name}": world "${draft.doc.name}" (id ${draft.doc.id}), POV ${draft.doc.pov}. Accepted collections: ${counts || "none"}.${draft.proposed ? " Your proposal is waiting for the user's review; you keep working on it." : ""}${draft.link ? ` It is linked to LumiRPEngine world ${draft.link.worldId}${draft.link.revision ? ` (revision ${draft.link.revision})` : ""}.` : ""}
-${sources}${state}
+Draft "${draft.name}": world "${draft.doc.name}" (id ${draft.doc.id}), POV ${draft.doc.pov}. Accepted collections: ${counts2 || "none"}.${draft.proposed ? " Your proposal is waiting for the user's review; you keep working on it." : ""}${draft.link ? ` It is linked to LumiRPEngine world ${draft.link.worldId}${draft.link.revision ? ` (revision ${draft.link.revision})` : ""}.` : ""}
+${sources}${state2}
 Engine: LumiRPEngine studio API ${ENGINE_VERSION}.`
   ].join(`
 
@@ -53230,18 +53230,18 @@ async function describeSources(reader) {
   return lines.join(`
 `);
 }
-function modelMessages(system, chat, run) {
+function modelMessages(system, chat, run2) {
   const out = [{ role: "system", content: system }];
-  const say = (role, text) => {
+  const say = (role, text4) => {
     const last = out[out.length - 1];
     if (last && last.role === role && typeof last.content === "string")
       last.content = `${last.content}
 
-${text}`;
+${text4}`;
     else
-      out.push({ role, content: text });
+      out.push({ role, content: text4 });
   };
-  const rounds = chat.filter((e) => e.kind === "results" && e.run === run);
+  const rounds = chat.filter((e) => e.kind === "results" && e.run === run2);
   const full = new Set(rounds.at(-1)?.results);
   let left = RUN_BUDGET - [...full].reduce((n, r) => n + r.content.length, 0);
   for (const r of rounds.slice(0, -1).reverse().flatMap((e) => e.results)) {
@@ -53250,36 +53250,36 @@ ${text}`;
     full.add(r);
     left -= r.content.length;
   }
-  const whole = new Set(chat.filter((e) => e.kind === "assistant" && e.run === run && e.calls.length > 0).slice(-CALLS_KEPT));
+  const whole4 = new Set(chat.filter((e) => e.kind === "assistant" && e.run === run2 && e.calls.length > 0).slice(-CALLS_KEPT));
   const waiting = [];
   let calling = false;
   for (const e of chat) {
     if (e.kind === "user" || e.kind === "note") {
-      const text = e.kind === "note" ? `(Studio) ${e.text}` : e.text;
+      const text4 = e.kind === "note" ? `(Studio) ${e.text}` : e.text;
       if (calling)
-        waiting.push(text);
+        waiting.push(text4);
       else
-        say("user", text);
+        say("user", text4);
     } else if (e.kind === "assistant") {
-      if (e.run !== run || e.calls.length === 0) {
+      if (e.run !== run2 || e.calls.length === 0) {
         const used = e.calls.length > 0 ? `(I used ${[...new Set(e.calls.map((c) => c.name))].join(", ")}.)` : "";
-        const text = [e.text, used].filter(Boolean).join(" ");
-        if (text)
-          say("assistant", text);
+        const text4 = [e.text, used].filter(Boolean).join(" ");
+        if (text4)
+          say("assistant", text4);
         continue;
       }
-      const parts = [...e.text ? [{ type: "text", text: e.text }] : [], ...e.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: whole.has(e) ? c.args : shortArgs(c.name, c.args), ...c.signature ? { signature: c.signature } : {} }))];
-      out.push({ role: "assistant", content: parts, ...e.reasoning ? { reasoning: e.reasoning } : {} });
+      const parts2 = [...e.text ? [{ type: "text", text: e.text }] : [], ...e.calls.map((c) => ({ type: "tool_use", id: c.id, name: c.name, input: whole4.has(e) ? c.args : shortArgs(c.name, c.args), ...c.signature ? { signature: c.signature } : {} }))];
+      out.push({ role: "assistant", content: parts2, ...e.reasoning ? { reasoning: e.reasoning } : {} });
       calling = true;
-    } else if (e.run === run && calling) {
+    } else if (e.run === run2 && calling) {
       out.push({ role: "user", content: e.results.map((r) => ({ type: "tool_result", toolUseId: r.id, content: full.has(r) || r.content.length <= TRIMMED ? r.content : `${r.content.slice(0, TRIMMED)} \u2026[the rest of this earlier answer is left out to save room; you read it whole when it came]`, isError: r.error })) });
       calling = false;
-      for (const text of waiting.splice(0))
-        say("user", text);
+      for (const text4 of waiting.splice(0))
+        say("user", text4);
     }
   }
-  for (const text of waiting)
-    say("user", text);
+  for (const text4 of waiting)
+    say("user", text4);
   return out;
 }
 
@@ -53302,11 +53302,11 @@ class Assistant {
   running(userId, draftId) {
     return this.runs.has(`${userId}\x00${draftId}`);
   }
-  async send(userId, draftId, text) {
+  async send(userId, draftId, text4) {
     const key = `${userId}\x00${draftId}`;
     if (this.runs.has(key))
       throw new Error("The assistant is still working on this draft. Stop it, or wait for its answer.");
-    const message = text.trim();
+    const message = text4.trim();
     if (message === "")
       throw new Error("Write something for the assistant first.");
     const controller = new AbortController;
@@ -53315,46 +53315,46 @@ class Assistant {
       d.chat = d.chat.map((e) => e.kind === "results" ? { ...e, results: e.results.map((r) => ({ ...r, content: "" })) } : e);
       d.chat.push({ kind: "user", text: message, at: Date.now() });
     });
-    const done = started.then((draft) => this.loop(userId, draft, controller.signal)).catch((error) => this.host.log("error", `[LumiRPEngine Studio] assistant: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)).finally(() => {
+    const done2 = started.then((draft) => this.loop(userId, draft, controller.signal)).catch((error) => this.host.log("error", `[LumiRPEngine Studio] assistant: ${error instanceof Error ? error.stack ?? error.message : String(error)}`)).finally(() => {
       this.runs.delete(key);
       return this.changed(userId, draftId).catch(() => {
         return;
       });
     });
-    this.runs.set(key, { controller, done });
+    this.runs.set(key, { controller, done: done2 });
     await started;
   }
   stop(userId, draftId) {
-    const run = this.runs.get(`${userId}\x00${draftId}`);
-    run?.controller.abort();
-    return run !== undefined;
+    const run2 = this.runs.get(`${userId}\x00${draftId}`);
+    run2?.controller.abort();
+    return run2 !== undefined;
   }
   async idle() {
     while (this.runs.size > 0)
       await Promise.all([...this.runs.values()].map((r) => r.done));
   }
-  async note(userId, draftId, text) {
+  async note(userId, draftId, text4) {
     const at = Date.now();
     await this.drafts.update(userId, draftId, (d) => {
-      d.chat.push({ kind: "note", text, at });
+      d.chat.push({ kind: "note", text: text4, at });
     });
-    this.activity(userId, draftId, { kind: "note", text, at });
+    this.activity(userId, draftId, { kind: "note", text: text4, at });
   }
-  async loop(userId, first, signal) {
+  async loop(userId, first, signal2) {
     const draftId = first.id;
-    const run = first.runs;
+    const run2 = first.runs;
     const settings = await this.settings.get(userId);
     const reader = new SourceReader(this.host, userId, first.source);
     const sources = await describeSources(reader);
     const chatState = first.source.chatId ? await this.bridge.chatState(userId, first.source.chatId) : null;
     const ctx = { userId, draftId, drafts: this.drafts, reader, bridge: this.bridge };
     let cutOffs = 0;
-    for (let round = 0;; round++) {
-      if (signal.aborted) {
+    for (let round2 = 0;; round2++) {
+      if (signal2.aborted) {
         await this.note(userId, draftId, "You stopped the assistant.");
         break;
       }
-      if (round >= settings.maxRounds) {
+      if (round2 >= settings.maxRounds) {
         await this.note(userId, draftId, `The assistant stopped after ${settings.maxRounds} model calls. Send "continue" to let it carry on.`);
         break;
       }
@@ -53363,46 +53363,46 @@ class Assistant {
         return;
       let reply;
       try {
-        reply = await this.host.models.generate({ messages: modelMessages(systemPrompt(draft, sources, chatState), draft.chat, run), tools: [...TOOLS], connectionId: settings.connectionId, maxTokens: MAX_TOKENS }, userId, AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)]));
+        reply = await this.host.models.generate({ messages: modelMessages(systemPrompt(draft, sources, chatState), draft.chat, run2), tools: [...TOOLS], connectionId: settings.connectionId, maxTokens: MAX_TOKENS }, userId, AbortSignal.any([signal2, AbortSignal.timeout(CALL_TIMEOUT_MS)]));
       } catch (error) {
-        await this.note(userId, draftId, signal.aborted ? "You stopped the assistant." : `The model call failed: ${error instanceof Error ? error.message : String(error)}`);
+        await this.note(userId, draftId, signal2.aborted ? "You stopped the assistant." : `The model call failed: ${error instanceof Error ? error.message : String(error)}`);
         break;
       }
-      const cutOff = CUT_OFF.test(reply.finishReason);
-      cutOffs = cutOff ? cutOffs + 1 : 0;
-      const text = reply.content.trim();
+      const cutOff2 = CUT_OFF.test(reply.finishReason);
+      cutOffs = cutOff2 ? cutOffs + 1 : 0;
+      const text4 = reply.content.trim();
       const calls = reply.toolCalls;
       const at = Date.now();
       await this.drafts.update(userId, draftId, (d) => {
-        d.chat.push({ kind: "assistant", text, at, run, calls: calls.map((c) => ({ id: c.id, name: c.name, args: c.args, ...c.signature ? { signature: c.signature } : {} })), ...calls.length > 0 && reply.reasoning ? { reasoning: reply.reasoning } : {} });
+        d.chat.push({ kind: "assistant", text: text4, at, run: run2, calls: calls.map((c) => ({ id: c.id, name: c.name, args: c.args, ...c.signature ? { signature: c.signature } : {} })), ...calls.length > 0 && reply.reasoning ? { reasoning: reply.reasoning } : {} });
       });
-      if (text)
-        this.activity(userId, draftId, { kind: "assistant", text, at });
-      if (cutOff && cutOffs >= CUT_OFF_LIMIT) {
+      if (text4)
+        this.activity(userId, draftId, { kind: "assistant", text: text4, at });
+      if (cutOff2 && cutOffs >= CUT_OFF_LIMIT) {
         await this.note(userId, draftId, `The model ran past its length limit ${CUT_OFF_LIMIT} times in a row, so the assistant stopped. Ask for less at a time, or use a connection that allows longer answers.`);
         break;
       }
       if (calls.length === 0) {
-        if (cutOff) {
+        if (cutOff2) {
           await this.note(userId, draftId, CUT_OFF_NOTE);
           continue;
         }
-        if (!text)
+        if (!text4)
           await this.note(userId, draftId, "The model answered with nothing. Try again, or pick another connection in the Studio's settings.");
         break;
       }
       const results = [];
       let room = RUN_BUDGET;
       for (const call of calls) {
-        const outcome = signal.aborted ? { content: "The user stopped the assistant before this ran.", error: true, summary: "Stopped", changed: false } : room < OUTPUT_LIMIT ? { content: `Not run: this round's calls asked for more than can come back to you at once. Call ${call.name} again on its own.`, error: true, summary: "Not run: the round asked for too much", changed: false } : await runTool(call.name, call.args, ctx);
+        const outcome = signal2.aborted ? { content: "The user stopped the assistant before this ran.", error: true, summary: "Stopped", changed: false } : room < OUTPUT_LIMIT ? { content: `Not run: this round's calls asked for more than can come back to you at once. Call ${call.name} again on its own.`, error: true, summary: "Not run: the round asked for too much", changed: false } : await runTool(call.name, call.args, ctx);
         room -= outcome.content.length;
         results.push({ id: call.id, name: call.name, content: outcome.content, error: outcome.error, summary: outcome.summary });
         this.activity(userId, draftId, { kind: "tool", name: call.name, summary: outcome.summary, error: outcome.error, at: Date.now() });
       }
       await this.drafts.update(userId, draftId, (d) => {
-        d.chat.push({ kind: "results", at: Date.now(), run, results });
+        d.chat.push({ kind: "results", at: Date.now(), run: run2, results });
       });
-      if (cutOff)
+      if (cutOff2)
         await this.note(userId, draftId, CUT_OFF_NOTE);
       await this.changed(userId, draftId);
     }
@@ -53442,7 +53442,7 @@ function readChats(value) {
       return [];
     const place = isRecord2(c.place) && str15(c.place.name) ? { id: str15(c.place.id) ? c.place.id : null, name: c.place.name } : null;
     const clock = isRecord2(c.clock) && typeof c.clock.minutes === "number" && str15(c.clock.label) ? { minutes: c.clock.minutes, label: c.clock.label, dayPart: str15(c.clock.dayPart) ? c.clock.dayPart : "" } : null;
-    const present = Array.isArray(c.present) ? c.present.flatMap((p) => isRecord2(p) && str15(p.id) && str15(p.name) ? [{ id: p.id, name: p.name, label: str15(p.label) ? p.label : p.name, ...str15(p.life) ? { life: p.life } : {} }] : []) : [];
+    const present2 = Array.isArray(c.present) ? c.present.flatMap((p) => isRecord2(p) && str15(p.id) && str15(p.name) ? [{ id: p.id, name: p.name, label: str15(p.label) ? p.label : p.name, ...str15(p.life) ? { life: p.life } : {} }] : []) : [];
     const quests = Array.isArray(c.quests) ? c.quests.flatMap((q) => isRecord2(q) && str15(q.id) && str15(q.label) ? [{ id: q.id, kind: str15(q.kind) ? q.kind : "quest", label: q.label, stage: str15(q.stage) ? q.stage : "", cue: str15(q.cue) ? q.cue : null }] : []) : [];
     return [
       {
@@ -53454,7 +53454,7 @@ function readChats(value) {
         place,
         clock,
         cash: str15(c.cash) ? c.cash : null,
-        present,
+        present: present2,
         quests,
         at: typeof c.at === "number" ? c.at : 0
       }
@@ -53483,11 +53483,11 @@ class EngineBridge {
     });
   }
   async pending(userId) {
-    const text = await this.host.storage.read(OFFER_FILE, userId);
-    if (text === null)
+    const text4 = await this.host.storage.read(OFFER_FILE, userId);
+    if (text4 === null)
       return null;
     try {
-      const raw = JSON.parse(text);
+      const raw = JSON.parse(text4);
       return isStoredOffer(raw) ? raw : null;
     } catch {
       return null;
@@ -53565,8 +53565,8 @@ class DraftStore {
     this.host = host;
   }
   locked(key, work) {
-    const run = (this.locks.get(key) ?? Promise.resolve()).then(work);
-    const settled = run.catch(() => {
+    const run2 = (this.locks.get(key) ?? Promise.resolve()).then(work);
+    const settled = run2.catch(() => {
       return;
     });
     this.locks.set(key, settled);
@@ -53574,14 +53574,14 @@ class DraftStore {
       if (this.locks.get(key) === settled)
         this.locks.delete(key);
     });
-    return run;
+    return run2;
   }
   async readJson(path, userId) {
-    const text = await this.host.storage.read(path, userId);
-    if (text === null)
+    const text4 = await this.host.storage.read(path, userId);
+    if (text4 === null)
       return null;
     try {
-      return JSON.parse(text);
+      return JSON.parse(text4);
     } catch {
       this.host.log("warn", `[LumiRPEngine Studio] ${path} isn't JSON; it is ignored`);
       return null;
@@ -53622,12 +53622,12 @@ class DraftStore {
     await this.save(userId, draft);
     return draft;
   }
-  update(userId, id, change) {
+  update(userId, id, change2) {
     return this.locked(`${userId}\x00${id}`, async () => {
       const draft = await this.get(userId, id);
       if (!draft)
         throw new Error("That draft is gone.");
-      await change(draft);
+      await change2(draft);
       draft.updatedAt = Date.now();
       if (draft.chat.length > CHAT_CAP)
         draft.chat = draft.chat.slice(-CHAT_CAP);
@@ -53736,11 +53736,11 @@ function countsOf(world) {
 }
 function draftView(draft, running) {
   const doc = { ...draft.doc };
-  const ids = {};
+  const ids2 = {};
   for (const c of COLLECTIONS2) {
     const items = doc[c];
     if (isRecord2(items) && Object.keys(items).length > 0)
-      ids[c] = Object.keys(items).slice(0, IDS_SHOWN);
+      ids2[c] = Object.keys(items).slice(0, IDS_SHOWN);
   }
   const issues = readWorldDoc(draft.doc).issues;
   const proposed = draft.proposed ? readWorldDoc(draft.proposed).issues : null;
@@ -53760,7 +53760,7 @@ function draftView(draft, running) {
     link: draft.link,
     world: { id: draft.doc.id, name: draft.doc.name, pov: draft.doc.pov },
     counts: countsOf(draft.doc),
-    ids,
+    ids: ids2,
     issues: issues.slice(0, ISSUES_SHOWN),
     errors: issues.filter((i) => i.severity === "error").length,
     warnings: issues.filter((i) => i.severity === "warning").length,
@@ -53850,14 +53850,14 @@ class Dispatcher {
         return { drafts: await this.drafts.remove(userId, r.draftId) };
       }
       case "draft.paste": {
-        const text = r.text.trim();
-        if (!text)
+        const text4 = r.text.trim();
+        if (!text4)
           throw new Error("Paste some text first.");
         await this.draft(userId, r.draftId);
         const draft = await this.drafts.update(userId, r.draftId, (d) => {
           if (d.source.pasted.length >= PASTED_CAP)
             throw new Error(`A draft holds at most ${PASTED_CAP} pasted texts.`);
-          d.source.pasted.push({ title: r.title.trim().slice(0, 120) || `Pasted text ${d.source.pasted.length + 1}`, text: text.slice(0, PASTED_TEXT_CAP) });
+          d.source.pasted.push({ title: r.title.trim().slice(0, 120) || `Pasted text ${d.source.pasted.length + 1}`, text: text4.slice(0, PASTED_TEXT_CAP) });
         });
         return { draft: this.view(userId, draft) };
       }
@@ -53895,12 +53895,12 @@ class Dispatcher {
         const draft = await this.drafts.update(userId, r.draftId, (d) => {
           if (!d.proposed)
             throw new Error("There is nothing to review.");
-          const all = changesBetween(d.doc, d.proposed);
-          const picked = r.keys === null ? all : all.filter((c) => r.keys?.includes(c.key));
+          const all2 = changesBetween(d.doc, d.proposed);
+          const picked = r.keys === null ? all2 : all2.filter((c) => r.keys?.includes(c.key));
           d.doc = acceptChanges(d.doc, d.proposed, r.keys === null ? null : picked.map((c) => c.key));
           d.proposed = null;
-          const declined = all.filter((c) => !picked.includes(c));
-          d.chat.push({ kind: "note", text: declined.length === 0 ? `You accepted all ${all.length} changes.` : `You accepted ${picked.length} of ${all.length} changes and declined: ${declined.map((c) => c.label).join("; ")}.`, at: Date.now() });
+          const declined = all2.filter((c) => !picked.includes(c));
+          d.chat.push({ kind: "note", text: declined.length === 0 ? `You accepted all ${all2.length} changes.` : `You accepted ${picked.length} of ${all2.length} changes and declined: ${declined.map((c) => c.label).join("; ")}.`, at: Date.now() });
         });
         return { draft: this.view(userId, draft) };
       }
@@ -53982,12 +53982,12 @@ class Dispatcher {
         const playing = await this.bridge.chatState(userId, chat.id).catch(() => null);
         if (playing)
           return this.create(userId, name, { kind: "world", worldId: playing.worldId, chatId: chat.id });
-        const ids = chatCharacterIds(chat);
-        const cards = await cardsOf(this.host, userId, ids);
+        const ids2 = chatCharacterIds(chat);
+        const cards = await cardsOf(this.host, userId, ids2);
         const books = await booksFor(this.host, userId, chat, cards);
         const world = title || chat.name || "New world";
         const persona = await this.host.personas.active(userId).catch(() => null);
-        const source = { ...empty, label: `Chat: ${chat.name}`, chatId: chat.id, characterIds: ids, books, persona: persona ? { id: persona.id, name: persona.name } : null };
+        const source = { ...empty, label: `Chat: ${chat.name}`, chatId: chat.id, characterIds: ids2, books, persona: persona ? { id: persona.id, name: persona.name } : null };
         return this.drafts.create(userId, { name: world, source, doc: newWorld(slug3(world), world), link: null, note: `Started from the chat \u201C${chat.name}\u201D${cards.length > 0 ? ` with ${cards.map((c) => c.name).join(", ")}` : ""}${books.length > 0 ? `, reading ${books.length} lore book${books.length === 1 ? "" : "s"}` : ""}.` });
       }
       case "character": {
@@ -54020,10 +54020,10 @@ class Dispatcher {
         let source = { ...empty, label: `World: ${read.name}`, worldId: read.worldId };
         if (spec.chatId) {
           const chat = await ownChat(this.host, userId, spec.chatId);
-          const ids = chatCharacterIds(chat);
-          const cards = await cardsOf(this.host, userId, ids);
+          const ids2 = chatCharacterIds(chat);
+          const cards = await cardsOf(this.host, userId, ids2);
           const persona = await this.host.personas.active(userId).catch(() => null);
-          source = { ...source, label: `World: ${read.name}, played in \u201C${chat.name}\u201D`, chatId: chat.id, characterIds: ids, books: await booksFor(this.host, userId, chat, cards), persona: persona ? { id: persona.id, name: persona.name } : null };
+          source = { ...source, label: `World: ${read.name}, played in \u201C${chat.name}\u201D`, chatId: chat.id, characterIds: ids2, books: await booksFor(this.host, userId, chat, cards), persona: persona ? { id: persona.id, name: persona.name } : null };
         }
         return this.drafts.create(userId, { name: title || read.name, source, doc: loaded.world, link: { worldId: read.worldId, revision: read.head }, note: `Started from LumiRPEngine's ${read.name} at its head revision ${read.head.slice(0, 8)}.` });
       }
@@ -54077,10 +54077,10 @@ class SettingsStore {
     this.host = host;
   }
   async get(userId) {
-    const text = await this.host.storage.read("settings.json", userId);
+    const text4 = await this.host.storage.read("settings.json", userId);
     let raw = null;
     try {
-      raw = text === null ? null : JSON.parse(text);
+      raw = text4 === null ? null : JSON.parse(text4);
     } catch {
       raw = null;
     }
@@ -54089,10 +54089,10 @@ class SettingsStore {
     return { connectionId: typeof raw.connectionId === "string" && raw.connectionId !== "" ? raw.connectionId : null, maxRounds: clampRounds(raw.maxRounds) };
   }
   async set(userId, patch) {
-    const current = await this.get(userId);
+    const current2 = await this.get(userId);
     const next = {
-      connectionId: patch.connectionId === undefined ? current.connectionId : patch.connectionId || null,
-      maxRounds: patch.maxRounds === undefined ? current.maxRounds : clampRounds(patch.maxRounds)
+      connectionId: patch.connectionId === undefined ? current2.connectionId : patch.connectionId || null,
+      maxRounds: patch.maxRounds === undefined ? current2.maxRounds : clampRounds(patch.maxRounds)
     };
     await this.host.storage.write("settings.json.tmp", JSON.stringify(next), userId);
     await this.host.storage.move("settings.json.tmp", "settings.json", userId);
@@ -54225,7 +54225,7 @@ function createSpindleHost() {
       }
     },
     models: {
-      async generate(request, userId, signal) {
+      async generate(request, userId, signal2) {
         const messages = request.messages.map((m) => ({
           role: m.role,
           content: typeof m.content === "string" ? m.content : m.content.map(part),
@@ -54238,7 +54238,7 @@ function createSpindleHost() {
           ...request.connectionId ? { connection_id: request.connectionId } : {},
           ...request.tools.length > 0 ? { tools: request.tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) } : {},
           userId,
-          signal
+          signal: signal2
         });
         const calls = isRecord2(raw) && Array.isArray(raw.tool_calls) ? raw.tool_calls : [];
         const toolCalls = calls.flatMap((c, i) => {
